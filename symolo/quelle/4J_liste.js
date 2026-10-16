@@ -28,6 +28,7 @@ marken: {},
 listeHeute: 0,
 listeSpalten: [],
 listeStation: false,
+imSwJeAb: {},
 
 kopfEl: null,
 meldungEl: null,
@@ -317,9 +318,10 @@ zeileBauen: function (tr, art, k) {
             }
             leer();
         } else if (spalte === "bg") {
-            if (art === "bg" || art === "ohne") {
+            if (art === "bg" || art === "ohne" || art === "sw") {
                 const td = this.zelle(tr, "", "", art === "bg" ? k.knoten.o.name : undefined, 2);
-                if (art === "bg" && k.klapp) this.nameKnopf(td, k.knoten.o.name, k.klapp.umschalten);
+                if (art === "sw") td.textContent = this.text(k.sw.baugruppe);
+                else if (art === "bg" && k.klapp) this.nameKnopf(td, k.knoten.o.name, k.klapp.umschalten);
                 else if (art === "bg") td.textContent = this.text(k.knoten.o.name);
                 else this.nameKnopf(td, "Teile ohne Baugruppe", k.klapp.umschalten);
                 i += 2;
@@ -348,19 +350,26 @@ zeileBauen: function (tr, art, k) {
             }
             this.zelle(tr, wert, "kom-mitte", wert);
         } else if (spalte === "status") {
-            if (art === "ohne") leer();
+            if (art === "sw") {
+                const m = this.el(this.el(tr, "td"), "button", "kom-statusmarke kom-schweissen kom-statusknopf", "Schweißen");
+                m.type = "button";
+                m.title = "Im Schweißen ansehen";
+                m.onclick = () => this.bereichOeffnen("schweissen", { suche: this.text(k.sw.ab_nr) });
+            }
+            else if (art === "ohne") leer();
             else this.statusZelle(tr, k.knoten.w);
         } else if (spalte === "termin") {
             if (art === "ab") this.terminZelle(tr, k.d);
             else leer();
         } else if (spalte === "proz") {
-            if (art === "ohne") leer();
+            if (art === "ohne" || art === "sw") leer();
             else this.zelle(tr, this.prozentText(k.knoten.w.prozent), "kom-zahl");
         } else if (spalte === "balken") {
-            if (art === "ohne") leer();
+            if (art === "ohne" || art === "sw") leer();
             else this.balkenZelle(tr, k.knoten.w);
         } else if (spalte === "stand") {
-            if (art === "ohne") this.zelle(tr, k.g.teile.length + (k.g.teile.length === 1 ? " Teil" : " Teile"), "kom-leise");
+            if (art === "sw") leer();
+            else if (art === "ohne") this.zelle(tr, k.g.teile.length + (k.g.teile.length === 1 ? " Teil" : " Teile"), "kom-leise");
             else this.zelle(tr, k.knoten.w.fortschritt);
         } else if (spalte === "planung") {
             if (art === "ab") this.planungZelle(tr, k.d);
@@ -379,13 +388,15 @@ karteZeichnen: function (karte, d) {
     const tab = this.tabelleNeu(karte, d.ampel ? "kom-ampel kom-ampel-" + d.ampel : "");
     const koerper = this.el(tab, "tbody");
     const neu = () => this.karteZeichnen(karte, d);
+    /* Baugruppen dieses AB, die einzeln im Schweißen liegen */
+    const imSw = this.imSwJeAb[this.text(a.o.ab_schluessel)] || [];
     const abUmschalten = () => { d.offen = !d.offen; this.gemerkt[d.schluessel] = d.offen; neu(); };
 
     /* AB-Zeile: Nummer, Verkaufsartikel, Kunde */
     const tr = this.el(koerper, "tr", "kom-dab " + this.statusKlasse(a.w));
     this.zeileBauen(tr, "ab", {
         knoten: a, d: d,
-        klapp: d.gruppen.length > 0 ? { offen: d.offen, name: a.o.ab_anzeige, umschalten: abUmschalten } : null
+        klapp: d.gruppen.length > 0 || imSw.length > 0 ? { offen: d.offen, name: a.o.ab_anzeige, umschalten: abUmschalten } : null
     });
 
     if (!d.offen) return;
@@ -414,5 +425,13 @@ karteZeichnen: function (karte, d) {
             const ttr = this.el(koerper, "tr", "kom-dteil " + this.statusKlasse(t.w));
             this.zeileBauen(ttr, "teil", { knoten: t, d: d, g: g, klapp: null });
         });
+    });
+
+    imSw.forEach(z => {
+        const str = this.el(koerper, "tr", "kom-dsw");
+        const td = this.el(str, "td", "kom-kacheln");
+        td.colSpan = this.listeSpalten.length;
+        this.rotKnopf(td, "▶ " + this.text(z.baugruppe) + " befindet sich im Schweißen", "Im Schweißen ansehen",
+            () => this.bereichOeffnen("schweissen", { suche: this.text(z.ab_nr) }));
     });
 },

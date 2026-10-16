@@ -132,9 +132,9 @@ def exportieren():
         auftraege.append(z)
         kopf_ids[v.id] = z["id"]
 
-    bg_felder = ["auftrag_id_auftrag", "name", "kurz"] + ZEILE
+    bg_felder = ["auftrag_id_auftrag", "name", "kurz"] + ZEILE + ["archiviert"]
     teil_felder = ["auftrag_id_auftrag", "baugruppe_id_baugruppe"] + ZEILE + [
-        "vorhanden", "datum_eingelagert", "datum_komplett",
+        "vorhanden", "datum_eingelagert", "datum_komplett", "archiviert",
     ]  # fmt: skip
     sw_felder = [
         "nr", "ab_nr", "ab_schluessel", "anzeige", "ebene", "baugruppe", "zeichnungsnummer", "benennung", "menge_bg",
@@ -154,7 +154,7 @@ def exportieren():
     ]
 
     schweisszeilen = aus_modell(
-        m.Schweisszeile.objects.order_by("id"), sw_felder, extra=lambda o: {"archiviert": False}
+        m.Schweisszeile.objects.order_by("id"), sw_felder, extra=lambda o: {"archiviert": False, "zurueckgeholt": False}
     )
     sw_id = max([z["id"] for z in schweisszeilen] or [0])
     for v in vorgaenge:
@@ -177,7 +177,7 @@ def exportieren():
                 fortschritt=az.fortschritt, eingelagert=zeit(az.eingelagert), komplett=zeit(az.komplett),
                 entnommen=zeit(az.entnommen), mitarbeiter=az.mitarbeiter, arbeitsplatz=az.arbeitsplatz,
                 liefertermin_stahlbau=zeit(az.liefertermin_stahlbau), termin_versand=zeit(az.termin_versand),
-                kopf=kopf, ap_geteilt=False, archiviert=True,
+                kopf=kopf, ap_geteilt=False, archiviert=True, zurueckgeholt=False,
             )  # fmt: skip
             schweisszeilen.append(z)
 
@@ -214,18 +214,25 @@ def exportieren():
         "fwm.standard_gruppe": tabelle(["name"], [{**standard(i), "name": n} for i, n in GRUPPEN]),
         "fwm.kom_auftrag": tabelle(auftrag_felder, auftraege),
         "fwm.kom_baugruppe": tabelle(
-            bg_felder, aus_modell(m.Baugruppe.objects.order_by("id"), bg_felder, {"auftrag_id": "auftrag_id_auftrag"})
+            bg_felder,
+            aus_modell(
+                m.Baugruppe.objects.order_by("id"),
+                bg_felder[:-1],
+                {"auftrag_id": "auftrag_id_auftrag"},
+                lambda o: {"archiviert": False},
+            ),
         ),
         "fwm.kom_teil": tabelle(
             teil_felder,
             aus_modell(
                 m.Teil.objects.order_by("id"),
-                teil_felder,
+                teil_felder[:-1],
                 {"auftrag_id": "auftrag_id_auftrag", "baugruppe_id": "baugruppe_id_baugruppe"},
+                lambda o: {"archiviert": False},
             ),
         ),
         "fwm.kom_schweisszeile": tabelle(
-            sw_felder + ["archiviert"],
+            sw_felder + ["archiviert", "zurueckgeholt"],
             schweisszeilen,
         ),
         "fwm.kom_mitarbeiter": tabelle(

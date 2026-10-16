@@ -148,10 +148,11 @@ statLaden: async function () {
     const live = await this.swLesen();
     const archiv = await this.datenLesen("schweisszeile", {
         aufloesen: false, archiv: "nur",
-        felder: ["nr", "ab_nr", "ab_schluessel", "ebene", "eingelagert", "liefertermin_stahlbau", "termin_versand"]
+        felder: ["nr", "ab_nr", "ab_schluessel", "ebene", "eingelagert", "liefertermin_stahlbau", "termin_versand", "zurueckgeholt"]
     });
 
-    return this.statAusSchweissen(live).concat(this.statAusArchiv(archiv));
+    /* Zeilen, die zurück in die Bestandsliste geholt wurden, zählen nicht als archiviert. */
+    return this.statAusSchweissen(live).concat(this.statAusArchiv(archiv.filter(z => !this.istJa(z.zurueckgeholt))));
 },
 
 /* ---------- Rechnen ---------- */

@@ -7,9 +7,9 @@
    auf eine Baugruppe: AB zusammenführen (Ben, 14./15.10.2026).
    Die Einträge berechnet regalEintraege (49_lagerort.js).
 
-   OFFEN (Symolo): "In der Bestandsliste anzeigen" (Sprung in die andere
-   Ansicht) gibt es erst, wenn klar ist, wie Symolo zwischen Formularen
-   wechselt.
+   "In der Bestandsliste anzeigen" springt in den anderen Bereich
+   (bereichOeffnen, 60_anzeige.js).
+   OFFEN (Symolo): Der Wechsel zwischen Formularen ist in Symolo noch nicht angebunden.
    =========================================================================== */
 
 abs: [],
@@ -182,6 +182,10 @@ platzDialog: function (e) {
         this.knopf(zeile, "Eintragen", eintragen);
 
         this.knopf(knoepfe, "Kein Platz", () => { this.dialogSchliessen(); this.platzSetzen(e, ""); });
+        this.knopf(knoepfe, "In der Bestandsliste anzeigen", () => {
+            this.dialogSchliessen();
+            this.bereichOeffnen("bestandsliste", { suche: this.text(e.ab.o.ab_anzeige) });
+        });
         this.knopf(knoepfe, "Abbrechen", () => this.dialogSchliessen(), "rot");
     });
 },

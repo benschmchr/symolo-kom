@@ -33,5 +33,16 @@ einstellungen: {
     /* SCHREIBSPERRE in Symolo: Erst auf true setzen, wenn alle Namen in
        20_tabellen.js geprüft sind. Bis dahin liest die App nur.
        Im lokalen Nachbau wird immer geschrieben. */
-    schreibenErlaubtInSymolo: false
+    schreibenErlaubtInSymolo: false,
+
+    /* Bereichsleiste oben in jeder Ansicht (wie das Hauptmenü der bisherigen App, Ben 16.10.2026).
+       Auf false setzen, wenn Symolo selbst zwischen den Formularen wechseln lässt. */
+    bereichsleiste: true,
+
+    /* Die Bereiche in der Reihenfolge des Hauptmenüs: [Name der Ansicht, Beschriftung]. */
+    bereiche: [
+        ["bestandsliste", "Bestandsliste"], ["dashboard", "Dashboard"], ["regal", "Regal"], ["forecast", "Forecast"],
+        ["planung", "Planung"], ["statistik", "Statistik"], ["schweissen", "Schweißen"],
+        ["arbeitsplaetze", "Arbeitsplätze"], ["archiv", "Archiv"], ["protokoll", "Protokoll"]
+    ]
 },

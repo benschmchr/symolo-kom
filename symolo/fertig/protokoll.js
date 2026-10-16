@@ -50,7 +50,18 @@ einstellungen: {
     /* SCHREIBSPERRE in Symolo: Erst auf true setzen, wenn alle Namen in
        20_tabellen.js geprüft sind. Bis dahin liest die App nur.
        Im lokalen Nachbau wird immer geschrieben. */
-    schreibenErlaubtInSymolo: false
+    schreibenErlaubtInSymolo: false,
+
+    /* Bereichsleiste oben in jeder Ansicht (wie das Hauptmenü der bisherigen App, Ben 16.10.2026).
+       Auf false setzen, wenn Symolo selbst zwischen den Formularen wechseln lässt. */
+    bereichsleiste: true,
+
+    /* Die Bereiche in der Reihenfolge des Hauptmenüs: [Name der Ansicht, Beschriftung]. */
+    bereiche: [
+        ["bestandsliste", "Bestandsliste"], ["dashboard", "Dashboard"], ["regal", "Regal"], ["forecast", "Forecast"],
+        ["planung", "Planung"], ["statistik", "Statistik"], ["schweissen", "Schweißen"],
+        ["arbeitsplaetze", "Arbeitsplätze"], ["archiv", "Archiv"], ["protokoll", "Protokoll"]
+    ]
 },
 
 
@@ -124,6 +135,10 @@ tabellen: {
             dispoliste: "dispoliste",
             lagerort: "lagerort",
             regal_geteilt: "regal_geteilt",
+            /* "bestand" = steht in der Bestandsliste. "schweissen" = ganz ins Schweißen
+               entnommen (Phase 6; die Zeile bleibt stehen, nur ausgeblendet).
+               "archiv" = Kopf eines im Schweißen archivierten AB (die Zeilen liegen
+               in schweisszeile). OFFEN (Symolo): Name und Werte des Felds. */
             bereich: "bereich",
             reihenfolge: "reihenfolge",
             quelldatei: "quelldatei",
@@ -158,11 +173,14 @@ tabellen: {
             profil: "profil",
             abmasse: "abmasse",
             bemerkung: "bemerkung",
-            lagerort: "lagerort"
+            lagerort: "lagerort",
+            /* Entnommen ins Schweißen (Phase 6): nur diese Baugruppe, der AB bleibt. */
+            archiviert: "archiviert"
         },
         verweise: {
             auftrag: { ziel: "auftrag", anzeige: "ab_anzeige" }
-        }
+        },
+        archiv: "archiviert"
     },
 
     teil: {
@@ -188,12 +206,15 @@ tabellen: {
             lagerort: "lagerort",
             vorhanden: "vorhanden",
             datum_eingelagert: "datum_eingelagert",
-            datum_komplett: "datum_komplett"
+            datum_komplett: "datum_komplett",
+            /* Entnommen ins Schweißen (Phase 6), zusammen mit der Baugruppe. */
+            archiviert: "archiviert"
         },
         verweise: {
             auftrag: { ziel: "auftrag", anzeige: "ab_anzeige" },
             baugruppe: { ziel: "baugruppe", anzeige: "name" }
-        }
+        },
+        archiv: "archiviert"
     },
 
     /* ---- Schweißen und Arbeitsplätze (VERMUTET, Vorschlag) ---- */
@@ -232,7 +253,10 @@ tabellen: {
             /* OFFEN (Symolo): Gibt es einen JSON-Typ? Sonst langer Text. */
             kopf: "kopf",
             ap_geteilt: "ap_geteilt",
-            archiviert: "archiviert"
+            /* ja = archiviert (Archiv) ODER zurück in die Bestandsliste geholt
+               (dann zusätzlich zurueckgeholt = ja; solche Zeilen zählen nirgends mit). */
+            archiviert: "archiviert",
+            zurueckgeholt: "zurueckgeholt"
         },
         archiv: "archiviert"
     },
@@ -2205,20 +2229,23 @@ abArchivieren: async function (ab) {
     return n;
 },
 
-/* R-X3 neu: AB aus dem Archiv in die Bestandsliste zurückholen. kopf = Zeile
-   aus archivLaden. Einen AB aus dem Schweißen holt die Ansicht Schweißen
-   zurück (Phase 6). Hat der AB inzwischen seinen Platz in der Reihenfolge
-   verloren, kommt er ans Ende (wie bisher). */
+/* R-X3 neu: AB aus dem Archiv zurückholen. kopf = Zeile aus archivLaden. Ein AB aus der Bestandsliste kommt
+   in die Bestandsliste, ein AB aus dem Schweißen ins Schweißen (swAusArchiv, 4L). Hat der AB inzwischen
+   seinen Platz in der Reihenfolge verloren, kommt er ans Ende (wie bisher). Gibt "bestand" oder
+   "schweissen" zurück: wohin er gekommen ist. */
 archivWiederherstellen: async function (kopf) {
 
     const name = this.text(kopf.ab_anzeige);
 
     if (this.archivAusSchweissen(kopf)) {
-        throw new Error(name + " wurde im Schweißen archiviert. Dorthin holt ihn die Ansicht Schweißen zurück (kommt noch).");
+        await this.swAusArchiv(kopf);
+        return "schweissen";
     }
 
-    /* nicht archivierte ABs mit demselben Schlüssel */
-    const da = await this.datenLesen("auftrag", { wo: { ab_schluessel: kopf.ab_schluessel }, aufloesen: false });
+    /* derselbe AB, nicht archiviert, in der Bestandsliste */
+    const da = await this.datenLesen("auftrag", {
+        wo: { ab_schluessel: kopf.ab_schluessel, bereich: "bestand" }, aufloesen: false
+    });
     if (da.length) {
         throw new Error(name + " steht schon wieder in der Bestandsliste (neu importiert). " +
             "Erst dort archivieren, dann wiederherstellen.");
@@ -2242,6 +2269,7 @@ archivWiederherstellen: async function (kopf) {
     });
 
     await this.protokollSchreiben("wiederhergestellt", name, "", "Archiv", "Bestandsliste");
+    return "bestand";
 },
 
 /* ---------------------------------------------------------------------------
@@ -2372,7 +2400,7 @@ archivZeilenLaden: async function (kopf) {
         const sz = await this.datenLesen("schweisszeile", {
             wo: { ab_schluessel: kopf.ab_schluessel }, archiv: "nur", aufloesen: false, sortierung: ["nr"]
         });
-        return this.archivZeilenAusSchweissen(sz, kopf);
+        return this.archivZeilenAusSchweissen(sz.filter(s => !this.istJa(s.zurueckgeholt)), kopf);
     }
 
     const baum = await this.bestandLaden([kopf._id], { archiv: "nur" });
@@ -2399,7 +2427,7 @@ archivZeilenAlle: async function (koepfe) {
             { archiv: "nur" });
         schweissen.forEach(k => {
             ergebnis[String(k._id)] = this.archivZeilenAusSchweissen(
-                sz.filter(s => this.text(s.ab_schluessel) === this.text(k.ab_schluessel)), k);
+                sz.filter(s => this.text(s.ab_schluessel) === this.text(k.ab_schluessel) && !this.istJa(s.zurueckgeholt)), k);
         });
     }
 
@@ -3234,10 +3262,11 @@ statLaden: async function () {
     const live = await this.swLesen();
     const archiv = await this.datenLesen("schweisszeile", {
         aufloesen: false, archiv: "nur",
-        felder: ["nr", "ab_nr", "ab_schluessel", "ebene", "eingelagert", "liefertermin_stahlbau", "termin_versand"]
+        felder: ["nr", "ab_nr", "ab_schluessel", "ebene", "eingelagert", "liefertermin_stahlbau", "termin_versand", "zurueckgeholt"]
     });
 
-    return this.statAusSchweissen(live).concat(this.statAusArchiv(archiv));
+    /* Zeilen, die zurück in die Bestandsliste geholt wurden, zählen nicht als archiviert. */
+    return this.statAusSchweissen(live).concat(this.statAusArchiv(archiv.filter(z => !this.istJa(z.zurueckgeholt))));
 },
 
 /* ---------- Rechnen ---------- */
@@ -3413,6 +3442,7 @@ marken: {},
 listeHeute: 0,
 listeSpalten: [],
 listeStation: false,
+imSwJeAb: {},
 
 kopfEl: null,
 meldungEl: null,
@@ -3702,9 +3732,10 @@ zeileBauen: function (tr, art, k) {
             }
             leer();
         } else if (spalte === "bg") {
-            if (art === "bg" || art === "ohne") {
+            if (art === "bg" || art === "ohne" || art === "sw") {
                 const td = this.zelle(tr, "", "", art === "bg" ? k.knoten.o.name : undefined, 2);
-                if (art === "bg" && k.klapp) this.nameKnopf(td, k.knoten.o.name, k.klapp.umschalten);
+                if (art === "sw") td.textContent = this.text(k.sw.baugruppe);
+                else if (art === "bg" && k.klapp) this.nameKnopf(td, k.knoten.o.name, k.klapp.umschalten);
                 else if (art === "bg") td.textContent = this.text(k.knoten.o.name);
                 else this.nameKnopf(td, "Teile ohne Baugruppe", k.klapp.umschalten);
                 i += 2;
@@ -3733,19 +3764,26 @@ zeileBauen: function (tr, art, k) {
             }
             this.zelle(tr, wert, "kom-mitte", wert);
         } else if (spalte === "status") {
-            if (art === "ohne") leer();
+            if (art === "sw") {
+                const m = this.el(this.el(tr, "td"), "button", "kom-statusmarke kom-schweissen kom-statusknopf", "Schweißen");
+                m.type = "button";
+                m.title = "Im Schweißen ansehen";
+                m.onclick = () => this.bereichOeffnen("schweissen", { suche: this.text(k.sw.ab_nr) });
+            }
+            else if (art === "ohne") leer();
             else this.statusZelle(tr, k.knoten.w);
         } else if (spalte === "termin") {
             if (art === "ab") this.terminZelle(tr, k.d);
             else leer();
         } else if (spalte === "proz") {
-            if (art === "ohne") leer();
+            if (art === "ohne" || art === "sw") leer();
             else this.zelle(tr, this.prozentText(k.knoten.w.prozent), "kom-zahl");
         } else if (spalte === "balken") {
-            if (art === "ohne") leer();
+            if (art === "ohne" || art === "sw") leer();
             else this.balkenZelle(tr, k.knoten.w);
         } else if (spalte === "stand") {
-            if (art === "ohne") this.zelle(tr, k.g.teile.length + (k.g.teile.length === 1 ? " Teil" : " Teile"), "kom-leise");
+            if (art === "sw") leer();
+            else if (art === "ohne") this.zelle(tr, k.g.teile.length + (k.g.teile.length === 1 ? " Teil" : " Teile"), "kom-leise");
             else this.zelle(tr, k.knoten.w.fortschritt);
         } else if (spalte === "planung") {
             if (art === "ab") this.planungZelle(tr, k.d);
@@ -3764,13 +3802,15 @@ karteZeichnen: function (karte, d) {
     const tab = this.tabelleNeu(karte, d.ampel ? "kom-ampel kom-ampel-" + d.ampel : "");
     const koerper = this.el(tab, "tbody");
     const neu = () => this.karteZeichnen(karte, d);
+    /* Baugruppen dieses AB, die einzeln im Schweißen liegen */
+    const imSw = this.imSwJeAb[this.text(a.o.ab_schluessel)] || [];
     const abUmschalten = () => { d.offen = !d.offen; this.gemerkt[d.schluessel] = d.offen; neu(); };
 
     /* AB-Zeile: Nummer, Verkaufsartikel, Kunde */
     const tr = this.el(koerper, "tr", "kom-dab " + this.statusKlasse(a.w));
     this.zeileBauen(tr, "ab", {
         knoten: a, d: d,
-        klapp: d.gruppen.length > 0 ? { offen: d.offen, name: a.o.ab_anzeige, umschalten: abUmschalten } : null
+        klapp: d.gruppen.length > 0 || imSw.length > 0 ? { offen: d.offen, name: a.o.ab_anzeige, umschalten: abUmschalten } : null
     });
 
     if (!d.offen) return;
@@ -3800,6 +3840,1347 @@ karteZeichnen: function (karte, d) {
             this.zeileBauen(ttr, "teil", { knoten: t, d: d, g: g, klapp: null });
         });
     });
+
+    imSw.forEach(z => {
+        const str = this.el(koerper, "tr", "kom-dsw");
+        const td = this.el(str, "td", "kom-kacheln");
+        td.colSpan = this.listeSpalten.length;
+        this.rotKnopf(td, "▶ " + this.text(z.baugruppe) + " befindet sich im Schweißen", "Im Schweißen ansehen",
+            () => this.bereichOeffnen("schweissen", { suche: this.text(z.ab_nr) }));
+    });
+},
+
+
+/* ===========================================================================
+   SCHWEISSEN EINTRAGEN (R-W6, R-W7)
+   Nachbau von bestand/schweissen: hilfen.py (datum_aus_text), abgleich.py
+   (abgleich_kern, abgleich_alle), mitarbeiter.py (setzen, Mitarbeiter-Liste,
+   Plätze). Mitarbeiter, Arbeitsplatz und die zwei Termine werden an einer
+   AB- oder BG-Zeile eingetragen und an alles darunter vererbt; ein Teil
+   nimmt nie einen eigenen Eintrag an.
+
+   Alles läuft über datenAendernViele (Folgeänderungen ohne Prüfung auf
+   fremde Änderungen, wie bisher). Gelesen wird vor jeder Änderung frisch.
+   Rechte fallen vorerst weg (Ben, 16.10.2026): jeder darf eintragen.
+   =========================================================================== */
+
+swTrenner: ", ",
+swMaxName: 80,
+swSonstiges: "Sonstiges",
+
+/* Alle fünf Spalten, die der Abgleich anfasst: Feld, Anzeigename fürs Protokoll */
+swEingaben: [
+    ["mitarbeiter", "Zuweisung Mitarbeiter"],
+    ["arbeitsplatz", "Zuweisung Arbeitsplatz"],
+    ["liefertermin_stahlbau", "Liefertermin Stahlbau"],
+    ["termin_versand", "Termin Versand"]
+],
+
+/* VBA Val(): führende Zahl, sonst 0. */
+swVal: function (text) {
+
+    const m = this.text(text).match(/^([0-9]+(?:\.[0-9]+)?)/);
+    return m ? Number(m[1]) : 0;
+},
+
+/* BgVor: erst die Nummer, dann der Name (ohne Groß-/Kleinschreibung). */
+swBgVergleich: function (a, b) {
+
+    return (this.swVal(this.swBgNummer(a)) - this.swVal(this.swBgNummer(b))) ||
+        (this.text(a).toLowerCase() < this.text(b).toLowerCase() ? -1 : (this.text(a).toLowerCase() > this.text(b).toLowerCase() ? 1 : 0));
+},
+
+/* ---------------------------------------------------------------------------
+   R-W7 Datumseingabe
+   --------------------------------------------------------------------------- */
+
+swNurZiffern: function (s) {
+
+    return s.length > 0 && s.length <= 8 && /^[0-9]+$/.test(s);
+},
+
+/* "15.10.2026", "15.10.26", "15.10", "151026", "15102026", "1510" (auch mit "/" oder "-").
+   Gibt die Tageszahl zurück, null = ungültig. Jahr nur 2020 bis 2099, ungültige Tage
+   (31.02.) werden abgelehnt. heute: Tageszahl (nur fürs Jahr, wenn es fehlt). */
+swDatumAusText: function (text, heute) {
+
+    const t = this.text(text).replace(/[/-]/g, ".");
+    if (!t) return null;
+
+    let d = 0, m = 0, y = 0;
+
+    if (t.indexOf(".") > -1) {
+        const p = t.split(".");
+        if (p.length < 2 || p.length > 3) return null;
+
+        const a = p[0].trim(), b = p[1].trim();
+        if (!this.swNurZiffern(a) || !this.swNurZiffern(b)) return null;
+        d = Number(a);
+        m = Number(b);
+
+        if (p.length === 3 && p[2].trim()) {
+            if (!this.swNurZiffern(p[2].trim())) return null;
+            y = Number(p[2].trim());
+        }
+    } else {
+        if (!this.swNurZiffern(t)) return null;
+        if (t.length === 4) {
+            d = Number(t.slice(0, 2));
+            m = Number(t.slice(2, 4));
+        } else if (t.length === 6 || t.length === 8) {
+            d = Number(t.slice(0, 2));
+            m = Number(t.slice(2, 4));
+            y = Number(t.slice(4));
+        } else {
+            return null;
+        }
+    }
+
+    if (y === 0) y = this.tagTeile(heute === undefined ? this.tagHeute() : heute)[0];
+    if (y < 100) y += 2000;
+    if (y < 2020 || y > 2099 || m < 1 || m > 12 || d < 1 || d > 31) return null;
+
+    const ms = Date.UTC(y, m - 1, d);
+    const probe = new Date(ms);
+    if (probe.getUTCFullYear() !== y || probe.getUTCMonth() !== m - 1 || probe.getUTCDate() !== d) return null;
+
+    return Math.floor(ms / 86400000);
+},
+
+/* Tageszahl -> Datum im Format von Symolo ("2026-10-16T00:00:00.0000000Z"). */
+swTagIso: function (nr) {
+
+    const [j, m, t] = this.tagTeile(nr);
+    return j + "-" + String(m).padStart(2, "0") + "-" + String(t).padStart(2, "0") + "T00:00:00.0000000Z";
+},
+
+/* ---------------------------------------------------------------------------
+   Mitarbeiter-Liste und Plätze
+   --------------------------------------------------------------------------- */
+
+/* "Anna, Bernd" -> ["Anna", "Bernd"] (ohne Doppelte, ohne "(verschieden)"). */
+swMitarbeiterListe: function (text) {
+
+    const aus = [], gesehen = {};
+
+    this.text(text).split(",").forEach(n => {
+        const name = n.split(/\s+/).filter(Boolean).join(" ");
+        if (name && name !== this.swVerschieden && !gesehen[name.toLowerCase()]) {
+            gesehen[name.toLowerCase()] = true;
+            aus.push(name);
+        }
+    });
+
+    return aus;
+},
+
+/* Alle Namen der Liste (aktive), alphabetisch. Zeilen für Eintragen und Austragen: swMitarbeiterZeilen. */
+swMitarbeiterZeilen: async function () {
+
+    return this.datenLesen("mitarbeiter", { aufloesen: false });
+},
+
+swIstAktiv: function (z) {
+
+    return z.aktiv === null || z.aktiv === undefined || z.aktiv === "" || this.istJa(z.aktiv);
+},
+
+swMitarbeiterNamen: async function () {
+
+    const zeilen = await this.swMitarbeiterZeilen();
+    return zeilen.filter(z => this.swIstAktiv(z)).map(z => this.text(z.name))
+        .sort((a, b) => (a.toLowerCase() < b.toLowerCase() ? -1 : (a.toLowerCase() > b.toLowerCase() ? 1 : 0)));
+},
+
+/* Neuer Name. Ein ausgetragener Name kommt wieder in die Liste (gelöscht wird nie). Gibt den Namen zurück. */
+swMitarbeiterNeu: async function (name) {
+
+    const n = this.text(name.replace(/,/g, " ")).split(/\s+/).filter(Boolean).join(" ");
+    if (!n) throw new Error("Bitte einen Namen eintragen.");
+    if (n.length > this.swMaxName) throw new Error("Der Name ist zu lang (höchstens " + this.swMaxName + " Zeichen).");
+    if (n === this.swVerschieden) throw new Error("„(verschieden)“ ist kein Name.");
+
+    const zeilen = await this.swMitarbeiterZeilen();
+    const da = zeilen.find(z => this.text(z.name).toLowerCase() === n.toLowerCase());
+
+    if (da && this.swIstAktiv(da)) throw new Error(n + " steht schon in der Liste.");
+    if (da) await this.datenAendern("mitarbeiter", da, { aktiv: true }, { ohnePruefung: true });
+    else await this.datenAnlegen("mitarbeiter", { name: n, aktiv: true });
+
+    await this.protokollSchreiben("schweissen", "", "Mitarbeiterliste", "", n);
+    return n;
+},
+
+/* Name austragen: er bleibt in der Datenbank (aktiv = nein), eingetragene Zuweisungen bleiben stehen. */
+swMitarbeiterWeg: async function (name) {
+
+    const zeilen = await this.swMitarbeiterZeilen();
+    const m = zeilen.find(z => this.swIstAktiv(z) && this.text(z.name).toLowerCase() === this.text(name).toLowerCase());
+    if (!m) throw new Error("Dieser Name steht nicht (mehr) in der Liste.");
+
+    await this.datenAendern("mitarbeiter", m, { aktiv: false }, { ohnePruefung: true });
+    await this.protokollSchreiben("schweissen", "", "Mitarbeiterliste", this.text(m.name), "ausgetragen");
+    return this.text(m.name);
+},
+
+/* R-AP1: Platzliste in der Reihenfolge der Nummer (zugleich Auswahl "Zuweisung Arbeitsplatz"). */
+swPlaetzeLaden: async function () {
+
+    const liste = await this.datenLesen("arbeitsplatz", { aufloesen: false });
+    return liste.sort((a, b) => (this.mengeMilli(a.reihenfolge) - this.mengeMilli(b.reihenfolge)) || this.idVergleich(a._id, b._id));
+},
+
+/* ApGleich: ohne Leerzeichen, Bindestriche, Schrägstriche und Punkte, ohne Groß-/Kleinschreibung. */
+swPlatzKern: function (text) {
+
+    return this.text(text).replace(/[ \-/.]/g, "").toLowerCase();
+},
+
+/* "AP 05" = "AP05": der Name aus der Platzliste (R-AP1) oder null. */
+swPlatzFinden: function (text, plaetze) {
+
+    const k = this.swPlatzKern(text);
+    if (!k) return null;
+    if (k === this.swSonstiges.toLowerCase()) return this.swSonstiges;
+
+    const p = plaetze.find(x => this.swPlatzKern(x.name) === k);
+    return p ? this.text(p.name) : null;
+},
+
+/* Text -> Wert zum Speichern. Mitarbeiter: freier Text, mehrere mit Komma. Arbeitsplatz: aus der Liste,
+   "" = entfernen. Termine: Tageszahl (R-W7), "" = entfernen (null). */
+swEingabePruefen: function (feld, text, plaetze) {
+
+    const t = this.text(text);
+
+    if (feld === "mitarbeiter") {
+        if (t === this.swVerschieden) throw new Error("„(verschieden)“ kann man nicht eintragen.");
+        const aus = this.swMitarbeiterListe(t).join(this.swTrenner);
+        if (aus.length > 200) throw new Error("Es sind zu viele Namen gewählt (höchstens 200 Zeichen zusammen).");
+        return aus;
+    }
+
+    if (feld === "arbeitsplatz") {
+        if (t === "" || t === "0") return "";
+        const name = this.swPlatzFinden(t, plaetze);
+        if (name === null) throw new Error("„" + t + "“ ist kein Arbeitsplatz. Bitte einen aus der Liste wählen.");
+        return name;
+    }
+
+    if (this.swDatumsfelder.indexOf(feld) > -1) {
+        if (t === "") return null;
+        const tag = this.swDatumAusText(t);
+        if (tag === null) {
+            throw new Error("„" + t + "“ ist kein gültiges Datum (z. B. 15.10.2026, 15.10. oder 151026; Jahr 2020 bis 2099).");
+        }
+        return this.swTagIso(tag);
+    }
+
+    throw new Error("Unbekanntes Feld.");
+},
+
+/* Wert fürs Protokoll: leer = "leer", Datum = TT.MM.JJJJ. */
+swWertText: function (wert) {
+
+    const t = this.text(wert);
+    if (t === "") return "leer";
+
+    const tag = this.tagNr(t);
+    return tag === null ? t : this.tagText(tag);
+},
+
+swAnzeigename: function (z) {
+
+    if (z.ebene === "AB") return this.text(z.anzeige);
+    if (z.ebene === "BG") return this.text(z.anzeige) + " / " + this.text(z.baugruppe);
+    return this.text(z.zeichnungsnummer);
+},
+
+/* ---------------------------------------------------------------------------
+   R-W6 Vererbung (Nachbau von AbgleichKern)
+   --------------------------------------------------------------------------- */
+
+/* ebene[i] = AB/BG/Teil, ab[i] = echter AB (ABNr), w[i] = [Mitarbeiter, Arbeitsplatz, Liefertermin, Termin Versand].
+   geaendert: Menge von "i|k" (an der AB-Zeile i wurde Eingabe k eben geändert).
+     AB geändert   -> Wert an alle BGs und Teile des AB
+     Baugruppe     -> Wert an ihre Teile; AB = gemeinsamer Wert aller BGs, sonst "(verschieden)"
+     Teil geändert -> zurück auf den Wert der BG
+   Einzelblöcke (BG ohne AB-Zeile) vererben nur innerhalb ihres Blocks. Ändert w an Ort und Stelle. */
+swAbgleichKern: function (ebene, ab, w, geaendert) {
+
+    const n = ebene.length;
+    const hat = (i, k) => Boolean(geaendert) && geaendert.has(i + "|" + k);
+
+    for (let i = 0; i < n; i++) {
+        if (ebene[i] !== "AB") continue;
+        for (let k = 0; k < 4; k++) {
+            if (hat(i, k) && this.swT(w[i][k]) !== this.swVerschieden) {
+                for (let j = 0; j < n; j++) {
+                    if (j !== i && this.swGleich(ab[j], ab[i])) w[j][k] = w[i][k];
+                }
+            }
+        }
+    }
+
+    for (let i = 0; i < n; i++) {
+        const e = ebene[i];
+        if (e !== "AB" && e !== "BG") continue;
+
+        let j = i + 1;
+        while (j < n) {
+            if (ebene[j] !== "Teil" || !this.swGleich(ab[j], ab[i])) break;
+            for (let k = 0; k < 4; k++) {
+                if (e === "BG") w[j][k] = w[i][k];
+                else if (this.swT(w[i][k]) !== this.swVerschieden) w[j][k] = w[i][k];
+            }
+            j++;
+        }
+    }
+
+    this.swAbAbleiten(ebene, ab, w);
+},
+
+/* Zeilen in der Reihenfolge nr (nach ID bei gleicher Nummer). */
+swNachNr: function (zeilen) {
+
+    return zeilen.slice().sort((a, b) => (this.mengeMilli(a.nr) - this.mengeMilli(b.nr)) || this.idVergleich(a._id, b._id));
+},
+
+/* Was sich beim Speichern ändert: "(verschieden)" wird nie gespeichert. Gibt
+   [{ zeile, werte }] zurück, nur für Zeilen mit anderen Werten. */
+swAenderungen: function (zeilen, w) {
+
+    const aus = [];
+
+    zeilen.forEach((z, i) => {
+        const werte = {};
+
+        this.swFelder.forEach((f, k) => {
+            const datum = this.swDatumsfelder.indexOf(f) > -1;
+            let v = w[i][k];
+
+            if (v === this.swVerschieden) v = datum ? null : "";
+            if ((v === null || v === undefined || v === "") && !datum) v = "";
+            if ((v === "" || v === undefined) && datum) v = null;
+
+            const alt = z[f];
+            const gleich = datum
+                ? (v === null ? this.swT(alt) === "" : this.swT(alt) === this.swT(v))
+                : this.text(alt) === this.text(v);
+
+            if (!gleich) werte[f] = v;
+        });
+
+        if (Object.keys(werte).length) aus.push({ zeile: z, werte: werte });
+    });
+
+    return aus;
+},
+
+/* Alle Zeilen im Schweißen angleichen (SwAbgleich). zeilen = swLesen(); geaendert wie oben, aber mit
+   Zeilen-IDs: [[_id, k]]. Gibt die nötigen Änderungen zurück (noch nicht geschrieben). */
+swAbgleichBerechnen: function (zeilen, geaendert) {
+
+    const liste = this.swNachNr(zeilen);
+    const w = this.swWerte(liste);
+
+    /* gespeicherter Stand wie in Excel ("verschieden") */
+    this.swAbAbleiten(liste.map(z => z.ebene), liste.map(z => z.ab_nr), w);
+
+    const index = {};
+    liste.forEach((z, i) => { index[String(z._id)] = i; });
+    const menge = new Set();
+    (geaendert || []).forEach(([id, k]) => { if (String(id) in index) menge.add(index[String(id)] + "|" + k); });
+
+    this.swAbgleichKern(liste.map(z => z.ebene), liste.map(z => z.ab_nr), w, menge);
+
+    return this.swAenderungen(liste, w);
+},
+
+/* Änderungen schreiben (je acht gleichzeitig). */
+swAenderungenSchreiben: async function (aenderungen) {
+
+    await this.datenAendernViele(aenderungen.map(a => ({ name: "schweisszeile", zeile: a.zeile, werte: a.werte })));
+},
+
+/* Alle Zeilen angleichen und die Änderungen speichern. */
+swAbgleichen: async function (geaendert) {
+
+    const zeilen = await this.swLesen();
+    await this.swAenderungenSchreiben(this.swAbgleichBerechnen(zeilen, geaendert));
+},
+
+/* ---------------------------------------------------------------------------
+   R-W6 Eintragen
+   --------------------------------------------------------------------------- */
+
+/* Eintrag an einer AB- oder BG-Zeile; wird an alles darunter vererbt. Ein Teil nimmt keinen Eintrag an.
+   zeilen = frisch gelesen (swLesen). Gibt { zeile, alt, neu, aenderungen } zurück (noch nicht geschrieben). */
+swSetzenBerechnen: function (zeilen, zeileId, feld, text, plaetze) {
+
+    const k = this.swFelder.indexOf(feld);
+    if (k < 0) throw new Error("Unbekanntes Feld.");
+
+    const z = zeilen.find(x => String(x._id) === String(zeileId));
+    if (!z) throw new Error("Diese Zeile gibt es nicht (mehr) im Bereich Schweißen.");
+    if (z.ebene === "Teil") {
+        throw new Error("Einzelteile übernehmen den Eintrag ihrer Baugruppe. Bitte bei der Baugruppe oder beim AB eintragen.");
+    }
+
+    const wert = this.swEingabePruefen(feld, text, plaetze);
+
+    const liste = this.swNachNr(zeilen);
+    const ebene = liste.map(x => x.ebene), ab = liste.map(x => x.ab_nr);
+    const w = this.swWerte(liste);
+    this.swAbAbleiten(ebene, ab, w);
+
+    const i = liste.findIndex(x => String(x._id) === String(z._id));
+    const alt = w[i][k];
+    w[i][k] = wert;
+
+    this.swAbgleichKern(ebene, ab, w, z.ebene === "AB" ? new Set([i + "|" + k]) : new Set());
+
+    return { zeile: z, alt: this.swWertText(alt), neu: this.swWertText(wert), aenderungen: this.swAenderungen(liste, w) };
+},
+
+/* Speichern ohne Rechtekontrolle (vorerst keine Rechte). Gibt { zeile, alt, neu, name } zurück und schreibt
+   ins Protokoll, wenn sich etwas geändert hat. */
+swSetzen: async function (zeileId, feld, text) {
+
+    const [zeilen, plaetze] = await Promise.all([this.swLesen(), this.swPlaetzeLaden()]);
+    const r = this.swSetzenBerechnen(zeilen, zeileId, feld, text, plaetze);
+
+    await this.swAenderungenSchreiben(r.aenderungen);
+
+    const name = this.swEingaben.find(e => e[0] === feld)[1];
+    if (r.alt !== r.neu) {
+        await this.protokollSchreiben("schweissen", r.zeile.ab_nr, name + ": " + this.swAnzeigename(r.zeile), r.alt, r.neu);
+    }
+
+    return { zeile: r.zeile, alt: r.alt, neu: r.neu, name: name };
+},
+
+
+/* ===========================================================================
+   SCHWEISSEN: ENTNEHMEN, ZUSAMMENFASSEN, ARCHIVIEREN, ZURÜCK (R-W2, R-W3,
+   R-W8, R-W9)
+   Nachbau von bestand/schweissen/vorgaenge.py. Alles läuft über die
+   Datenschicht (datenAnlegen, datenAendern). Gelöscht wird nie (Ben,
+   16.10.2026); statt Löschen gilt:
+
+   Entnehmen:  Die Zeilen werden als Kopien in schweisszeile angelegt. Das
+               Original bleibt stehen und wird nur ausgeblendet:
+               - ganzer AB:   auftrag.bereich = "schweissen"
+               - eine BG:     baugruppe und ihre Teile bekommen archiviert = ja
+   Zurück:     Die Zeilen aus schweisszeile bauen den AB (oder die BG) in der
+               Bestandsliste neu auf (wie bisher, nicht aus den ausgeblendeten
+               Originalen). Die Kopien in schweisszeile bekommen archiviert = ja
+               und zurueckgeholt = ja; so zählen sie weder im Archiv noch in
+               der Statistik.
+               OFFEN (Symolo): Die ausgeblendeten Originale und die
+               zurückgeholten Zeilen bleiben in der Datenbank. Aufräumen kann
+               nur die IT.
+   Archivieren: Alle Zeilen des AB bekommen archiviert = ja; dazu gibt es einen
+               Kopf (auftrag, bereich "archiv") für das Archiv.
+   Nichts davon ist eine Transaktion. OFFEN (Symolo): Gibt es Transaktionen
+   oder ein Sammelanlegen? Bis dahin werden die Schritte nacheinander
+   geschrieben, die Originale zuletzt ausgeblendet.
+   =========================================================================== */
+
+/* R-W4: Spalten, die aus der Bestandsliste kopiert werden (wie archivUebernehmen) */
+swKopierFelder: ["zeichnungsnummer", "benennung", "menge_bg", "index", "lk_nummer", "arbeitsgang", "material", "profil",
+    "abmasse", "bemerkung", "lagerort"],
+
+/* Nächste freie Nummer (Reihenfolge nr). */
+swNaechsteNr: function (zeilen) {
+
+    return zeilen.reduce((m, z) => Math.max(m, this.mengeMilli(z.nr) / 1000), 0) + 1;
+},
+
+/* Kopfdaten des AB, wie sie zum Zurückholen mitgespeichert werden. */
+swKopfVon: function (o) {
+
+    const j = {};
+    ["kunde", "haupt_ab", "verkaufsartikel", "ersteller", "datum_liste", "dispoliste", "quelldatei"]
+        .forEach(f => { j[f] = this.text(o[f]); });
+    j.reihenfolge = o.reihenfolge === null || o.reihenfolge === undefined || o.reihenfolge === "" ? null : Number(o.reihenfolge);
+    j.forecast_schluessel = this.text(o.forecast_schluessel);
+    return JSON.stringify(j);
+},
+
+/* Eine leere Zeile mit allen Feldern der Tabelle schweisszeile. */
+swLeereZeile: function () {
+
+    return {
+        nr: 0, ab_nr: "", ab_schluessel: "", anzeige: "", ebene: "", baugruppe: "", zeichnungsnummer: "", benennung: "",
+        menge_bg: "", menge_gesamt: "", index: "", lk_nummer: "", arbeitsgang: "", material: "", profil: "", abmasse: "",
+        bemerkung: "", vorhanden: "", lagerort: "", status: "", fortschritt: "", eingelagert: null, komplett: null,
+        entnommen: null, mitarbeiter: "", arbeitsplatz: "", liefertermin_stahlbau: null, termin_versand: null,
+        kopf: "{}", ap_geteilt: false, archiviert: false, zurueckgeholt: false
+    };
+},
+
+/* ---------------------------------------------------------------------------
+   R-W2 Entnehmen
+   --------------------------------------------------------------------------- */
+
+swPlanName: function (p) {
+
+    const ab = this.text(p.a.o.ab_anzeige);
+    return p.bg === null ? "AB " + ab : "Baugruppe " + this.text(p.bg.o.name) + " (" + ab + ")";
+},
+
+/* Sicherheitsfrage wie in Excel. */
+swPlanFrage: function (p) {
+
+    if (p.bg === null) {
+        return "AB " + this.text(p.a.o.ab_anzeige) + " mit " + p.nBg + " Baugruppe(n) und " + p.nTeil +
+            " Teil(en) ins Blatt Schweißen verschieben?";
+    }
+    return this.swPlanName(p) + " mit " + p.nTeil + " Teil(en) ins Blatt Schweißen verschieben?";
+},
+
+/* Wie die Zeilen im Schweißen heißen: "AB…" oder "AB…_BGnnn". */
+swPlanAnzeige: function (p) {
+
+    const ab = this.text(p.a.o.ab_anzeige);
+    return p.bg === null || p.mitAb ? ab : ab + "_BG" + this.swBgNummer(p.bg.o.name);
+},
+
+/* R-W2: nur ganze ABs oder BGs mit Status Komplett. Liest den AB frisch aus der Datenbank.
+   Wirft eine Meldung wie in Excel. */
+swEntnehmenPruefen: async function (abId, bgId) {
+
+    const baum = await this.bestandLaden([abId]);
+    const a = baum.length ? baum[0] : null;
+    if (a === null) throw new Error("Dieser Arbeitsauftrag ist nicht (mehr) in der Bestandsliste.");
+
+    let bg = null;
+    if (bgId !== null && bgId !== undefined) {
+        bg = a.bgs.find(b => String(b.o._id) === String(bgId)) || null;
+        if (bg === null) throw new Error("Diese Baugruppe ist nicht (mehr) in der Bestandsliste.");
+    }
+
+    const ziel = bg || a;
+    if (ziel.w.status !== "Komplett") {
+        const name = bg === null ? "AB " + this.text(a.o.ab_anzeige)
+            : "Baugruppe " + this.text(bg.o.name) + " (" + this.text(a.o.ab_anzeige) + ")";
+        throw new Error("Nur ABs und Baugruppen mit Status „Komplett“ können entnommen werden. " + name + ": " + ziel.w.status);
+    }
+
+    if (bg === null) return { a: a, bg: null, mitAb: true, nBg: a.bgs.length, nTeil: this.bestandTeile(a).length };
+
+    /* letzte BG: der AB kommt mit (R-W3) */
+    return { a: a, bg: bg, mitAb: a.bgs.length === 1 && a.ohne.length === 0, nBg: 0, nTeil: bg.teile.length };
+},
+
+/* Eine Zeile (BG oder Teil) für das Schweißen. */
+swZeileNeu: function (nr, a, anzeige, ebene, bgName, o, w, heute, kopf, vorhanden) {
+
+    const z = this.swLeereZeile();
+
+    this.swKopierFelder.forEach(f => { z[f] = this.text(o[f]); });
+    Object.assign(z, {
+        nr: nr, ab_nr: this.text(a.o.ab_anzeige), ab_schluessel: this.text(a.o.ab_schluessel), anzeige: anzeige,
+        ebene: ebene, baugruppe: bgName, menge_gesamt: this.sollText(o), vorhanden: vorhanden,
+        status: w.status, fortschritt: w.fortschritt, eingelagert: this.text(w.eingelagert) || null,
+        komplett: this.text(w.komplett) || null, entnommen: heute, kopf: kopf
+    });
+    return z;
+},
+
+/* Die Zeilen für das Schweißen in der Reihenfolge der Bestandsliste (Teile ohne BG vorn). */
+swZeilenKopieren: function (p, nr, heute) {
+
+    const a = p.a, ab = a.o;
+    const anzeige = this.swPlanAnzeige(p);
+    const kopf = this.swKopfVon(ab);
+    const zeilen = [];
+
+    const teil = (t, bgName) => this.swZeileNeu(nr + zeilen.length, a, anzeige, "Teil", bgName, t.o, t.w, heute, kopf,
+        this.mengeGleich(t.o.vorhanden, null) ? "" : this.zahlText(this.mengeMilli(t.o.vorhanden)));
+
+    const bgZeilen = b => {
+        zeilen.push(this.swZeileNeu(nr + zeilen.length, a, anzeige, "BG", this.text(b.o.name), b.o, b.w, heute, kopf, ""));
+        b.teile.forEach(t => zeilen.push(teil(t, this.text(b.o.name))));
+    };
+
+    if (p.bg === null || p.mitAb) {
+        /* AB-Zeile (R-D2: wie in Excel "Kunde: …" usw.) */
+        const z = this.swLeereZeile();
+        Object.assign(z, {
+            nr: nr, ab_nr: this.text(ab.ab_anzeige), ab_schluessel: this.text(ab.ab_schluessel), anzeige: anzeige,
+            ebene: "AB", zeichnungsnummer: this.text(ab.ab_anzeige), benennung: this.text(ab.verkaufsartikel),
+            lagerort: this.text(ab.lagerort), status: a.w.status, fortschritt: a.w.fortschritt,
+            eingelagert: this.text(a.w.eingelagert) || null, komplett: this.text(a.w.komplett) || null,
+            entnommen: heute, kopf: kopf
+        });
+        for (const feld in this.archivKopfEtiketten) {
+            const [vorsatz, quelle] = this.archivKopfEtiketten[feld];
+            const wert = this.text(ab[quelle]);
+            z[feld] = wert ? vorsatz + wert : "";
+        }
+        zeilen.push(z);
+    }
+
+    if (p.bg === null) {
+        a.ohne.forEach(t => zeilen.push(teil(t, this.archivOhneBg)));
+        a.bgs.forEach(bgZeilen);
+    } else {
+        bgZeilen(p.bg);
+    }
+
+    return zeilen;
+},
+
+/* R-W2/R-W3: AB oder BG ins Schweißen kopieren, in der Bestandsliste ausblenden. Die letzte BG nimmt die
+   AB-Zeile mit; dann werden alle Zeilen des AB zusammengefasst. Entnommen = heute; Mitarbeiter,
+   Arbeitsplatz, Termine leer. Gibt den Plan zurück. */
+swEntnehmen: async function (abId, bgId) {
+
+    const p = await this.swEntnehmenPruefen(abId, bgId);
+    const heute = this.heuteText();
+
+    const vorhanden = await this.swLesen();
+    const neu = this.swZeilenKopieren(p, this.swNaechsteNr(vorhanden), heute);
+
+    /* erst kopieren, dann ausblenden */
+    await this.jeAcht(neu, z => this.datenAnlegen("schweisszeile", z));
+
+    const ganz = p.bg === null || p.mitAb;
+    if (ganz) {
+        await this.datenAendern("auftrag", p.a.o, { bereich: "schweissen" }, { ohnePruefung: true });
+    } else {
+        const aufgaben = [{ name: "baugruppe", zeile: p.bg.o, werte: { archiviert: true } }];
+        p.bg.teile.forEach(t => aufgaben.push({ name: "teil", zeile: t.o, werte: { archiviert: true } }));
+        await this.datenAendernViele(aufgaben);
+    }
+
+    if (ganz) await this.swZusammenfassen(this.text(p.a.o.ab_schluessel));
+    await this.swAbgleichen();
+
+    await this.protokollSchreiben("entnommen", p.a.o.ab_anzeige, p.bg === null ? "" : "BG " + this.text(p.bg.o.name),
+        "Bestandsliste", "Schweißen");
+    return p;
+},
+
+/* Zeilen eines AB (in Reihenfolge) -> { abz: AB-Zeilen, ohne: Teile ohne BG, bgs: [{ bg, teile }] } */
+swGruppen: function (zeilen) {
+
+    const g = { abz: [], ohne: [], bgs: [] };
+
+    zeilen.forEach(z => {
+        if (z.ebene === "AB") g.abz.push(z);
+        else if (z.ebene === "BG") g.bgs.push({ bg: z, teile: [] });
+        else if (g.bgs.length) g.bgs[g.bgs.length - 1].teile.push(z);
+        else g.ohne.push(z);
+    });
+
+    return g;
+},
+
+/* R-W3 (SwZusammenfassen): alle Zeilen eines AB unter der AB-Zeile zusammenfassen: AB-Zeile, Teile ohne BG,
+   dann die BGs nach Nummer (Teile bleiben hinter ihrer BG); Anzeige wieder "AB…". Mitarbeiter, Plätze, Termine
+   und das Entnommen-Datum jeder Zeile bleiben. Die Zeilen stehen danach am Ende der Liste. */
+swZusammenfassen: async function (schluessel) {
+
+    const alle = await this.swLesen();
+    const zeilen = this.swNachNr(alle.filter(z => this.text(z.ab_schluessel) === schluessel));
+    if (!zeilen.length) return;
+
+    const g = this.swGruppen(zeilen);
+    g.bgs.sort((p, q) => this.swBgVergleich(p.bg.baugruppe, q.bg.baugruppe));
+
+    let ordnung = g.abz.concat(g.ohne);
+    g.bgs.forEach(x => { ordnung = ordnung.concat([x.bg], x.teile); });
+
+    const nr = this.swNaechsteNr(alle);
+    await this.datenAendernViele(ordnung.map((z, i) => ({
+        name: "schweisszeile", zeile: z, werte: { nr: nr + i, anzeige: this.text(z.ab_nr) }
+    })));
+},
+
+/* ---------------------------------------------------------------------------
+   R-W8 Archivieren
+   --------------------------------------------------------------------------- */
+
+/* R-I10: Liegt der AB (Vergleich nach R-AB3) schon ganz oder teilweise im Bereich Schweißen? */
+swHatAb: async function (ab) {
+
+    return this.text(ab) !== "" && this.swHatSchluessel(this.abSchluessel(ab));
+},
+
+swHatSchluessel: async function (schluessel) {
+
+    const da = await this.datenLesen("schweisszeile", { wo: { ab_schluessel: schluessel }, aufloesen: false, felder: ["ab_schluessel"] });
+    return da.length > 0;
+},
+
+/* Nur ganze ABs (AB-Zeile). Gibt { z, n } zurück (n = Zahl der Zeilen) oder wirft eine Meldung wie in Excel. */
+swArchivierenPruefen: async function (zeileId) {
+
+    const alle = await this.swLesen();
+    const z = alle.find(x => String(x._id) === String(zeileId));
+    if (!z) throw new Error("Diese Zeile gibt es nicht (mehr) im Bereich Schweißen.");
+
+    if (z.ebene === "BG" && this.text(z.anzeige).toUpperCase().indexOf("_BG") > -1) {
+        throw new Error("Diese Baugruppe kann erst archiviert werden, wenn der ganze AB im Blatt Schweißen liegt.");
+    }
+    if (z.ebene !== "AB") throw new Error("Archiviert werden nur ganze ABs: bitte in der AB-Zeile archivieren.");
+
+    return { z: z, n: alle.filter(x => this.text(x.ab_schluessel) === this.text(z.ab_schluessel)).length, alle: alle };
+},
+
+/* R-W8: alle Zeilen des AB ins Archiv (Herkunft "Archiviert aus Schweißen"), im Schweißen ausblenden.
+   Mitarbeiter, Plätze und Termine werden so festgehalten, wie sie angezeigt wurden ("(verschieden)" bleibt Text;
+   bei Terminen steht dann nichts). Gibt { ab, n } zurück. */
+swArchivieren: async function (zeileId) {
+
+    const { z, alle: live } = await this.swArchivierenPruefen(zeileId);
+    const zeilen = this.swNachNr(live.filter(x => this.text(x.ab_schluessel) === this.text(z.ab_schluessel)));
+
+    const w = this.swWerte(zeilen);
+    this.swAbAbleiten(zeilen.map(x => x.ebene), zeilen.map(x => x.ab_nr), w);
+
+    const abZeile = zeilen.find(x => x.ebene === "AB");
+    const k = abZeile.kopfObj || {};
+    const jetzt = this.zeitJetzt();
+
+    /* Kopf fürs Archiv: einen früheren Kopf des AB wiederverwenden, sonst neu anlegen. */
+    const kopfWerte = {
+        ab_anzeige: this.text(abZeile.ab_nr), ab_schluessel: this.text(abZeile.ab_schluessel),
+        kunde: this.text(k.kunde), verkaufsartikel: this.text(k.verkaufsartikel),
+        quelldatei: this.text(k.quelldatei), reihenfolge: k.reihenfolge === undefined ? null : k.reihenfolge,
+        regal_geteilt: false, bereich: "archiv", archiviert: true, archiviert_am: jetzt,
+        archiv_herkunft: this.archivHerkunftSchweissen, archiv_status: this.text(abZeile.status)
+    };
+    const koepfe = await this.datenLesen("auftrag", {
+        wo: { ab_schluessel: kopfWerte.ab_schluessel, bereich: "archiv" }, archiv: "alle", aufloesen: false
+    });
+    const frei = koepfe.find(x => !this.istJa(x.archiviert));
+    if (frei) await this.datenAendern("auftrag", frei, kopfWerte, { ohnePruefung: true });
+    else await this.datenAnlegen("auftrag", kopfWerte);
+
+    await this.datenAendernViele(zeilen.map((x, i) => {
+        const datum = v => (v === this.swVerschieden ? null : (v === undefined ? null : v));
+        return {
+            name: "schweisszeile", zeile: x, werte: {
+                mitarbeiter: this.text(w[i][0]), arbeitsplatz: this.text(w[i][1]),
+                liefertermin_stahlbau: datum(w[i][2]), termin_versand: datum(w[i][3]), archiviert: true
+            }
+        };
+    }));
+
+    await this.protokollSchreiben("archiviert", this.text(abZeile.ab_nr), "", zeilen.length + " Zeilen", "Archiv");
+    return { ab: this.text(abZeile.ab_nr), n: zeilen.length };
+},
+
+/* Kopfdaten für die Zeilen eines wiederhergestellten AB: was in den Zeilen steht, ergänzt aus dem Kopf. */
+swKopfAusZeilen: function (zeilen, kopf) {
+
+    const abZeile = zeilen.find(x => x.ebene === "AB");
+    let j = {};
+    for (const x of zeilen) {
+        try { j = JSON.parse(this.text(x.kopf) || "{}") || {}; } catch (fehler) { j = {}; }
+        if (Object.keys(j).length) break;
+    }
+
+    const setzen = (f, wert) => { if (j[f] === undefined || j[f] === null || j[f] === "") j[f] = wert; };
+    setzen("kunde", this.text(kopf.kunde));
+    setzen("verkaufsartikel", this.text(kopf.verkaufsartikel));
+    setzen("quelldatei", this.text(kopf.quelldatei));
+    setzen("reihenfolge", kopf.reihenfolge === undefined ? null : kopf.reihenfolge);
+    setzen("forecast_schluessel", this.abForecastSchluessel(this.text(kopf.ab_anzeige)));
+
+    if (abZeile) {
+        for (const feld in this.archivKopfEtiketten) {
+            const [vorsatz, quelle] = this.archivKopfEtiketten[feld];
+            const t = this.text(abZeile[feld]);
+            setzen(quelle, t.indexOf(vorsatz) === 0 ? this.text(t.slice(vorsatz.length)) : t);
+        }
+    }
+
+    return JSON.stringify(j);
+},
+
+/* Wiederherstellen eines aus dem Schweißen archivierten AB: die Zeilen kommen mit allen Angaben zurück ins
+   Schweißen. kopf = Zeile aus archivLaden. Gibt die Zahl der Zeilen zurück. */
+swAusArchiv: async function (kopf) {
+
+    const name = this.text(kopf.ab_anzeige);
+    const schluessel = this.text(kopf.ab_schluessel) || this.abSchluessel(name);
+
+    if (await this.swHatSchluessel(schluessel)) {
+        throw new Error(name + " liegt schon wieder im Schweißen. Erst dort archivieren, dann wiederherstellen.");
+    }
+
+    const archiviert = await this.datenLesen("schweisszeile", { wo: { ab_schluessel: schluessel }, archiv: "nur", aufloesen: false });
+    const zeilen = this.swNachNr(archiviert.filter(x => !this.istJa(x.zurueckgeholt)));
+    if (!zeilen.length) throw new Error("Für " + name + " gibt es keine Zeilen im Archiv.");
+
+    const alle = await this.swLesen();
+    const nr = this.swNaechsteNr(alle);
+    const kopfText = this.swKopfAusZeilen(zeilen, kopf);
+    const ohneVerschieden = v => (this.text(v) === this.swVerschieden ? "" : this.text(v));
+
+    await this.datenAendernViele(zeilen.map((x, i) => ({
+        name: "schweisszeile", zeile: x, werte: {
+            nr: nr + i, anzeige: this.text(x.ab_nr) || name, archiviert: false,
+            mitarbeiter: ohneVerschieden(x.mitarbeiter), arbeitsplatz: ohneVerschieden(x.arbeitsplatz),
+            liefertermin_stahlbau: this.tagNr(x.liefertermin_stahlbau) === null ? null : x.liefertermin_stahlbau,
+            termin_versand: this.tagNr(x.termin_versand) === null ? null : x.termin_versand, kopf: kopfText
+        }
+    })));
+
+    /* Der Kopf im Archiv wird nicht mehr gebraucht; er bleibt stehen, ist aber nicht mehr archiviert
+       (bereich "archiv": die Bestandsliste liest ihn nie). */
+    await this.datenAendern("auftrag", kopf, { archiviert: false, archiviert_am: null }, { ohnePruefung: true });
+
+    await this.swAbgleichen();
+    await this.protokollSchreiben("wiederhergestellt", name, "", "Archiv", "Schweißen");
+    return zeilen.length;
+},
+
+/* ---------------------------------------------------------------------------
+   R-W9 Zurück in die Bestandsliste
+   --------------------------------------------------------------------------- */
+
+swRueckName: function (r) {
+
+    const z = r.zeile;
+    return z.ebene === "AB" ? "AB " + this.text(z.ab_nr) : "Baugruppe " + this.text(z.baugruppe) + " (" + this.text(z.ab_nr) + ")";
+},
+
+swRueckFrage: function (r) {
+
+    const z = r.zeile;
+    if (z.ebene === "AB") return "AB " + this.text(z.ab_nr) + " mit allen Baugruppen zurück in die Bestandsliste schieben?";
+
+    let text = "Baugruppe " + this.text(z.baugruppe) + " (" + this.text(z.ab_nr) + ") zurück in die Bestandsliste schieben?";
+    if (r.mitAb) text += " Die AB-Zeile geht mit zurück, die übrigen Baugruppen bleiben einzeln im Schweißen.";
+    return text;
+},
+
+swRueckVerlust: "Mengen, Lagerort und Daten kommen mit. Mitarbeiter, Arbeitsplatz, Termine und das Entnahmedatum gehen verloren.",
+
+/* Gibt { zeile, auswahl, mitAb } zurück oder wirft eine Meldung. */
+swZurueckPruefen: async function (zeileId) {
+
+    const live = await this.swLesen();
+    const z = live.find(x => String(x._id) === String(zeileId));
+    if (!z) throw new Error("Diese Zeile gibt es nicht (mehr) im Bereich Schweißen.");
+    if (z.ebene !== "AB" && z.ebene !== "BG") throw new Error("Bitte die Zeile des AB oder der Baugruppe wählen (nicht ein Einzelteil).");
+
+    const alle = this.swNachNr(live.filter(x => this.text(x.ab_schluessel) === this.text(z.ab_schluessel)));
+    if (z.ebene === "AB") return { zeile: z, auswahl: alle, mitAb: true, alle: alle };
+
+    const g = this.swGruppen(alle);
+    const mein = g.bgs.find(x => String(x.bg._id) === String(z._id));
+    let auswahl = [mein.bg].concat(mein.teile);
+    const mitAb = g.abz.length > 0;
+    if (mitAb) auswahl = g.abz.concat(g.ohne, auswahl);   /* AB-Zeile und Teile ohne BG gehen mit zurück */
+
+    return { zeile: z, auswahl: auswahl, mitAb: mitAb, alle: alle };
+},
+
+/* Text aus dem Schweißen -> { zahl, text }: eine Zahl (Komma oder Punkt) oder der Text selbst. */
+swZahl: function (wert) {
+
+    const t = this.text(wert);
+    if (!t) return { zahl: null, text: "" };
+
+    const s = t.indexOf(",") > -1 ? t.replace(/\./g, "").replace(",", ".") : t;
+    if (/^[+-]?(\d+\.?\d*|\.\d+)([eE][+-]?\d+)?$/.test(s) && Number.isFinite(Number(s))) return { zahl: Number(s), text: "" };
+
+    return { zahl: null, text: t };
+},
+
+/* R-W9: AB bzw. BG zurück in die Bestandsliste. Eine BG eines zusammengefassten AB nimmt die AB-Zeile mit; die
+   übrigen BGs stehen danach wieder einzeln als AB…_BGnnn. Mitarbeiter, Arbeitsplatz, Termine und Entnommen gehen
+   verloren. Gibt den AB (Zeile aus kom_auftrag) zurück. */
+swZurueck: async function (zeileId) {
+
+    const r = await this.swZurueckPruefen(zeileId);
+    const sel = r.auswahl;
+    const erste = sel[0];
+    const schluessel = this.text(erste.ab_schluessel);
+    const g = this.swGruppen(sel);
+
+    const k = (g.abz.length ? g.abz[0].kopfObj : null) || erste.kopfObj || {};
+
+    const vorhanden = await this.datenLesen("auftrag", { wo: { ab_schluessel: schluessel, bereich: "bestand" }, aufloesen: false });
+    let a = vorhanden.length ? vorhanden[0] : null;
+
+    if (a === null) {   /* AB-Zeile wird neu aufgebaut */
+        const live = await this.datenLesen("auftrag", { wo: { bereich: "bestand" }, aufloesen: false, felder: ["reihenfolge"] });
+        const milli = live.map(x => this.mengeMilli(x.reihenfolge));
+        const belegt = k.reihenfolge === null || k.reihenfolge === undefined || k.reihenfolge === "" ? null : Number(k.reihenfolge);
+        const frei = belegt && milli.indexOf(belegt * 1000) < 0;
+
+        a = await this.datenAnlegen("auftrag", {
+            ab_anzeige: this.text(erste.ab_nr), ab_schluessel: schluessel,
+            forecast_schluessel: this.text(k.forecast_schluessel) || this.abForecastSchluessel(erste.ab_nr),
+            haupt_ab: this.text(k.haupt_ab), kunde: this.text(k.kunde), verkaufsartikel: this.text(k.verkaufsartikel),
+            ersteller: this.text(k.ersteller), datum_liste: this.text(k.datum_liste), dispoliste: this.text(k.dispoliste),
+            lagerort: g.abz.length ? this.text(g.abz[0].lagerort) : "", regal_geteilt: false, bereich: "bestand",
+            reihenfolge: frei ? belegt : (milli.length ? Math.max(...milli) / 1000 : 0) + 1,
+            quelldatei: this.text(k.quelldatei), archiviert: false, archiviert_am: null, archiv_herkunft: "", archiv_status: ""
+        });
+    }
+
+    /* höchste Zeilennummer im AB, auch unter den ausgeblendeten, damit keine doppelt vergeben wird */
+    const [bgAlt, teilAlt] = await Promise.all([
+        this.datenLesenIn("baugruppe", "auftrag", [a._id], { archiv: "alle", felder: ["zeile"] }),
+        this.datenLesenIn("teil", "auftrag", [a._id], { archiv: "alle", felder: ["zeile"] })
+    ]);
+    let zeile = bgAlt.concat(teilAlt).reduce((m, x) => Math.max(m, this.mengeMilli(x.zeile) / 1000), 0);
+
+    const felder = x => {
+        const o = {};
+        this.swKopierFelder.forEach(f => { o[f] = this.text(x[f]); });
+        return o;
+    };
+    const soll = x => {
+        const s = this.swZahl(x.menge_gesamt);
+        return { menge_gesamt: s.zahl, menge_gesamt_text: s.text };
+    };
+    const datum = v => (this.tagNr(v) === null ? null : v);
+
+    /* Reihenfolge wie bisher: Teile ohne BG, dann je BG sie selbst und ihre Teile */
+    const teilWerte = (x, bgId) => {
+        zeile += 1;
+        return Object.assign({
+            auftrag: a._id, baugruppe: bgId, zeile: zeile, vorhanden: this.swZahl(x.vorhanden).zahl,
+            datum_eingelagert: datum(x.eingelagert), datum_komplett: datum(x.komplett), archiviert: false
+        }, soll(x), felder(x));
+    };
+
+    const teile = g.ohne.map(x => teilWerte(x, null));
+    const bgPlan = g.bgs.map(x => {
+        zeile += 1;
+        const werte = Object.assign({
+            auftrag: a._id, zeile: zeile, name: this.text(x.bg.baugruppe), kurz: this.swBgNummer(x.bg.baugruppe), archiviert: false
+        }, soll(x.bg), felder(x.bg));
+        return { x: x, werte: werte, teile: x.teile.map(t => teilWerte(t, null)) };   /* Teile folgen ihrer BG */
+    });
+
+    /* BGs zuerst (die Teile brauchen ihre Verweise) */
+    await this.jeAcht(bgPlan, async p => { p.neu = await this.datenAnlegen("baugruppe", p.werte); });
+    bgPlan.forEach(p => p.teile.forEach(t => { t.baugruppe = p.neu._id; }));
+
+    const alleTeile = teile.concat(...bgPlan.map(p => p.teile));
+    await this.jeAcht(alleTeile, t => this.datenAnlegen("teil", t));
+
+    /* die Zeilen im Schweißen ausblenden: archiviert und zurückgeholt */
+    await this.datenAendernViele(sel.map(x => ({ name: "schweisszeile", zeile: x, werte: { archiviert: true, zurueckgeholt: true } })));
+
+    if (r.zeile.ebene === "BG" && r.mitAb) {   /* SwEinzelnBeschriften: übrige BGs wieder einzeln */
+        const ids = {};
+        sel.forEach(x => { ids[String(x._id)] = true; });
+        const rest = r.alle.filter(x => !ids[String(x._id)]);
+        await this.datenAendernViele(rest.map(x => ({
+            name: "schweisszeile", zeile: x, werte: { anzeige: this.text(x.ab_nr) + "_BG" + this.swBgNummer(x.baugruppe) }
+        })));
+    }
+
+    await this.protokollSchreiben("zurueck", a.ab_anzeige, r.zeile.ebene === "AB" ? "" : "BG " + this.text(r.zeile.baugruppe),
+        "Schweißen", "Bestandsliste");
+    return a;
+},
+
+
+/* ===========================================================================
+   ARBEITSPLÄTZE: HALLENPLAN (R-AP1 bis R-AP5)
+   Nachbau von bestand/schweissen/hallenplan.py: die Einträge der Magnettafel
+   (Formel AP), die Plätze mit ihren Einträgen und die drei Listen darunter,
+   dazu Platz setzen, Mitarbeiter setzen, AB aufsplitten und zusammenführen.
+   Platz und Mitarbeiter gehen über swSetzen (4K_sw_eingaben.js), also mit
+   Vererbung an BGs und Teile.
+   =========================================================================== */
+
+/* "(verschieden)" zählt als leer. */
+hpRein: function (x) {
+
+    const t = this.text(x);
+    return t === this.swVerschieden ? "" : t;
+},
+
+hpKlein: function (s) {
+
+    return this.text(s).toLowerCase();
+},
+
+/* R-AP3 (Formel AP): je AB bzw. BG im Schweißen ein Eintrag mit Platz und Mitarbeiter.
+   - zusammengefasster AB, alle BGs am selben Platz (auch keinem) -> ein Eintrag "AB…";
+   - BGs an verschiedenen Plätzen -> jede BG einzeln als "AB…_BGnnn"; AB ohne BG -> der AB selbst;
+   - Einzelblöcke "AB…_BGnnn" -> immer einzeln.
+   Platz einer BG = eigener, sonst der des AB; Mitarbeiter ebenso; "(verschieden)" zählt als leer.
+   zeilen = swLesen() (mit m und p). Ergebnis: [{ name, platz, mitarbeiter, ganz, komplett, bgs }] nach Name. */
+hpEintraege: function (zeilen) {
+
+    const abPlatz = {}, abMit = {}, nbg = {}, geteilt = {};
+
+    zeilen.forEach(z => {
+        const k = this.hpKlein(z.ab_nr);
+        if (z.ebene === "AB") {
+            if (!(k in abPlatz)) abPlatz[k] = this.hpRein(z.p);
+            if (!(k in abMit)) abMit[k] = this.hpRein(z.m);
+            if (this.istJa(z.ap_geteilt)) geteilt[k] = true;
+        } else if (z.ebene === "BG") {
+            nbg[k] = (nbg[k] || 0) + 1;
+        }
+    });
+
+    const roh = [];
+    zeilen.forEach(z => {
+        const k = this.hpKlein(z.ab_nr);
+        if (z.ebene === "BG" || (z.ebene === "AB" && !nbg[k])) {
+            const xp = k in abPlatz ? abPlatz[k] : "", xm = k in abMit ? abMit[k] : "";
+            roh.push({
+                en: this.text(z.ab_nr), ed: this.text(z.anzeige), enr: this.swBgNummer(z.baugruppe), eeb: z.ebene,
+                ep: this.hpRein(z.p) || xp, em: this.hpRein(z.m) || xm, xm: xm
+            });
+        }
+    });
+
+    const kombis = {};
+    roh.forEach(r => {
+        const k = this.hpKlein(r.en);
+        (kombis[k] = kombis[k] || {})[this.hpKlein(r.ep)] = true;
+    });
+
+    const aus = [], gesehen = {};
+    roh.forEach(r => {
+        const k = this.hpKlein(r.en);
+        const einz = r.ed.toLowerCase().indexOf("_bg") > -1;
+        const ganz = (Object.keys(kombis[k]).length === 1 && !einz && !geteilt[k]) || r.eeb === "AB";
+        const name = ganz ? r.en : (einz ? r.ed : r.en + "_BG" + r.enr);
+        const mit = ganz && r.eeb !== "AB" ? r.xm : r.em;
+        const schluessel = this.hpKlein(name) + "|" + this.hpKlein(r.ep);
+
+        if (gesehen[schluessel]) return;
+        gesehen[schluessel] = true;
+
+        aus.push({ name: name, platz: r.ep, mitarbeiter: mit, ganz: ganz, komplett: k in abPlatz, bgs: nbg[k] || 0 });
+    });
+
+    return aus.sort((a, b) => (this.hpKlein(a.name) < this.hpKlein(b.name) ? -1 : (this.hpKlein(a.name) > this.hpKlein(b.name) ? 1 : 0)));
+},
+
+hpAnzeige: function (e) {
+
+    return e.mitarbeiter ? e.name + " · " + e.mitarbeiter : e.name;
+},
+
+/* Der AB hinter dem Eintrag ("AB2515204_BG100" -> "AB2515204"). */
+hpAb: function (e) {
+
+    const i = e.name.toUpperCase().indexOf("_BG");
+    return i < 0 ? e.name : e.name.slice(0, i);
+},
+
+/* R-AP2 bis R-AP4: die Plätze mit ihren Einträgen und die drei Listen unter dem Plan.
+   plaetze = swPlaetzeLaden(). */
+hpHallenplan: function (zeilen, plaetze) {
+
+    const alle = this.hpEintraege(zeilen);
+    const jePlatz = plaetze.map(p => ({ p: p, eintraege: [] }));
+    const nicht = [], ungueltig = [], einsortiert = [];
+
+    alle.forEach(e => {
+        if (!e.platz) { nicht.push(e); return; }
+
+        const x = jePlatz.find(j => this.hpKlein(j.p.name) === this.hpKlein(e.platz));   /* COUNTIF: exakt */
+        if (!x) { ungueltig.push(e); return; }
+
+        x.eintraege.push(e);
+        einsortiert.push([e, x.p]);
+    });
+
+    return { plaetze: jePlatz, nicht: nicht, ungueltig: ungueltig, einsortiert: einsortiert, anzahl: alle.length };
+},
+
+/* ---------------------------------------------------------------------------
+   Ändern
+   --------------------------------------------------------------------------- */
+
+/* Die AB-Zeile ("AB…") bzw. BG-Zeile ("AB…_BGnnn") hinter einem Eintrag des Hallenplans. */
+hpZiel: function (zeilen, eintrag) {
+
+    const p = eintrag.toUpperCase().indexOf("_BG");
+    const abNr = p >= 0 ? eintrag.slice(0, p) : eintrag;
+    const bgNr = p >= 0 ? eintrag.slice(p + 3) : "";
+
+    for (const z of this.swNachNr(zeilen)) {
+        if (!this.swGleich(z.ab_nr, abNr)) continue;
+        if (!bgNr && z.ebene === "AB") return z;
+        if (bgNr && z.ebene === "BG" && this.swGleich(this.swBgNummer(z.baugruppe), bgNr)) return z;
+    }
+
+    throw new Error(eintrag + " wurde im Bereich Schweißen nicht gefunden.");
+},
+
+/* R-AP5 (ApSetzen): Arbeitsplatz eines AB bzw. einer BG im Schweißen eintragen; die Vererbung gibt ihn an
+   BGs und Teile weiter. Gibt die Meldung zurück. */
+hpPlatzSetzen: async function (eintrag, platz) {
+
+    const zeilen = await this.swLesen();
+    const ziel = this.hpZiel(zeilen, eintrag);
+    const r = await this.swSetzen(ziel._id, "arbeitsplatz", platz);
+
+    return eintrag + ": " + (r.neu !== "leer" ? "Arbeitsplatz " + r.neu : "kein Arbeitsplatz mehr") + ".";
+},
+
+/* Rechtsklick im Hallenplan: Mitarbeiter eines Eintrags ändern (Auswahl aus der Liste). */
+hpMitarbeiterSetzen: async function (eintrag, wert) {
+
+    const zeilen = await this.swLesen();
+    const ziel = this.hpZiel(zeilen, eintrag);
+    const r = await this.swSetzen(ziel._id, "mitarbeiter", wert);
+
+    return eintrag + ": " + (r.neu !== "leer" ? "Mitarbeiter " + r.neu : "kein Mitarbeiter mehr") + ".";
+},
+
+/* Die AB-Zeile zu einem Eintrag; nur vorhanden, wenn der ganze AB im Schweißen liegt. */
+hpAbZeile: function (zeilen, eintrag) {
+
+    const ziel = this.hpZiel(zeilen, eintrag);
+    const ab = this.swNachNr(zeilen).find(z => z.ebene === "AB" && this.text(z.ab_schluessel) === this.text(ziel.ab_schluessel));
+
+    if (!ab || this.text(ziel.anzeige) !== this.text(ab.anzeige)) {
+        throw new Error("Aufsplitten und Zusammenführen geht nur, wenn alle Baugruppen des AB im Schweißen liegen. " +
+            "Dieser AB ist noch zwischen Bestandsliste und Schweißen aufgeteilt.");
+    }
+
+    return ab;
+},
+
+/* Hallenplan: der AB wird in seine Baugruppen aufgesplittet (je BG ein Eintrag, alle am bisherigen Platz). */
+hpTeilen: async function (eintrag) {
+
+    const zeilen = await this.swLesen();
+    const ab = this.hpAbZeile(zeilen, eintrag);
+
+    const nBg = zeilen.filter(z => this.text(z.ab_schluessel) === this.text(ab.ab_schluessel) && z.ebene === "BG").length;
+    if (nBg < 2) throw new Error("Dieser AB hat keine Baugruppen zum Aufsplitten (mindestens zwei nötig).");   /* Ben, 15.10. */
+
+    await this.datenAendern("schweisszeile", ab, { ap_geteilt: true }, { ohnePruefung: true });
+    await this.protokollSchreiben("schweissen", ab.ab_nr, "Arbeitsplätze", "AB", "Baugruppen einzeln");
+
+    return eintrag + " ist in Baugruppen aufgesplittet.";
+},
+
+/* Hallenplan, Rechtsklick auf eine Baugruppe: der ganze AB kommt dorthin, wo diese Baugruppe liegt. */
+hpZusammenfuehren: async function (eintrag) {
+
+    const zeilen = await this.swLesen();
+    const ab = this.hpAbZeile(zeilen, eintrag);
+    const bg = this.hpZiel(zeilen, eintrag);
+    const e = this.hpEintraege(zeilen).find(x => this.hpKlein(x.name) === this.hpKlein(eintrag));
+    const platz = e ? e.platz : "";
+
+    if (bg.ebene !== "BG") throw new Error("Dieser Eintrag ist schon der ganze AB.");
+
+    await this.datenAendern("schweisszeile", ab, { ap_geteilt: false }, { ohnePruefung: true });
+    await this.swSetzen(ab._id, "arbeitsplatz", platz);
+    await this.protokollSchreiben("schweissen", ab.ab_nr, "Arbeitsplätze", "Baugruppen einzeln",
+        "AB zusammen (" + (platz || "kein Platz") + ")");
+
+    return this.text(ab.ab_nr) + " ist zusammengeführt" + (platz ? " (" + platz + ")" : " (nicht einsortiert)") + ".";
+},
+
+
+/* ===========================================================================
+   SCHWEISSEN ANSEHEN: Suchen, Filtern, Sortieren, Sammlungen (R-W10)
+   Nachbau von bestand/schweissen/bloecke.py. Die Blöcke bauen swBloecke und
+   swBerechnen (4F_schweissen.js). Jede Zeile trägt zeigen (Treffer von
+   Suche und Filter).
+   =========================================================================== */
+
+swAnzeigen: [["ab", "ABs"], ["bg", "BGs"], ["alles", "Alles"]],
+
+swSortierungen: [
+    ["", "Standard"],
+    ["lt_auf", "Liefertermin aufsteigend"],
+    ["lt_ab", "Liefertermin absteigend"],
+    ["ab_auf", "AB aufsteigend"],
+    ["ab_ab", "AB absteigend"]
+],
+
+swTreffer: function (q, texte) {
+
+    return texte.some(t => this.text(t).toLowerCase().indexOf(q) > -1);
+},
+
+/* R-W10: Teilwort in AB/Anzeige (-> ganzer Block), Zeichnungsnummer, Benennung, LK Nummer, Mitarbeiter,
+   Arbeitsplatz (BG -> mit allen Teilen, Teil -> mit BG- und AB-Kopf). Setzt zeigen an Zeilen und
+   Blöcken; gibt die Zahl der Treffer zurück. */
+swSuchen: function (bloecke, begriff) {
+
+    const q = this.text(begriff).toLowerCase();
+    const passt = z => this.swTreffer(q, [z.zeichnungsnummer, z.benennung, z.lk_nummer, z.m, z.p]);
+    let treffer = 0;
+
+    bloecke.forEach(b => {
+        const alle = this.swBlockZeilen(b);
+        alle.forEach(z => { z.zeigen = false; });
+        b.zeigen = false;
+
+        const kopf = this.swKopf(b);
+        if (this.swTreffer(q, [kopf.anzeige, kopf.ab_nr]) || (b.ab && passt(b.ab))) {
+            alle.forEach(z => { z.zeigen = true; });
+            b.zeigen = true;
+            treffer++;
+            return;
+        }
+
+        const ab = () => { if (b.ab) b.ab.zeigen = true; };
+
+        b.ohne.forEach(t => {
+            if (passt(t)) { t.zeigen = b.zeigen = true; ab(); treffer++; }
+        });
+
+        b.bgs.forEach(g => {
+            if (passt(g.bg)) {
+                g.bg.zeigen = b.zeigen = true;
+                g.teile.forEach(t => { t.zeigen = true; });
+                ab();
+                treffer++;
+            }
+            g.teile.forEach(t => {
+                if (passt(t)) { t.zeigen = g.bg.zeigen = b.zeigen = true; ab(); treffer++; }
+            });
+        });
+    });
+
+    return treffer;
+},
+
+/* R-W10 Anzeige (Ben, 14.10.): "ABs" und "BGs" zeigen alle Zeilen, nur zugeklappt (das Klappen
+   macht die Ansicht), damit man darunter aufklappen kann. "Alles" zeigt alles. */
+swAllesZeigen: function (bloecke) {
+
+    bloecke.forEach(b => {
+        b.zeigen = true;
+        this.swBlockZeilen(b).forEach(z => { z.zeigen = true; });
+    });
+},
+
+/* Ben, 14.10.: nur Blöcke, in denen dieser Mitarbeiter / dieser Arbeitsplatz vorkommt. */
+swBlockFiltern: function (bloecke, mitarbeiter, platz) {
+
+    return bloecke.filter(b => {
+        const zs = this.swBlockZeilen(b);
+
+        if (mitarbeiter && !zs.some(z => this.swMitarbeiterListe(z.m).some(n => n.toLowerCase() === mitarbeiter.toLowerCase()))) return false;
+        if (platz && !zs.some(z => this.hpKlein(z.p) === this.hpKlein(platz))) return false;
+        return true;
+    });
+},
+
+/* Liefertermin (Stahlbau) oder AB-Nummer; Blöcke ohne Termin stehen immer hinten. */
+swBlockSortieren: function (bloecke, wie) {
+
+    const vergleich = (x, y) => (x < y ? -1 : (x > y ? 1 : 0));
+    const nummer = b => this.text(this.swKopf(b).ab_nr).toLowerCase();
+    const absteigend = wie.slice(-2) === "ab";
+
+    if (wie.indexOf("ab_") === 0) {
+        return bloecke.slice().sort((p, q) => (absteigend ? -1 : 1) * vergleich(nummer(p), nummer(q)));
+    }
+
+    const tag = b => this.tagNr(this.swKopf(b).lt);
+    const mit = bloecke.filter(b => tag(b) !== null).sort((p, q) =>
+        (absteigend ? -1 : 1) * (vergleich(tag(p), tag(q)) || vergleich(nummer(p), nummer(q))));
+
+    return mit.concat(bloecke.filter(b => tag(b) === null));
+},
+
+/* Ben, 15.10.: Die Einzelblöcke eines AB (Baugruppen im Schweißen, der Rest noch in der Bestandsliste)
+   stehen gemeinsam unter der AB-Überschrift. Ergebnis: Blöcke und Sammlungen in der Reihenfolge der Liste.
+   Sammlung: { sammlung: true, schluessel, bloecke, komBgs: [Namen], offen } */
+swSammeln: function (bloecke) {
+
+    const ergebnis = [], sammlungen = {};
+
+    bloecke.forEach(b => {
+        if (b.ab !== null) { ergebnis.push(b); return; }
+
+        const s = this.text(b.bgs[0].bg.ab_schluessel);
+        if (!sammlungen[s]) {
+            sammlungen[s] = { sammlung: true, schluessel: s, bloecke: [], komBgs: [], offen: true };
+            ergebnis.push(sammlungen[s]);
+        }
+        sammlungen[s].bloecke.push(b);
+    });
+
+    return ergebnis;
+},
+
+/* Spalten, die ohne "Mehr" zu sehen sind, und die ausgeblendeten Mehr-Spalten (dritter Eintrag true).
+   Eine Zelle über die ganze Zeile spannt nur über die sichtbaren; die Mehr-Spalten bekommen eine eigene
+   leere Zelle, sonst entstehen zusätzliche Spalten und die Tabelle wird schmaler als die Karte. */
+spaltenZaehlen: function (spalten) {
+
+    const mehr = spalten.filter(s => s[2]).length;
+    return { sichtbar: spalten.length - mehr, mehr: mehr };
+},
+
+/* Hängt die leere Zelle für die Mehr-Spalten an eine Zeile mit über die Zeile gespannter Zelle. */
+mehrRest: function (tr, spalten) {
+
+    const n = this.spaltenZaehlen(spalten);
+    if (n.mehr) this.zelle(tr, "", "kom-mehr", undefined, n.mehr);
+},
+
+/* Name, Kunde, Benennung einer Sammlung (aus ihrem ersten Block). */
+swSammlungKopf: function (s) {
+
+    const kopf = this.swKopf(s.bloecke[0]);
+    const k = kopf.kopfObj || {};
+    return { anzeige: this.text(kopf.anzeige).replace(/_BG[^_]*$/i, ""), benennung: this.text(k.verkaufsartikel), kunde: this.text(k.kunde) };
+},
+
+/* Die Baugruppen, die einer Sammlung noch in der Bestandsliste stehen (rote Kacheln), als Namen. */
+swSammlungenErgaenzen: async function (liste) {
+
+    const sammlungen = liste.filter(x => x.sammlung);
+    if (!sammlungen.length) return;
+
+    const abs = await this.datenLesenIn("auftrag", "ab_schluessel", sammlungen.map(s => s.schluessel), { wo: { bereich: "bestand" } });
+    if (!abs.length) return;
+
+    const bgs = await this.datenLesenIn("baugruppe", "auftrag", abs.map(a => a._id), { sortierung: ["zeile"] });
+
+    sammlungen.forEach(s => {
+        const a = abs.find(x => this.text(x.ab_schluessel) === s.schluessel);
+        if (!a) return;
+        s.komBgs = bgs.filter(b => String(b._auftrag_id) === String(a._id)).map(b => this.text(b.name));
+    });
+},
+
+/* Je AB-Schlüssel die Baugruppen, die einzeln im Schweißen liegen (rote Kacheln "Befinden sich im
+   Schweißen" in der Bestandsliste und im Dashboard). zeilen = swLesen(). */
+swImSchweissen: function (zeilen) {
+
+    const je = {};
+
+    zeilen.forEach(z => {
+        if (z.ebene === "BG" && this.text(z.anzeige).toLowerCase().indexOf("_bg") > -1) {
+            (je[this.text(z.ab_schluessel)] = je[this.text(z.ab_schluessel)] || []).push(z);
+        }
+    });
+
+    return je;
+},
+
+/* Zähler oben: ABs im Schweißen (ein Einzelblock zählt als eigener Eintrag je AB) und Zahl der Einzelblöcke. */
+swZaehler: function (bloecke) {
+
+    const abs = {};
+    bloecke.forEach(b => { abs[b.ab === null ? "e|" + this.text(this.swKopf(b).ab_schluessel) : "a|" + String(b.ab._id)] = true; });
+
+    return { ab: Object.keys(abs).length, einzeln: bloecke.filter(b => b.ab === null).length };
 },
 
 
@@ -3874,6 +5255,7 @@ geruestBauen: function (parent) {
     const kopf = this.el(view, "div", "kom-kopf");
     this.el(kopf, "h2", "kom-titel", this.ansicht.titel);
     this.infoZeile = this.el(kopf, "div", "kom-info");
+    this.bereichsleisteBauen(view);
 
     this.koerper = this.el(view, "div", "kom-koerper");
 
@@ -3885,6 +5267,59 @@ geruestBauen: function (parent) {
     });
 
     return view;
+},
+
+/* Bereichsleiste wie das Hauptmenü der bisherigen App: ein Knopf je Bereich, der aktuelle ist hervorgehoben.
+   Der Verbindungstest hat keine. */
+bereichsleisteBauen: function (view) {
+
+    if (!this.einstellungen.bereichsleiste || this.ansicht.name === "verbindungstest") return;
+
+    const menue = this.el(view, "nav", "kom-menue");
+    menue.setAttribute("aria-label", "Bereiche");
+
+    this.einstellungen.bereiche.forEach(([name, titel]) => {
+        const b = this.el(menue, "button", "kom-menuepunkt" + (name === this.ansicht.name ? " kom-aktiv" : ""), titel);
+        b.type = "button";
+        if (name === this.ansicht.name) b.setAttribute("aria-current", "page");
+        b.onclick = () => this.bereichOeffnen(name);
+    });
+},
+
+/* In einen anderen Bereich wechseln. optionen.suche: dort gleich nach diesem Text suchen (z. B. die AB-Nummer).
+   Den Wechsel selbst macht window.KOM_BEREICH_WECHSELN (setzt die Testseite). OFFEN (Symolo): Wie öffnet Symolo
+   ein anderes Formular aus einem Hook heraus? Bis das geklärt ist, steht in Symolo nur ein Hinweis. */
+/* Rote Zeile (Ben, 16.10.): eine Baugruppe liegt im anderen Bereich (Schweißen oder Kommissionierlager).
+   Der Knopf springt dorthin (ziel). */
+rotKnopf: function (parent, text, titel, ziel) {
+
+    const k = this.el(parent, "button", "kom-rotknopf", text);
+    k.type = "button";
+    k.title = titel;
+    k.onclick = ziel;
+    return k;
+},
+
+bereichOeffnen: function (name, optionen) {
+
+    if (name === this.ansicht.name && !(optionen && optionen.suche)) return;
+
+    const wechsler = window.KOM_BEREICH_WECHSELN;
+    if (typeof wechsler === "function") {
+        wechsler(name, optionen || {});
+        return;
+    }
+
+    const b = this.einstellungen.bereiche.find(x => x[0] === name);
+    this.statusZeigen("Der Wechsel nach „" + (b ? b[1] : name) + "“ ist in Symolo noch nicht angebunden.", "fehler");
+},
+
+/* Beim Wechsel mitgegebene Angaben (einmal lesen): { suche }. */
+startOptionen: function () {
+
+    const o = window.KOM_START_OPTIONEN || {};
+    window.KOM_START_OPTIONEN = null;
+    return o;
 },
 
 /* Zeigt, woher die Daten kommen und ob gespeichert werden darf. */
@@ -3966,6 +5401,30 @@ tabelleBauen: function (parent, spalten, zeilen, leerText, aktionen) {
     });
 
     return tab;
+},
+
+/* Klapp-Knopf (▾/▸) und Name als Knopf: Einfachklick klappt. */
+klappZellen: function (tr, name, offen, klappen, doppel) {
+
+    const td1 = this.el(tr, "td");
+    const td2 = this.el(tr, "td");
+    td2.title = this.text(name);
+
+    if (!klappen) {
+        td2.textContent = this.text(name);
+        return;
+    }
+
+    const pfeil = this.el(td1, "button", "kom-klapp", offen ? "▾" : "▸");
+    pfeil.type = "button";
+    pfeil.title = "Auf- oder zuklappen";
+    pfeil.setAttribute("aria-label", this.text(name) + " auf- oder zuklappen");
+    pfeil.onclick = klappen;
+
+    const nameKnopf = this.el(td2, "button", "kom-name", name);
+    nameKnopf.type = "button";
+    nameKnopf.onclick = klappen;
+    if (doppel) nameKnopf.ondblclick = doppel;
 },
 
 /* Fenster in der Mitte (Dialog), liegt in der Ansicht, damit das CSS greift.
@@ -4395,6 +5854,20 @@ form_on_load: function (FORM) {
 .kom-pr .kom-titel { margin: 0; font-size: var(--fs-h3); line-height: var(--lh-h3); font-weight: var(--fw-h3); }
 .kom-pr .kom-info { font-size: var(--fs-small); line-height: var(--lh-small); color: var(--ink-muted); }
 
+.kom-pr .kom-pr .kom-kacheln { white-space: normal; }
+.kom-pr .kom-rotknopf { padding: var(--space-1) var(--space-3); border-radius: var(--radius-sm); border: none;
+  background: var(--brand-red); color: var(--on-brand); font: inherit; font-size: var(--fs-small); white-space: nowrap; cursor: pointer; }
+.kom-pr .kom-rotknopf:hover { background: var(--red-grad-end); }
+.kom-pr .kom-rotknopf:focus-visible { outline: 2px solid var(--focus); outline-offset: 1px; }
+.kom-pr .kom-menue { flex: 0 0 auto; display: flex; flex-wrap: wrap; gap: var(--space-1);
+  padding: var(--space-2) var(--space-4); background: var(--surface-100); border-bottom: 1px solid var(--line); }
+.kom-pr .kom-menuepunkt { min-height: 32px; padding: 0 var(--space-3); border: 1px solid transparent;
+  border-radius: var(--radius-pill); background: none; color: var(--ink); cursor: pointer;
+  font-family: inherit; font-size: var(--fs-small); font-weight: var(--fw-label); }
+.kom-pr .kom-menuepunkt:hover { border-color: var(--glow-red); color: var(--glow-red); }
+.kom-pr .kom-menuepunkt.kom-aktiv { background: var(--brand-gray); border-color: var(--brand-gray); color: var(--on-brand); }
+.kom-pr .kom-menuepunkt:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+
 .kom-pr .kom-koerper { flex: 1 1 auto; min-height: 0; overflow: auto; padding: var(--space-4); }
 
 .kom-pr .kom-fuss { flex: 0 0 auto; display: flex; align-items: center; gap: var(--space-2);
@@ -4446,7 +5919,7 @@ form_on_load: function (FORM) {
 .kom-pr .kom-dialog-knoepfe .kom-knopf { min-height: 44px; }
 
 /* box-sizing an einer Stelle (Skill, Falle 5). Jede neue Box kommt hierher. */
-.kom-pr .kom-kopf, .kom-pr .kom-koerper, .kom-pr .kom-fuss, .kom-pr .kom-knopf,
+.kom-pr .kom-menue, .kom-pr .kom-menuepunkt, .kom-pr .kom-kopf, .kom-pr .kom-koerper, .kom-pr .kom-fuss, .kom-pr .kom-knopf,
 .kom-pr .kom-tabelle, .kom-pr .kom-status, .kom-pr .kom-dialog { box-sizing: border-box; }
 
 

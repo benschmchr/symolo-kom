@@ -19,8 +19,9 @@
         return el;
     }
 
-    function oeffnen(name) {
+    function oeffnen(name, optionen) {
         if (aktiv) aktiv.onUnload({}, {});
+        window.KOM_START_OPTIONEN = optionen || null;
         ausgabe.replaceChildren();
 
         const obj = window.KOM_ANSICHTEN[name]();
@@ -45,6 +46,13 @@
         auswahl.appendChild(o);
     });
     auswahl.onchange = () => oeffnen(auswahl.value);
+
+    /* Die Bereichsleiste in den Ansichten wechselt über diese Funktion (in Symolo OFFEN). */
+    window.KOM_BEREICH_WECHSELN = (name, optionen) => {
+        if (!window.KOM_ANSICHTEN[name]) return;
+        auswahl.value = name;
+        oeffnen(name, optionen);
+    };
     const auswahlLabel = element("label", "Bereich: ");
     auswahlLabel.appendChild(auswahl);
     leiste.appendChild(auswahlLabel);

@@ -107,20 +107,23 @@ abArchivieren: async function (ab) {
     return n;
 },
 
-/* R-X3 neu: AB aus dem Archiv in die Bestandsliste zurückholen. kopf = Zeile
-   aus archivLaden. Einen AB aus dem Schweißen holt die Ansicht Schweißen
-   zurück (Phase 6). Hat der AB inzwischen seinen Platz in der Reihenfolge
-   verloren, kommt er ans Ende (wie bisher). */
+/* R-X3 neu: AB aus dem Archiv zurückholen. kopf = Zeile aus archivLaden. Ein AB aus der Bestandsliste kommt
+   in die Bestandsliste, ein AB aus dem Schweißen ins Schweißen (swAusArchiv, 4L). Hat der AB inzwischen
+   seinen Platz in der Reihenfolge verloren, kommt er ans Ende (wie bisher). Gibt "bestand" oder
+   "schweissen" zurück: wohin er gekommen ist. */
 archivWiederherstellen: async function (kopf) {
 
     const name = this.text(kopf.ab_anzeige);
 
     if (this.archivAusSchweissen(kopf)) {
-        throw new Error(name + " wurde im Schweißen archiviert. Dorthin holt ihn die Ansicht Schweißen zurück (kommt noch).");
+        await this.swAusArchiv(kopf);
+        return "schweissen";
     }
 
-    /* nicht archivierte ABs mit demselben Schlüssel */
-    const da = await this.datenLesen("auftrag", { wo: { ab_schluessel: kopf.ab_schluessel }, aufloesen: false });
+    /* derselbe AB, nicht archiviert, in der Bestandsliste */
+    const da = await this.datenLesen("auftrag", {
+        wo: { ab_schluessel: kopf.ab_schluessel, bereich: "bestand" }, aufloesen: false
+    });
     if (da.length) {
         throw new Error(name + " steht schon wieder in der Bestandsliste (neu importiert). " +
             "Erst dort archivieren, dann wiederherstellen.");
@@ -144,6 +147,7 @@ archivWiederherstellen: async function (kopf) {
     });
 
     await this.protokollSchreiben("wiederhergestellt", name, "", "Archiv", "Bestandsliste");
+    return "bestand";
 },
 
 /* ---------------------------------------------------------------------------
@@ -274,7 +278,7 @@ archivZeilenLaden: async function (kopf) {
         const sz = await this.datenLesen("schweisszeile", {
             wo: { ab_schluessel: kopf.ab_schluessel }, archiv: "nur", aufloesen: false, sortierung: ["nr"]
         });
-        return this.archivZeilenAusSchweissen(sz, kopf);
+        return this.archivZeilenAusSchweissen(sz.filter(s => !this.istJa(s.zurueckgeholt)), kopf);
     }
 
     const baum = await this.bestandLaden([kopf._id], { archiv: "nur" });
@@ -301,7 +305,7 @@ archivZeilenAlle: async function (koepfe) {
             { archiv: "nur" });
         schweissen.forEach(k => {
             ergebnis[String(k._id)] = this.archivZeilenAusSchweissen(
-                sz.filter(s => this.text(s.ab_schluessel) === this.text(k.ab_schluessel)), k);
+                sz.filter(s => this.text(s.ab_schluessel) === this.text(k.ab_schluessel) && !this.istJa(s.zurueckgeholt)), k);
         });
     }
 

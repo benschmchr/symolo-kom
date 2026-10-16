@@ -68,6 +68,10 @@ tabellen: {
             dispoliste: "dispoliste",
             lagerort: "lagerort",
             regal_geteilt: "regal_geteilt",
+            /* "bestand" = steht in der Bestandsliste. "schweissen" = ganz ins Schweißen
+               entnommen (Phase 6; die Zeile bleibt stehen, nur ausgeblendet).
+               "archiv" = Kopf eines im Schweißen archivierten AB (die Zeilen liegen
+               in schweisszeile). OFFEN (Symolo): Name und Werte des Felds. */
             bereich: "bereich",
             reihenfolge: "reihenfolge",
             quelldatei: "quelldatei",
@@ -102,11 +106,14 @@ tabellen: {
             profil: "profil",
             abmasse: "abmasse",
             bemerkung: "bemerkung",
-            lagerort: "lagerort"
+            lagerort: "lagerort",
+            /* Entnommen ins Schweißen (Phase 6): nur diese Baugruppe, der AB bleibt. */
+            archiviert: "archiviert"
         },
         verweise: {
             auftrag: { ziel: "auftrag", anzeige: "ab_anzeige" }
-        }
+        },
+        archiv: "archiviert"
     },
 
     teil: {
@@ -132,12 +139,15 @@ tabellen: {
             lagerort: "lagerort",
             vorhanden: "vorhanden",
             datum_eingelagert: "datum_eingelagert",
-            datum_komplett: "datum_komplett"
+            datum_komplett: "datum_komplett",
+            /* Entnommen ins Schweißen (Phase 6), zusammen mit der Baugruppe. */
+            archiviert: "archiviert"
         },
         verweise: {
             auftrag: { ziel: "auftrag", anzeige: "ab_anzeige" },
             baugruppe: { ziel: "baugruppe", anzeige: "name" }
-        }
+        },
+        archiv: "archiviert"
     },
 
     /* ---- Schweißen und Arbeitsplätze (VERMUTET, Vorschlag) ---- */
@@ -176,7 +186,10 @@ tabellen: {
             /* OFFEN (Symolo): Gibt es einen JSON-Typ? Sonst langer Text. */
             kopf: "kopf",
             ap_geteilt: "ap_geteilt",
-            archiviert: "archiviert"
+            /* ja = archiviert (Archiv) ODER zurück in die Bestandsliste geholt
+               (dann zusätzlich zurueckgeholt = ja; solche Zeilen zählen nirgends mit). */
+            archiviert: "archiviert",
+            zurueckgeholt: "zurueckgeholt"
         },
         archiv: "archiviert"
     },

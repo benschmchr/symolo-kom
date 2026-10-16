@@ -1,0 +1,47 @@
+/* Arbeitsplätze: Hallenplan wie die Magnettafel. Die Tafelfarben sind Bedeutungsfarben (wie auf der Tafel in der
+   Halle, aus ArbeitsplaetzeAnlegen), nicht im Designsystem; sie stehen als eigene Variablen hier (Entscheidung W-AP). */
+
+.ANSICHT { --tafel-grau: #d9d9d9; --tafel-blau: #9bc2e6; --tafel-gruen: #a9d08e; --tafel-gelb: #ffd966;
+  --tafel-lila: #b4a7d6; --tafel-orange: #f4b084; --tafel-rosa: #f8c4be; }
+
+.ANSICHT .kom-leise { margin: 0 0 var(--space-3); color: var(--ink-muted); font-size: var(--fs-small); }
+.ANSICHT .kom-eintraege .kom-leise, .ANSICHT .kom-ap .kom-leise { margin: 0; }
+.ANSICHT .kom-leer { padding: var(--space-3); color: var(--ink-muted); }
+
+.ANSICHT .kom-halle { display: grid; grid-template-columns: repeat(8, 1fr); grid-auto-rows: minmax(110px, auto);
+  gap: var(--space-3); margin-bottom: var(--space-4); padding: var(--space-4); border: 1px solid var(--line);
+  border-radius: var(--radius-lg); background: var(--surface-100); }
+.ANSICHT .kom-ap { display: flex; flex-direction: column; gap: var(--space-1); padding: var(--space-3);
+  border: 1px solid var(--line); border-top: 8px solid var(--tafel-grau); border-radius: var(--radius-lg); background: var(--surface-0); }
+.ANSICHT .kom-ap-name { margin: 0 0 var(--space-1); font-size: var(--fs-body); }
+.ANSICHT .kom-tafel-grau { border-top-color: var(--tafel-grau); }
+.ANSICHT .kom-tafel-blau { border-top-color: var(--tafel-blau); }
+.ANSICHT .kom-tafel-gruen { border-top-color: var(--tafel-gruen); }
+.ANSICHT .kom-tafel-gelb { border-top-color: var(--tafel-gelb); }
+.ANSICHT .kom-tafel-lila { border-top-color: var(--tafel-lila); }
+.ANSICHT .kom-tafel-orange { border-top-color: var(--tafel-orange); }
+.ANSICHT .kom-tafel-rosa { border-top-color: var(--tafel-rosa); }
+.ANSICHT .kom-ap.kom-ziel, .ANSICHT .kom-liste-karte.kom-ziel { outline: 2px solid var(--focus); outline-offset: 1px; }
+
+.ANSICHT .kom-eintraege { display: flex; flex-wrap: wrap; align-items: flex-start; gap: var(--space-1); }
+.ANSICHT .kom-eintrag { display: inline-flex; align-items: center; min-height: 32px; padding: 0 var(--space-2);
+  border: 1px solid var(--line-strong); border-radius: var(--radius-pill); background: var(--surface-100);
+  font-size: var(--fs-label); font-weight: var(--fw-label); cursor: pointer; white-space: nowrap; }
+.ANSICHT .kom-eintrag:focus-visible { outline: 2px solid var(--focus); outline-offset: 1px; }
+.ANSICHT .kom-eintrag-platz { opacity: .8; font-weight: var(--fw-body); }
+
+.ANSICHT .kom-listen { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: var(--space-3); }
+.ANSICHT .kom-liste-karte { padding: var(--space-3); border: 1px solid var(--line); border-radius: var(--radius-lg); background: var(--surface-100); }
+.ANSICHT .kom-liste-titel { margin: 0 0 var(--space-2); font-size: var(--fs-body); }
+.ANSICHT .kom-anzahl { padding: 0 var(--space-2); border-radius: 999px; background: var(--line); font-size: var(--fs-label); }
+
+/* Fenster */
+.ANSICHT .kom-platzraster { display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: var(--space-2); margin: var(--space-3) 0; }
+.ANSICHT .kom-platzraster .kom-knopf { min-height: 44px; }
+.ANSICHT .kom-knopf.kom-knopf-gewaehlt { background: var(--brand-gray); border-color: var(--brand-gray); color: var(--on-brand); }
+.ANSICHT .kom-auswahl { display: flex; flex-direction: column; gap: var(--space-1); max-height: 50vh; overflow: auto; margin-bottom: var(--space-3); }
+.ANSICHT .kom-schalter { display: flex; align-items: center; gap: var(--space-2); min-height: 32px; font-size: var(--fs-small); cursor: pointer; }
+
+@media (max-width: 900px) { .ANSICHT .kom-halle { display: flex; flex-direction: column; } }
+
+.ANSICHT .kom-halle, .ANSICHT .kom-ap, .ANSICHT .kom-eintrag, .ANSICHT .kom-liste-karte { box-sizing: border-box; }
