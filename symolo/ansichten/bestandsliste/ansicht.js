@@ -454,9 +454,10 @@ karteZeichnen: function (karte, a) {
         const block = this.el(tab, "tbody", "kom-bg-block");
         const btr = this.el(block, "tr", "kom-imsw");
         const td = this.el(btr, "td", "kom-kacheln");
-        td.colSpan = this.bestandSpalten.length;
+        td.colSpan = this.spaltenZaehlen(this.bestandSpalten).sichtbar;
         this.rotKnopf(td, "▶ " + this.text(z.baugruppe) + " befindet sich im Schweißen", "Im Schweißen ansehen",
             () => this.bereichOeffnen("schweissen", { suche: this.text(z.ab_nr) }));
+        this.mehrRest(btr, this.bestandSpalten);
     });
 },
 

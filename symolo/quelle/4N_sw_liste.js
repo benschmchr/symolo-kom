@@ -125,6 +125,22 @@ swSammeln: function (bloecke) {
     return ergebnis;
 },
 
+/* Spalten, die ohne "Mehr" zu sehen sind, und die ausgeblendeten Mehr-Spalten (dritter Eintrag true).
+   Eine Zelle über die ganze Zeile spannt nur über die sichtbaren; die Mehr-Spalten bekommen eine eigene
+   leere Zelle, sonst entstehen zusätzliche Spalten und die Tabelle wird schmaler als die Karte. */
+spaltenZaehlen: function (spalten) {
+
+    const mehr = spalten.filter(s => s[2]).length;
+    return { sichtbar: spalten.length - mehr, mehr: mehr };
+},
+
+/* Hängt die leere Zelle für die Mehr-Spalten an eine Zeile mit über die Zeile gespannter Zelle. */
+mehrRest: function (tr, spalten) {
+
+    const n = this.spaltenZaehlen(spalten);
+    if (n.mehr) this.zelle(tr, "", "kom-mehr", undefined, n.mehr);
+},
+
 /* Name, Kunde, Benennung einer Sammlung (aus ihrem ersten Block). */
 swSammlungKopf: function (s) {
 

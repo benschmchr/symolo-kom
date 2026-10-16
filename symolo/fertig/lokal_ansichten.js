@@ -5116,6 +5116,22 @@ swSammeln: function (bloecke) {
     return ergebnis;
 },
 
+/* Spalten, die ohne "Mehr" zu sehen sind, und die ausgeblendeten Mehr-Spalten (dritter Eintrag true).
+   Eine Zelle über die ganze Zeile spannt nur über die sichtbaren; die Mehr-Spalten bekommen eine eigene
+   leere Zelle, sonst entstehen zusätzliche Spalten und die Tabelle wird schmaler als die Karte. */
+spaltenZaehlen: function (spalten) {
+
+    const mehr = spalten.filter(s => s[2]).length;
+    return { sichtbar: spalten.length - mehr, mehr: mehr };
+},
+
+/* Hängt die leere Zelle für die Mehr-Spalten an eine Zeile mit über die Zeile gespannter Zelle. */
+mehrRest: function (tr, spalten) {
+
+    const n = this.spaltenZaehlen(spalten);
+    if (n.mehr) this.zelle(tr, "", "kom-mehr", undefined, n.mehr);
+},
+
 /* Name, Kunde, Benennung einer Sammlung (aus ihrem ersten Block). */
 swSammlungKopf: function (s) {
 
@@ -5914,9 +5930,10 @@ karteZeichnen: function (karte, a) {
         const block = this.el(tab, "tbody", "kom-bg-block");
         const btr = this.el(block, "tr", "kom-imsw");
         const td = this.el(btr, "td", "kom-kacheln");
-        td.colSpan = this.bestandSpalten.length;
+        td.colSpan = this.spaltenZaehlen(this.bestandSpalten).sichtbar;
         this.rotKnopf(td, "▶ " + this.text(z.baugruppe) + " befindet sich im Schweißen", "Im Schweißen ansehen",
             () => this.bereichOeffnen("schweissen", { suche: this.text(z.ab_nr) }));
+        this.mehrRest(btr, this.bestandSpalten);
     });
 },
 
@@ -11612,6 +11629,22 @@ swSammeln: function (bloecke) {
     });
 
     return ergebnis;
+},
+
+/* Spalten, die ohne "Mehr" zu sehen sind, und die ausgeblendeten Mehr-Spalten (dritter Eintrag true).
+   Eine Zelle über die ganze Zeile spannt nur über die sichtbaren; die Mehr-Spalten bekommen eine eigene
+   leere Zelle, sonst entstehen zusätzliche Spalten und die Tabelle wird schmaler als die Karte. */
+spaltenZaehlen: function (spalten) {
+
+    const mehr = spalten.filter(s => s[2]).length;
+    return { sichtbar: spalten.length - mehr, mehr: mehr };
+},
+
+/* Hängt die leere Zelle für die Mehr-Spalten an eine Zeile mit über die Zeile gespannter Zelle. */
+mehrRest: function (tr, spalten) {
+
+    const n = this.spaltenZaehlen(spalten);
+    if (n.mehr) this.zelle(tr, "", "kom-mehr", undefined, n.mehr);
 },
 
 /* Name, Kunde, Benennung einer Sammlung (aus ihrem ersten Block). */
@@ -17519,6 +17552,22 @@ swSammeln: function (bloecke) {
     return ergebnis;
 },
 
+/* Spalten, die ohne "Mehr" zu sehen sind, und die ausgeblendeten Mehr-Spalten (dritter Eintrag true).
+   Eine Zelle über die ganze Zeile spannt nur über die sichtbaren; die Mehr-Spalten bekommen eine eigene
+   leere Zelle, sonst entstehen zusätzliche Spalten und die Tabelle wird schmaler als die Karte. */
+spaltenZaehlen: function (spalten) {
+
+    const mehr = spalten.filter(s => s[2]).length;
+    return { sichtbar: spalten.length - mehr, mehr: mehr };
+},
+
+/* Hängt die leere Zelle für die Mehr-Spalten an eine Zeile mit über die Zeile gespannter Zelle. */
+mehrRest: function (tr, spalten) {
+
+    const n = this.spaltenZaehlen(spalten);
+    if (n.mehr) this.zelle(tr, "", "kom-mehr", undefined, n.mehr);
+},
+
 /* Name, Kunde, Benennung einer Sammlung (aus ihrem ersten Block). */
 swSammlungKopf: function (s) {
 
@@ -23413,6 +23462,22 @@ swSammeln: function (bloecke) {
     return ergebnis;
 },
 
+/* Spalten, die ohne "Mehr" zu sehen sind, und die ausgeblendeten Mehr-Spalten (dritter Eintrag true).
+   Eine Zelle über die ganze Zeile spannt nur über die sichtbaren; die Mehr-Spalten bekommen eine eigene
+   leere Zelle, sonst entstehen zusätzliche Spalten und die Tabelle wird schmaler als die Karte. */
+spaltenZaehlen: function (spalten) {
+
+    const mehr = spalten.filter(s => s[2]).length;
+    return { sichtbar: spalten.length - mehr, mehr: mehr };
+},
+
+/* Hängt die leere Zelle für die Mehr-Spalten an eine Zeile mit über die Zeile gespannter Zelle. */
+mehrRest: function (tr, spalten) {
+
+    const n = this.spaltenZaehlen(spalten);
+    if (n.mehr) this.zelle(tr, "", "kom-mehr", undefined, n.mehr);
+},
+
 /* Name, Kunde, Benennung einer Sammlung (aus ihrem ersten Block). */
 swSammlungKopf: function (s) {
 
@@ -29260,6 +29325,22 @@ swSammeln: function (bloecke) {
     return ergebnis;
 },
 
+/* Spalten, die ohne "Mehr" zu sehen sind, und die ausgeblendeten Mehr-Spalten (dritter Eintrag true).
+   Eine Zelle über die ganze Zeile spannt nur über die sichtbaren; die Mehr-Spalten bekommen eine eigene
+   leere Zelle, sonst entstehen zusätzliche Spalten und die Tabelle wird schmaler als die Karte. */
+spaltenZaehlen: function (spalten) {
+
+    const mehr = spalten.filter(s => s[2]).length;
+    return { sichtbar: spalten.length - mehr, mehr: mehr };
+},
+
+/* Hängt die leere Zelle für die Mehr-Spalten an eine Zeile mit über die Zeile gespannter Zelle. */
+mehrRest: function (tr, spalten) {
+
+    const n = this.spaltenZaehlen(spalten);
+    if (n.mehr) this.zelle(tr, "", "kom-mehr", undefined, n.mehr);
+},
+
 /* Name, Kunde, Benennung einer Sammlung (aus ihrem ersten Block). */
 swSammlungKopf: function (s) {
 
@@ -35080,6 +35161,22 @@ swSammeln: function (bloecke) {
     });
 
     return ergebnis;
+},
+
+/* Spalten, die ohne "Mehr" zu sehen sind, und die ausgeblendeten Mehr-Spalten (dritter Eintrag true).
+   Eine Zelle über die ganze Zeile spannt nur über die sichtbaren; die Mehr-Spalten bekommen eine eigene
+   leere Zelle, sonst entstehen zusätzliche Spalten und die Tabelle wird schmaler als die Karte. */
+spaltenZaehlen: function (spalten) {
+
+    const mehr = spalten.filter(s => s[2]).length;
+    return { sichtbar: spalten.length - mehr, mehr: mehr };
+},
+
+/* Hängt die leere Zelle für die Mehr-Spalten an eine Zeile mit über die Zeile gespannter Zelle. */
+mehrRest: function (tr, spalten) {
+
+    const n = this.spaltenZaehlen(spalten);
+    if (n.mehr) this.zelle(tr, "", "kom-mehr", undefined, n.mehr);
 },
 
 /* Name, Kunde, Benennung einer Sammlung (aus ihrem ersten Block). */
@@ -41014,6 +41111,22 @@ swSammeln: function (bloecke) {
     });
 
     return ergebnis;
+},
+
+/* Spalten, die ohne "Mehr" zu sehen sind, und die ausgeblendeten Mehr-Spalten (dritter Eintrag true).
+   Eine Zelle über die ganze Zeile spannt nur über die sichtbaren; die Mehr-Spalten bekommen eine eigene
+   leere Zelle, sonst entstehen zusätzliche Spalten und die Tabelle wird schmaler als die Karte. */
+spaltenZaehlen: function (spalten) {
+
+    const mehr = spalten.filter(s => s[2]).length;
+    return { sichtbar: spalten.length - mehr, mehr: mehr };
+},
+
+/* Hängt die leere Zelle für die Mehr-Spalten an eine Zeile mit über die Zeile gespannter Zelle. */
+mehrRest: function (tr, spalten) {
+
+    const n = this.spaltenZaehlen(spalten);
+    if (n.mehr) this.zelle(tr, "", "kom-mehr", undefined, n.mehr);
 },
 
 /* Name, Kunde, Benennung einer Sammlung (aus ihrem ersten Block). */
@@ -46964,6 +47077,22 @@ swSammeln: function (bloecke) {
     return ergebnis;
 },
 
+/* Spalten, die ohne "Mehr" zu sehen sind, und die ausgeblendeten Mehr-Spalten (dritter Eintrag true).
+   Eine Zelle über die ganze Zeile spannt nur über die sichtbaren; die Mehr-Spalten bekommen eine eigene
+   leere Zelle, sonst entstehen zusätzliche Spalten und die Tabelle wird schmaler als die Karte. */
+spaltenZaehlen: function (spalten) {
+
+    const mehr = spalten.filter(s => s[2]).length;
+    return { sichtbar: spalten.length - mehr, mehr: mehr };
+},
+
+/* Hängt die leere Zelle für die Mehr-Spalten an eine Zeile mit über die Zeile gespannter Zelle. */
+mehrRest: function (tr, spalten) {
+
+    const n = this.spaltenZaehlen(spalten);
+    if (n.mehr) this.zelle(tr, "", "kom-mehr", undefined, n.mehr);
+},
+
 /* Name, Kunde, Benennung einer Sammlung (aus ihrem ersten Block). */
 swSammlungKopf: function (s) {
 
@@ -47685,17 +47814,8 @@ sammlungZeichnen: function (tab, s, neu) {
     const tr = this.el(koerper, "tr", "kom-ab kom-sammlung");
     this.klappZellen(tr, kopf.anzeige, offen, klappen);
     this.zelle(tr, kopf.benennung + (kopf.kunde ? " · " + kopf.kunde : ""), "", kopf.benennung, 2);
-    this.zelle(tr, "Einzelne Baugruppen im Schweißen", "kom-leise", undefined, this.swSpalten.length - 4);
-
-    if (offen && s.komBgs.length) {
-        const ktr = this.el(koerper, "tr", "kom-komzeile");
-        const td = this.el(ktr, "td", "kom-kacheln");
-        td.colSpan = this.swSpalten.length;
-        s.komBgs.forEach(name => {
-            this.rotKnopf(td, "◀ " + name + " befindet sich im Kommissionierlager", "In der Bestandsliste ansehen",
-                () => this.bereichOeffnen("bestandsliste", { suche: kopf.anzeige }));
-        });
-    }
+    this.zelle(tr, "Einzelne Baugruppen im Schweißen", "kom-leise", undefined, this.spaltenZaehlen(this.swSpalten).sichtbar - 4);
+    this.mehrRest(tr, this.swSpalten);
 
     if (!offen) return;
 
@@ -47711,6 +47831,18 @@ sammlungZeichnen: function (tab, s, neu) {
         });
         if (bOffen) g.teile.forEach(t => { if (t.zeigen) this.zeileBauen(block, t, "teil", {}); });
     });
+
+    /* Ben, 16.10.: die roten Kacheln stehen immer unter den Baugruppen, die wirklich im Schweißen liegen. */
+    if (offen && s.komBgs.length) {
+        const ktr = this.el(this.el(tab, "tbody"), "tr", "kom-komzeile");
+        const td = this.el(ktr, "td", "kom-kacheln");
+        td.colSpan = this.spaltenZaehlen(this.swSpalten).sichtbar;
+        s.komBgs.forEach(name => {
+            this.rotKnopf(td, "◀ " + name + " befindet sich im Kommissionierlager", "In der Bestandsliste ansehen",
+                () => this.bereichOeffnen("bestandsliste", { suche: kopf.anzeige }));
+        });
+        this.mehrRest(ktr, this.swSpalten);
+    }
 },
 
 /* DLZ (R-W5): Termin Versand minus Eingelagert in Tagen, leer solange eins fehlt. */
@@ -53478,6 +53610,22 @@ swSammeln: function (bloecke) {
     });
 
     return ergebnis;
+},
+
+/* Spalten, die ohne "Mehr" zu sehen sind, und die ausgeblendeten Mehr-Spalten (dritter Eintrag true).
+   Eine Zelle über die ganze Zeile spannt nur über die sichtbaren; die Mehr-Spalten bekommen eine eigene
+   leere Zelle, sonst entstehen zusätzliche Spalten und die Tabelle wird schmaler als die Karte. */
+spaltenZaehlen: function (spalten) {
+
+    const mehr = spalten.filter(s => s[2]).length;
+    return { sichtbar: spalten.length - mehr, mehr: mehr };
+},
+
+/* Hängt die leere Zelle für die Mehr-Spalten an eine Zeile mit über die Zeile gespannter Zelle. */
+mehrRest: function (tr, spalten) {
+
+    const n = this.spaltenZaehlen(spalten);
+    if (n.mehr) this.zelle(tr, "", "kom-mehr", undefined, n.mehr);
 },
 
 /* Name, Kunde, Benennung einer Sammlung (aus ihrem ersten Block). */
@@ -59408,6 +59556,22 @@ swSammeln: function (bloecke) {
     return ergebnis;
 },
 
+/* Spalten, die ohne "Mehr" zu sehen sind, und die ausgeblendeten Mehr-Spalten (dritter Eintrag true).
+   Eine Zelle über die ganze Zeile spannt nur über die sichtbaren; die Mehr-Spalten bekommen eine eigene
+   leere Zelle, sonst entstehen zusätzliche Spalten und die Tabelle wird schmaler als die Karte. */
+spaltenZaehlen: function (spalten) {
+
+    const mehr = spalten.filter(s => s[2]).length;
+    return { sichtbar: spalten.length - mehr, mehr: mehr };
+},
+
+/* Hängt die leere Zelle für die Mehr-Spalten an eine Zeile mit über die Zeile gespannter Zelle. */
+mehrRest: function (tr, spalten) {
+
+    const n = this.spaltenZaehlen(spalten);
+    if (n.mehr) this.zelle(tr, "", "kom-mehr", undefined, n.mehr);
+},
+
 /* Name, Kunde, Benennung einer Sammlung (aus ihrem ersten Block). */
 swSammlungKopf: function (s) {
 
@@ -65323,6 +65487,22 @@ swSammeln: function (bloecke) {
     });
 
     return ergebnis;
+},
+
+/* Spalten, die ohne "Mehr" zu sehen sind, und die ausgeblendeten Mehr-Spalten (dritter Eintrag true).
+   Eine Zelle über die ganze Zeile spannt nur über die sichtbaren; die Mehr-Spalten bekommen eine eigene
+   leere Zelle, sonst entstehen zusätzliche Spalten und die Tabelle wird schmaler als die Karte. */
+spaltenZaehlen: function (spalten) {
+
+    const mehr = spalten.filter(s => s[2]).length;
+    return { sichtbar: spalten.length - mehr, mehr: mehr };
+},
+
+/* Hängt die leere Zelle für die Mehr-Spalten an eine Zeile mit über die Zeile gespannter Zelle. */
+mehrRest: function (tr, spalten) {
+
+    const n = this.spaltenZaehlen(spalten);
+    if (n.mehr) this.zelle(tr, "", "kom-mehr", undefined, n.mehr);
 },
 
 /* Name, Kunde, Benennung einer Sammlung (aus ihrem ersten Block). */

@@ -377,17 +377,8 @@ sammlungZeichnen: function (tab, s, neu) {
     const tr = this.el(koerper, "tr", "kom-ab kom-sammlung");
     this.klappZellen(tr, kopf.anzeige, offen, klappen);
     this.zelle(tr, kopf.benennung + (kopf.kunde ? " · " + kopf.kunde : ""), "", kopf.benennung, 2);
-    this.zelle(tr, "Einzelne Baugruppen im Schweißen", "kom-leise", undefined, this.swSpalten.length - 4);
-
-    if (offen && s.komBgs.length) {
-        const ktr = this.el(koerper, "tr", "kom-komzeile");
-        const td = this.el(ktr, "td", "kom-kacheln");
-        td.colSpan = this.swSpalten.length;
-        s.komBgs.forEach(name => {
-            this.rotKnopf(td, "◀ " + name + " befindet sich im Kommissionierlager", "In der Bestandsliste ansehen",
-                () => this.bereichOeffnen("bestandsliste", { suche: kopf.anzeige }));
-        });
-    }
+    this.zelle(tr, "Einzelne Baugruppen im Schweißen", "kom-leise", undefined, this.spaltenZaehlen(this.swSpalten).sichtbar - 4);
+    this.mehrRest(tr, this.swSpalten);
 
     if (!offen) return;
 
@@ -403,6 +394,18 @@ sammlungZeichnen: function (tab, s, neu) {
         });
         if (bOffen) g.teile.forEach(t => { if (t.zeigen) this.zeileBauen(block, t, "teil", {}); });
     });
+
+    /* Ben, 16.10.: die roten Kacheln stehen immer unter den Baugruppen, die wirklich im Schweißen liegen. */
+    if (offen && s.komBgs.length) {
+        const ktr = this.el(this.el(tab, "tbody"), "tr", "kom-komzeile");
+        const td = this.el(ktr, "td", "kom-kacheln");
+        td.colSpan = this.spaltenZaehlen(this.swSpalten).sichtbar;
+        s.komBgs.forEach(name => {
+            this.rotKnopf(td, "◀ " + name + " befindet sich im Kommissionierlager", "In der Bestandsliste ansehen",
+                () => this.bereichOeffnen("bestandsliste", { suche: kopf.anzeige }));
+        });
+        this.mehrRest(ktr, this.swSpalten);
+    }
 },
 
 /* DLZ (R-W5): Termin Versand minus Eingelagert in Tagen, leer solange eins fehlt. */
