@@ -452,17 +452,11 @@ karteZeichnen: function (karte, a) {
     /* Baugruppen, die einzeln im Schweißen liegen (rot) */
     imSw.forEach(z => {
         const block = this.el(tab, "tbody", "kom-bg-block");
-        const btr = this.el(block, "tr", "kom-bg kom-imsw");
-        this.zelle(btr, "");
-        this.zelle(btr, z.baugruppe, "", z.baugruppe, 2);
-        this.zelle(btr, "", "", undefined, 5);
-        const hinweis = this.zelle(btr, "", "kom-imsw-hinweis", undefined, 4);
-        const sprung = this.el(hinweis, "button", "kom-link", "▶ Befinden sich im Schweißen");
-        sprung.type = "button";
-        sprung.title = "Im Schweißen ansehen";
-        sprung.onclick = () => this.bereichOeffnen("schweissen", { suche: this.text(z.ab_nr) });
-        for (let i = 0; i < 7; i++) this.zelle(btr, "", "kom-mehr");
-        this.zelle(btr, "");
+        const btr = this.el(block, "tr", "kom-imsw");
+        const td = this.el(btr, "td", "kom-kacheln");
+        td.colSpan = this.bestandSpalten.length;
+        this.rotKnopf(td, "▶ " + this.text(z.baugruppe) + " befindet sich im Schweißen", "Im Schweißen ansehen",
+            () => this.bereichOeffnen("schweissen", { suche: this.text(z.ab_nr) }));
     });
 },
 

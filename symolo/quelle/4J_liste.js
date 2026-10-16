@@ -428,7 +428,10 @@ karteZeichnen: function (karte, d) {
     });
 
     imSw.forEach(z => {
-        const str = this.el(koerper, "tr", "kom-dbg kom-dsw");
-        this.zeileBauen(str, "sw", { knoten: {}, d: d, g: null, sw: z, klapp: null });
+        const str = this.el(koerper, "tr", "kom-dsw");
+        const td = this.el(str, "td", "kom-kacheln");
+        td.colSpan = this.listeSpalten.length;
+        this.rotKnopf(td, "▶ " + this.text(z.baugruppe) + " befindet sich im Schweißen", "Im Schweißen ansehen",
+            () => this.bereichOeffnen("schweissen", { suche: this.text(z.ab_nr) }));
     });
 },

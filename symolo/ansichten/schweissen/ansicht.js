@@ -379,15 +379,13 @@ sammlungZeichnen: function (tab, s, neu) {
     this.zelle(tr, kopf.benennung + (kopf.kunde ? " · " + kopf.kunde : ""), "", kopf.benennung, 2);
     this.zelle(tr, "Einzelne Baugruppen im Schweißen", "kom-leise", undefined, this.swSpalten.length - 4);
 
-    if (s.komBgs.length) {
+    if (offen && s.komBgs.length) {
         const ktr = this.el(koerper, "tr", "kom-komzeile");
         const td = this.el(ktr, "td", "kom-kacheln");
         td.colSpan = this.swSpalten.length;
         s.komBgs.forEach(name => {
-            const k = this.el(td, "button", "kom-kachel-rot", "◀ " + name + " befindet sich im Kommissionierlager");
-            k.type = "button";
-            k.title = "In der Bestandsliste ansehen";
-            k.onclick = () => this.bereichOeffnen("bestandsliste", { suche: kopf.anzeige });
+            this.rotKnopf(td, "◀ " + name + " befindet sich im Kommissionierlager", "In der Bestandsliste ansehen",
+                () => this.bereichOeffnen("bestandsliste", { suche: kopf.anzeige }));
         });
     }
 

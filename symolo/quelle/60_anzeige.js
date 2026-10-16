@@ -78,6 +78,17 @@ bereichsleisteBauen: function (view) {
 /* In einen anderen Bereich wechseln. optionen.suche: dort gleich nach diesem Text suchen (z. B. die AB-Nummer).
    Den Wechsel selbst macht window.KOM_BEREICH_WECHSELN (setzt die Testseite). OFFEN (Symolo): Wie öffnet Symolo
    ein anderes Formular aus einem Hook heraus? Bis das geklärt ist, steht in Symolo nur ein Hinweis. */
+/* Rote Zeile (Ben, 16.10.): eine Baugruppe liegt im anderen Bereich (Schweißen oder Kommissionierlager).
+   Der Knopf springt dorthin (ziel). */
+rotKnopf: function (parent, text, titel, ziel) {
+
+    const k = this.el(parent, "button", "kom-rotknopf", text);
+    k.type = "button";
+    k.title = titel;
+    k.onclick = ziel;
+    return k;
+},
+
 bereichOeffnen: function (name, optionen) {
 
     if (name === this.ansicht.name && !(optionen && optionen.suche)) return;

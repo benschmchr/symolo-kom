@@ -3841,8 +3841,11 @@ karteZeichnen: function (karte, d) {
     });
 
     imSw.forEach(z => {
-        const str = this.el(koerper, "tr", "kom-dbg kom-dsw");
-        this.zeileBauen(str, "sw", { knoten: {}, d: d, g: null, sw: z, klapp: null });
+        const str = this.el(koerper, "tr", "kom-dsw");
+        const td = this.el(str, "td", "kom-kacheln");
+        td.colSpan = this.listeSpalten.length;
+        this.rotKnopf(td, "▶ " + this.text(z.baugruppe) + " befindet sich im Schweißen", "Im Schweißen ansehen",
+            () => this.bereichOeffnen("schweissen", { suche: this.text(z.ab_nr) }));
     });
 },
 
@@ -5269,6 +5272,17 @@ bereichsleisteBauen: function (view) {
 /* In einen anderen Bereich wechseln. optionen.suche: dort gleich nach diesem Text suchen (z. B. die AB-Nummer).
    Den Wechsel selbst macht window.KOM_BEREICH_WECHSELN (setzt die Testseite). OFFEN (Symolo): Wie öffnet Symolo
    ein anderes Formular aus einem Hook heraus? Bis das geklärt ist, steht in Symolo nur ein Hinweis. */
+/* Rote Zeile (Ben, 16.10.): eine Baugruppe liegt im anderen Bereich (Schweißen oder Kommissionierlager).
+   Der Knopf springt dorthin (ziel). */
+rotKnopf: function (parent, text, titel, ziel) {
+
+    const k = this.el(parent, "button", "kom-rotknopf", text);
+    k.type = "button";
+    k.title = titel;
+    k.onclick = ziel;
+    return k;
+},
+
 bereichOeffnen: function (name, optionen) {
 
     if (name === this.ansicht.name && !(optionen && optionen.suche)) return;
@@ -5898,17 +5912,11 @@ karteZeichnen: function (karte, a) {
     /* Baugruppen, die einzeln im Schweißen liegen (rot) */
     imSw.forEach(z => {
         const block = this.el(tab, "tbody", "kom-bg-block");
-        const btr = this.el(block, "tr", "kom-bg kom-imsw");
-        this.zelle(btr, "");
-        this.zelle(btr, z.baugruppe, "", z.baugruppe, 2);
-        this.zelle(btr, "", "", undefined, 5);
-        const hinweis = this.zelle(btr, "", "kom-imsw-hinweis", undefined, 4);
-        const sprung = this.el(hinweis, "button", "kom-link", "▶ Befinden sich im Schweißen");
-        sprung.type = "button";
-        sprung.title = "Im Schweißen ansehen";
-        sprung.onclick = () => this.bereichOeffnen("schweissen", { suche: this.text(z.ab_nr) });
-        for (let i = 0; i < 7; i++) this.zelle(btr, "", "kom-mehr");
-        this.zelle(btr, "");
+        const btr = this.el(block, "tr", "kom-imsw");
+        const td = this.el(btr, "td", "kom-kacheln");
+        td.colSpan = this.bestandSpalten.length;
+        this.rotKnopf(td, "▶ " + this.text(z.baugruppe) + " befindet sich im Schweißen", "Im Schweißen ansehen",
+            () => this.bereichOeffnen("schweissen", { suche: this.text(z.ab_nr) }));
     });
 },
 
@@ -6287,6 +6295,11 @@ form_on_load: function (FORM) {
 .kom-bl .kom-titel { margin: 0; font-size: var(--fs-h3); line-height: var(--lh-h3); font-weight: var(--fw-h3); }
 .kom-bl .kom-info { font-size: var(--fs-small); line-height: var(--lh-small); color: var(--ink-muted); }
 
+.kom-bl .kom-bl .kom-kacheln { white-space: normal; }
+.kom-bl .kom-rotknopf { padding: var(--space-1) var(--space-3); border-radius: var(--radius-sm); border: none;
+  background: var(--brand-red); color: var(--on-brand); font: inherit; font-size: var(--fs-small); white-space: nowrap; cursor: pointer; }
+.kom-bl .kom-rotknopf:hover { background: var(--red-grad-end); }
+.kom-bl .kom-rotknopf:focus-visible { outline: 2px solid var(--focus); outline-offset: 1px; }
 .kom-bl .kom-menue { flex: 0 0 auto; display: flex; flex-wrap: wrap; gap: var(--space-1);
   padding: var(--space-2) var(--space-4); background: var(--surface-100); border-bottom: 1px solid var(--line); }
 .kom-bl .kom-menuepunkt { min-height: 32px; padding: 0 var(--space-3); border: 1px solid transparent;
@@ -6474,8 +6487,7 @@ form_on_load: function (FORM) {
 .kom-bl .kom-knopf-klein, .kom-bl .kom-knopf-rot-klein { min-height: 28px; padding: 0 var(--space-2); font-size: var(--fs-label); }
 .kom-bl .kom-knopf-rot-klein { background: var(--brand-red); border-color: var(--brand-red); color: var(--on-brand); }
 .kom-bl .kom-knopf-rot-klein:hover { background: var(--red-grad-end); color: var(--on-brand); }
-.kom-bl .kom-imsw td { background: color-mix(in srgb, var(--brand-red) 16%, var(--surface-100)); }
-.kom-bl .kom-imsw td.kom-imsw-hinweis { color: var(--brand-red); font-weight: var(--fw-label); }
+.kom-bl .kom-imsw td { background: transparent; padding: var(--space-1) var(--space-3); }
 .kom-bl .kom-link { padding: 0; border: none; background: none; color: inherit; font: inherit; font-weight: inherit; cursor: pointer; text-decoration: underline; }
 .kom-bl .kom-link:focus-visible { outline: 2px solid var(--focus); outline-offset: 1px; }
 
@@ -10327,8 +10339,11 @@ karteZeichnen: function (karte, d) {
     });
 
     imSw.forEach(z => {
-        const str = this.el(koerper, "tr", "kom-dbg kom-dsw");
-        this.zeileBauen(str, "sw", { knoten: {}, d: d, g: null, sw: z, klapp: null });
+        const str = this.el(koerper, "tr", "kom-dsw");
+        const td = this.el(str, "td", "kom-kacheln");
+        td.colSpan = this.listeSpalten.length;
+        this.rotKnopf(td, "▶ " + this.text(z.baugruppe) + " befindet sich im Schweißen", "Im Schweißen ansehen",
+            () => this.bereichOeffnen("schweissen", { suche: this.text(z.ab_nr) }));
     });
 },
 
@@ -11755,6 +11770,17 @@ bereichsleisteBauen: function (view) {
 /* In einen anderen Bereich wechseln. optionen.suche: dort gleich nach diesem Text suchen (z. B. die AB-Nummer).
    Den Wechsel selbst macht window.KOM_BEREICH_WECHSELN (setzt die Testseite). OFFEN (Symolo): Wie öffnet Symolo
    ein anderes Formular aus einem Hook heraus? Bis das geklärt ist, steht in Symolo nur ein Hinweis. */
+/* Rote Zeile (Ben, 16.10.): eine Baugruppe liegt im anderen Bereich (Schweißen oder Kommissionierlager).
+   Der Knopf springt dorthin (ziel). */
+rotKnopf: function (parent, text, titel, ziel) {
+
+    const k = this.el(parent, "button", "kom-rotknopf", text);
+    k.type = "button";
+    k.title = titel;
+    k.onclick = ziel;
+    return k;
+},
+
 bereichOeffnen: function (name, optionen) {
 
     if (name === this.ansicht.name && !(optionen && optionen.suche)) return;
@@ -12175,6 +12201,11 @@ form_on_load: function (FORM) {
 .kom-db .kom-titel { margin: 0; font-size: var(--fs-h3); line-height: var(--lh-h3); font-weight: var(--fw-h3); }
 .kom-db .kom-info { font-size: var(--fs-small); line-height: var(--lh-small); color: var(--ink-muted); }
 
+.kom-db .kom-db .kom-kacheln { white-space: normal; }
+.kom-db .kom-rotknopf { padding: var(--space-1) var(--space-3); border-radius: var(--radius-sm); border: none;
+  background: var(--brand-red); color: var(--on-brand); font: inherit; font-size: var(--fs-small); white-space: nowrap; cursor: pointer; }
+.kom-db .kom-rotknopf:hover { background: var(--red-grad-end); }
+.kom-db .kom-rotknopf:focus-visible { outline: 2px solid var(--focus); outline-offset: 1px; }
 .kom-db .kom-menue { flex: 0 0 auto; display: flex; flex-wrap: wrap; gap: var(--space-1);
   padding: var(--space-2) var(--space-4); background: var(--surface-100); border-bottom: 1px solid var(--line); }
 .kom-db .kom-menuepunkt { min-height: 32px; padding: 0 var(--space-3); border: 1px solid transparent;
@@ -12360,7 +12391,7 @@ form_on_load: function (FORM) {
 .kom-db .kom-erklaerung { margin: 0 0 var(--space-3); }
 
 /* Baugruppen, die einzeln im Schweißen liegen (Phase 6): rote Zeile mit Marke "Schweißen" */
-.kom-db .kom-dsw td { background: color-mix(in srgb, var(--brand-red) 16%, var(--surface-100)); }
+.kom-db .kom-dsw td { background: transparent; padding: var(--space-1) var(--space-3); }
 .kom-db .kom-statusmarke.kom-schweissen { border-color: var(--brand-red); color: var(--brand-red); }
 .kom-db .kom-statusknopf { cursor: pointer; font: inherit; font-weight: var(--fw-label); }
 .kom-db .kom-statusknopf:focus-visible { outline: 2px solid var(--focus); outline-offset: 1px; }
@@ -16213,8 +16244,11 @@ karteZeichnen: function (karte, d) {
     });
 
     imSw.forEach(z => {
-        const str = this.el(koerper, "tr", "kom-dbg kom-dsw");
-        this.zeileBauen(str, "sw", { knoten: {}, d: d, g: null, sw: z, klapp: null });
+        const str = this.el(koerper, "tr", "kom-dsw");
+        const td = this.el(str, "td", "kom-kacheln");
+        td.colSpan = this.listeSpalten.length;
+        this.rotKnopf(td, "▶ " + this.text(z.baugruppe) + " befindet sich im Schweißen", "Im Schweißen ansehen",
+            () => this.bereichOeffnen("schweissen", { suche: this.text(z.ab_nr) }));
     });
 },
 
@@ -17641,6 +17675,17 @@ bereichsleisteBauen: function (view) {
 /* In einen anderen Bereich wechseln. optionen.suche: dort gleich nach diesem Text suchen (z. B. die AB-Nummer).
    Den Wechsel selbst macht window.KOM_BEREICH_WECHSELN (setzt die Testseite). OFFEN (Symolo): Wie öffnet Symolo
    ein anderes Formular aus einem Hook heraus? Bis das geklärt ist, steht in Symolo nur ein Hinweis. */
+/* Rote Zeile (Ben, 16.10.): eine Baugruppe liegt im anderen Bereich (Schweißen oder Kommissionierlager).
+   Der Knopf springt dorthin (ziel). */
+rotKnopf: function (parent, text, titel, ziel) {
+
+    const k = this.el(parent, "button", "kom-rotknopf", text);
+    k.type = "button";
+    k.title = titel;
+    k.onclick = ziel;
+    return k;
+},
+
 bereichOeffnen: function (name, optionen) {
 
     if (name === this.ansicht.name && !(optionen && optionen.suche)) return;
@@ -18050,6 +18095,11 @@ form_on_load: function (FORM) {
 .kom-fc .kom-titel { margin: 0; font-size: var(--fs-h3); line-height: var(--lh-h3); font-weight: var(--fw-h3); }
 .kom-fc .kom-info { font-size: var(--fs-small); line-height: var(--lh-small); color: var(--ink-muted); }
 
+.kom-fc .kom-fc .kom-kacheln { white-space: normal; }
+.kom-fc .kom-rotknopf { padding: var(--space-1) var(--space-3); border-radius: var(--radius-sm); border: none;
+  background: var(--brand-red); color: var(--on-brand); font: inherit; font-size: var(--fs-small); white-space: nowrap; cursor: pointer; }
+.kom-fc .kom-rotknopf:hover { background: var(--red-grad-end); }
+.kom-fc .kom-rotknopf:focus-visible { outline: 2px solid var(--focus); outline-offset: 1px; }
 .kom-fc .kom-menue { flex: 0 0 auto; display: flex; flex-wrap: wrap; gap: var(--space-1);
   padding: var(--space-2) var(--space-4); background: var(--surface-100); border-bottom: 1px solid var(--line); }
 .kom-fc .kom-menuepunkt { min-height: 32px; padding: 0 var(--space-3); border: 1px solid transparent;
@@ -18235,7 +18285,7 @@ form_on_load: function (FORM) {
 .kom-fc .kom-erklaerung { margin: 0 0 var(--space-3); }
 
 /* Baugruppen, die einzeln im Schweißen liegen (Phase 6): rote Zeile mit Marke "Schweißen" */
-.kom-fc .kom-dsw td { background: color-mix(in srgb, var(--brand-red) 16%, var(--surface-100)); }
+.kom-fc .kom-dsw td { background: transparent; padding: var(--space-1) var(--space-3); }
 .kom-fc .kom-statusmarke.kom-schweissen { border-color: var(--brand-red); color: var(--brand-red); }
 .kom-fc .kom-statusknopf { cursor: pointer; font: inherit; font-weight: var(--fw-label); }
 .kom-fc .kom-statusknopf:focus-visible { outline: 2px solid var(--focus); outline-offset: 1px; }
@@ -22088,8 +22138,11 @@ karteZeichnen: function (karte, d) {
     });
 
     imSw.forEach(z => {
-        const str = this.el(koerper, "tr", "kom-dbg kom-dsw");
-        this.zeileBauen(str, "sw", { knoten: {}, d: d, g: null, sw: z, klapp: null });
+        const str = this.el(koerper, "tr", "kom-dsw");
+        const td = this.el(str, "td", "kom-kacheln");
+        td.colSpan = this.listeSpalten.length;
+        this.rotKnopf(td, "▶ " + this.text(z.baugruppe) + " befindet sich im Schweißen", "Im Schweißen ansehen",
+            () => this.bereichOeffnen("schweissen", { suche: this.text(z.ab_nr) }));
     });
 },
 
@@ -23516,6 +23569,17 @@ bereichsleisteBauen: function (view) {
 /* In einen anderen Bereich wechseln. optionen.suche: dort gleich nach diesem Text suchen (z. B. die AB-Nummer).
    Den Wechsel selbst macht window.KOM_BEREICH_WECHSELN (setzt die Testseite). OFFEN (Symolo): Wie öffnet Symolo
    ein anderes Formular aus einem Hook heraus? Bis das geklärt ist, steht in Symolo nur ein Hinweis. */
+/* Rote Zeile (Ben, 16.10.): eine Baugruppe liegt im anderen Bereich (Schweißen oder Kommissionierlager).
+   Der Knopf springt dorthin (ziel). */
+rotKnopf: function (parent, text, titel, ziel) {
+
+    const k = this.el(parent, "button", "kom-rotknopf", text);
+    k.type = "button";
+    k.title = titel;
+    k.onclick = ziel;
+    return k;
+},
+
 bereichOeffnen: function (name, optionen) {
 
     if (name === this.ansicht.name && !(optionen && optionen.suche)) return;
@@ -23878,6 +23942,11 @@ form_on_load: function (FORM) {
 .kom-pl .kom-titel { margin: 0; font-size: var(--fs-h3); line-height: var(--lh-h3); font-weight: var(--fw-h3); }
 .kom-pl .kom-info { font-size: var(--fs-small); line-height: var(--lh-small); color: var(--ink-muted); }
 
+.kom-pl .kom-pl .kom-kacheln { white-space: normal; }
+.kom-pl .kom-rotknopf { padding: var(--space-1) var(--space-3); border-radius: var(--radius-sm); border: none;
+  background: var(--brand-red); color: var(--on-brand); font: inherit; font-size: var(--fs-small); white-space: nowrap; cursor: pointer; }
+.kom-pl .kom-rotknopf:hover { background: var(--red-grad-end); }
+.kom-pl .kom-rotknopf:focus-visible { outline: 2px solid var(--focus); outline-offset: 1px; }
 .kom-pl .kom-menue { flex: 0 0 auto; display: flex; flex-wrap: wrap; gap: var(--space-1);
   padding: var(--space-2) var(--space-4); background: var(--surface-100); border-bottom: 1px solid var(--line); }
 .kom-pl .kom-menuepunkt { min-height: 32px; padding: 0 var(--space-3); border: 1px solid transparent;
@@ -24063,7 +24132,7 @@ form_on_load: function (FORM) {
 .kom-pl .kom-erklaerung { margin: 0 0 var(--space-3); }
 
 /* Baugruppen, die einzeln im Schweißen liegen (Phase 6): rote Zeile mit Marke "Schweißen" */
-.kom-pl .kom-dsw td { background: color-mix(in srgb, var(--brand-red) 16%, var(--surface-100)); }
+.kom-pl .kom-dsw td { background: transparent; padding: var(--space-1) var(--space-3); }
 .kom-pl .kom-statusmarke.kom-schweissen { border-color: var(--brand-red); color: var(--brand-red); }
 .kom-pl .kom-statusknopf { cursor: pointer; font: inherit; font-weight: var(--fw-label); }
 .kom-pl .kom-statusknopf:focus-visible { outline: 2px solid var(--focus); outline-offset: 1px; }
@@ -27916,8 +27985,11 @@ karteZeichnen: function (karte, d) {
     });
 
     imSw.forEach(z => {
-        const str = this.el(koerper, "tr", "kom-dbg kom-dsw");
-        this.zeileBauen(str, "sw", { knoten: {}, d: d, g: null, sw: z, klapp: null });
+        const str = this.el(koerper, "tr", "kom-dsw");
+        const td = this.el(str, "td", "kom-kacheln");
+        td.colSpan = this.listeSpalten.length;
+        this.rotKnopf(td, "▶ " + this.text(z.baugruppe) + " befindet sich im Schweißen", "Im Schweißen ansehen",
+            () => this.bereichOeffnen("schweissen", { suche: this.text(z.ab_nr) }));
     });
 },
 
@@ -29344,6 +29416,17 @@ bereichsleisteBauen: function (view) {
 /* In einen anderen Bereich wechseln. optionen.suche: dort gleich nach diesem Text suchen (z. B. die AB-Nummer).
    Den Wechsel selbst macht window.KOM_BEREICH_WECHSELN (setzt die Testseite). OFFEN (Symolo): Wie öffnet Symolo
    ein anderes Formular aus einem Hook heraus? Bis das geklärt ist, steht in Symolo nur ein Hinweis. */
+/* Rote Zeile (Ben, 16.10.): eine Baugruppe liegt im anderen Bereich (Schweißen oder Kommissionierlager).
+   Der Knopf springt dorthin (ziel). */
+rotKnopf: function (parent, text, titel, ziel) {
+
+    const k = this.el(parent, "button", "kom-rotknopf", text);
+    k.type = "button";
+    k.title = titel;
+    k.onclick = ziel;
+    return k;
+},
+
 bereichOeffnen: function (name, optionen) {
 
     if (name === this.ansicht.name && !(optionen && optionen.suche)) return;
@@ -29769,6 +29852,11 @@ form_on_load: function (FORM) {
 .kom-st .kom-titel { margin: 0; font-size: var(--fs-h3); line-height: var(--lh-h3); font-weight: var(--fw-h3); }
 .kom-st .kom-info { font-size: var(--fs-small); line-height: var(--lh-small); color: var(--ink-muted); }
 
+.kom-st .kom-st .kom-kacheln { white-space: normal; }
+.kom-st .kom-rotknopf { padding: var(--space-1) var(--space-3); border-radius: var(--radius-sm); border: none;
+  background: var(--brand-red); color: var(--on-brand); font: inherit; font-size: var(--fs-small); white-space: nowrap; cursor: pointer; }
+.kom-st .kom-rotknopf:hover { background: var(--red-grad-end); }
+.kom-st .kom-rotknopf:focus-visible { outline: 2px solid var(--focus); outline-offset: 1px; }
 .kom-st .kom-menue { flex: 0 0 auto; display: flex; flex-wrap: wrap; gap: var(--space-1);
   padding: var(--space-2) var(--space-4); background: var(--surface-100); border-bottom: 1px solid var(--line); }
 .kom-st .kom-menuepunkt { min-height: 32px; padding: 0 var(--space-3); border: 1px solid transparent;
@@ -33719,8 +33807,11 @@ karteZeichnen: function (karte, d) {
     });
 
     imSw.forEach(z => {
-        const str = this.el(koerper, "tr", "kom-dbg kom-dsw");
-        this.zeileBauen(str, "sw", { knoten: {}, d: d, g: null, sw: z, klapp: null });
+        const str = this.el(koerper, "tr", "kom-dsw");
+        const td = this.el(str, "td", "kom-kacheln");
+        td.colSpan = this.listeSpalten.length;
+        this.rotKnopf(td, "▶ " + this.text(z.baugruppe) + " befindet sich im Schweißen", "Im Schweißen ansehen",
+            () => this.bereichOeffnen("schweissen", { suche: this.text(z.ab_nr) }));
     });
 },
 
@@ -35147,6 +35238,17 @@ bereichsleisteBauen: function (view) {
 /* In einen anderen Bereich wechseln. optionen.suche: dort gleich nach diesem Text suchen (z. B. die AB-Nummer).
    Den Wechsel selbst macht window.KOM_BEREICH_WECHSELN (setzt die Testseite). OFFEN (Symolo): Wie öffnet Symolo
    ein anderes Formular aus einem Hook heraus? Bis das geklärt ist, steht in Symolo nur ein Hinweis. */
+/* Rote Zeile (Ben, 16.10.): eine Baugruppe liegt im anderen Bereich (Schweißen oder Kommissionierlager).
+   Der Knopf springt dorthin (ziel). */
+rotKnopf: function (parent, text, titel, ziel) {
+
+    const k = this.el(parent, "button", "kom-rotknopf", text);
+    k.type = "button";
+    k.title = titel;
+    k.onclick = ziel;
+    return k;
+},
+
 bereichOeffnen: function (name, optionen) {
 
     if (name === this.ansicht.name && !(optionen && optionen.suche)) return;
@@ -35677,6 +35779,11 @@ form_on_load: function (FORM) {
 .kom-ar .kom-titel { margin: 0; font-size: var(--fs-h3); line-height: var(--lh-h3); font-weight: var(--fw-h3); }
 .kom-ar .kom-info { font-size: var(--fs-small); line-height: var(--lh-small); color: var(--ink-muted); }
 
+.kom-ar .kom-ar .kom-kacheln { white-space: normal; }
+.kom-ar .kom-rotknopf { padding: var(--space-1) var(--space-3); border-radius: var(--radius-sm); border: none;
+  background: var(--brand-red); color: var(--on-brand); font: inherit; font-size: var(--fs-small); white-space: nowrap; cursor: pointer; }
+.kom-ar .kom-rotknopf:hover { background: var(--red-grad-end); }
+.kom-ar .kom-rotknopf:focus-visible { outline: 2px solid var(--focus); outline-offset: 1px; }
 .kom-ar .kom-menue { flex: 0 0 auto; display: flex; flex-wrap: wrap; gap: var(--space-1);
   padding: var(--space-2) var(--space-4); background: var(--surface-100); border-bottom: 1px solid var(--line); }
 .kom-ar .kom-menuepunkt { min-height: 32px; padding: 0 var(--space-3); border: 1px solid transparent;
@@ -39634,8 +39741,11 @@ karteZeichnen: function (karte, d) {
     });
 
     imSw.forEach(z => {
-        const str = this.el(koerper, "tr", "kom-dbg kom-dsw");
-        this.zeileBauen(str, "sw", { knoten: {}, d: d, g: null, sw: z, klapp: null });
+        const str = this.el(koerper, "tr", "kom-dsw");
+        const td = this.el(str, "td", "kom-kacheln");
+        td.colSpan = this.listeSpalten.length;
+        this.rotKnopf(td, "▶ " + this.text(z.baugruppe) + " befindet sich im Schweißen", "Im Schweißen ansehen",
+            () => this.bereichOeffnen("schweissen", { suche: this.text(z.ab_nr) }));
     });
 },
 
@@ -41062,6 +41172,17 @@ bereichsleisteBauen: function (view) {
 /* In einen anderen Bereich wechseln. optionen.suche: dort gleich nach diesem Text suchen (z. B. die AB-Nummer).
    Den Wechsel selbst macht window.KOM_BEREICH_WECHSELN (setzt die Testseite). OFFEN (Symolo): Wie öffnet Symolo
    ein anderes Formular aus einem Hook heraus? Bis das geklärt ist, steht in Symolo nur ein Hinweis. */
+/* Rote Zeile (Ben, 16.10.): eine Baugruppe liegt im anderen Bereich (Schweißen oder Kommissionierlager).
+   Der Knopf springt dorthin (ziel). */
+rotKnopf: function (parent, text, titel, ziel) {
+
+    const k = this.el(parent, "button", "kom-rotknopf", text);
+    k.type = "button";
+    k.title = titel;
+    k.onclick = ziel;
+    return k;
+},
+
 bereichOeffnen: function (name, optionen) {
 
     if (name === this.ansicht.name && !(optionen && optionen.suche)) return;
@@ -41616,6 +41737,11 @@ form_on_load: function (FORM) {
 .kom-pr .kom-titel { margin: 0; font-size: var(--fs-h3); line-height: var(--lh-h3); font-weight: var(--fw-h3); }
 .kom-pr .kom-info { font-size: var(--fs-small); line-height: var(--lh-small); color: var(--ink-muted); }
 
+.kom-pr .kom-pr .kom-kacheln { white-space: normal; }
+.kom-pr .kom-rotknopf { padding: var(--space-1) var(--space-3); border-radius: var(--radius-sm); border: none;
+  background: var(--brand-red); color: var(--on-brand); font: inherit; font-size: var(--fs-small); white-space: nowrap; cursor: pointer; }
+.kom-pr .kom-rotknopf:hover { background: var(--red-grad-end); }
+.kom-pr .kom-rotknopf:focus-visible { outline: 2px solid var(--focus); outline-offset: 1px; }
 .kom-pr .kom-menue { flex: 0 0 auto; display: flex; flex-wrap: wrap; gap: var(--space-1);
   padding: var(--space-2) var(--space-4); background: var(--surface-100); border-bottom: 1px solid var(--line); }
 .kom-pr .kom-menuepunkt { min-height: 32px; padding: 0 var(--space-3); border: 1px solid transparent;
@@ -45563,8 +45689,11 @@ karteZeichnen: function (karte, d) {
     });
 
     imSw.forEach(z => {
-        const str = this.el(koerper, "tr", "kom-dbg kom-dsw");
-        this.zeileBauen(str, "sw", { knoten: {}, d: d, g: null, sw: z, klapp: null });
+        const str = this.el(koerper, "tr", "kom-dsw");
+        const td = this.el(str, "td", "kom-kacheln");
+        td.colSpan = this.listeSpalten.length;
+        this.rotKnopf(td, "▶ " + this.text(z.baugruppe) + " befindet sich im Schweißen", "Im Schweißen ansehen",
+            () => this.bereichOeffnen("schweissen", { suche: this.text(z.ab_nr) }));
     });
 },
 
@@ -46991,6 +47120,17 @@ bereichsleisteBauen: function (view) {
 /* In einen anderen Bereich wechseln. optionen.suche: dort gleich nach diesem Text suchen (z. B. die AB-Nummer).
    Den Wechsel selbst macht window.KOM_BEREICH_WECHSELN (setzt die Testseite). OFFEN (Symolo): Wie öffnet Symolo
    ein anderes Formular aus einem Hook heraus? Bis das geklärt ist, steht in Symolo nur ein Hinweis. */
+/* Rote Zeile (Ben, 16.10.): eine Baugruppe liegt im anderen Bereich (Schweißen oder Kommissionierlager).
+   Der Knopf springt dorthin (ziel). */
+rotKnopf: function (parent, text, titel, ziel) {
+
+    const k = this.el(parent, "button", "kom-rotknopf", text);
+    k.type = "button";
+    k.title = titel;
+    k.onclick = ziel;
+    return k;
+},
+
 bereichOeffnen: function (name, optionen) {
 
     if (name === this.ansicht.name && !(optionen && optionen.suche)) return;
@@ -47547,15 +47687,13 @@ sammlungZeichnen: function (tab, s, neu) {
     this.zelle(tr, kopf.benennung + (kopf.kunde ? " · " + kopf.kunde : ""), "", kopf.benennung, 2);
     this.zelle(tr, "Einzelne Baugruppen im Schweißen", "kom-leise", undefined, this.swSpalten.length - 4);
 
-    if (s.komBgs.length) {
+    if (offen && s.komBgs.length) {
         const ktr = this.el(koerper, "tr", "kom-komzeile");
         const td = this.el(ktr, "td", "kom-kacheln");
         td.colSpan = this.swSpalten.length;
         s.komBgs.forEach(name => {
-            const k = this.el(td, "button", "kom-kachel-rot", "◀ " + name + " befindet sich im Kommissionierlager");
-            k.type = "button";
-            k.title = "In der Bestandsliste ansehen";
-            k.onclick = () => this.bereichOeffnen("bestandsliste", { suche: kopf.anzeige });
+            this.rotKnopf(td, "◀ " + name + " befindet sich im Kommissionierlager", "In der Bestandsliste ansehen",
+                () => this.bereichOeffnen("bestandsliste", { suche: kopf.anzeige }));
         });
     }
 
@@ -47982,6 +48120,11 @@ form_on_load: function (FORM) {
 .kom-sw .kom-titel { margin: 0; font-size: var(--fs-h3); line-height: var(--lh-h3); font-weight: var(--fw-h3); }
 .kom-sw .kom-info { font-size: var(--fs-small); line-height: var(--lh-small); color: var(--ink-muted); }
 
+.kom-sw .kom-sw .kom-kacheln { white-space: normal; }
+.kom-sw .kom-rotknopf { padding: var(--space-1) var(--space-3); border-radius: var(--radius-sm); border: none;
+  background: var(--brand-red); color: var(--on-brand); font: inherit; font-size: var(--fs-small); white-space: nowrap; cursor: pointer; }
+.kom-sw .kom-rotknopf:hover { background: var(--red-grad-end); }
+.kom-sw .kom-rotknopf:focus-visible { outline: 2px solid var(--focus); outline-offset: 1px; }
 .kom-sw .kom-menue { flex: 0 0 auto; display: flex; flex-wrap: wrap; gap: var(--space-1);
   padding: var(--space-2) var(--space-4); background: var(--surface-100); border-bottom: 1px solid var(--line); }
 .kom-sw .kom-menuepunkt { min-height: 32px; padding: 0 var(--space-3); border: 1px solid transparent;
@@ -48169,8 +48312,7 @@ form_on_load: function (FORM) {
 .kom-sw .kom-knopf-klein, .kom-sw .kom-knopf-rot-klein { min-height: 28px; padding: 0 var(--space-2); font-size: var(--fs-label); }
 .kom-sw .kom-knopf-rot-klein { background: var(--brand-red); border-color: var(--brand-red); color: var(--on-brand); }
 .kom-sw .kom-knopf-rot-klein:hover { background: var(--red-grad-end); color: var(--on-brand); }
-.kom-sw .kom-imsw td { background: color-mix(in srgb, var(--brand-red) 16%, var(--surface-100)); }
-.kom-sw .kom-imsw td.kom-imsw-hinweis { color: var(--brand-red); font-weight: var(--fw-label); }
+.kom-sw .kom-imsw td { background: transparent; padding: var(--space-1) var(--space-3); }
 .kom-sw .kom-link { padding: 0; border: none; background: none; color: inherit; font: inherit; font-weight: inherit; cursor: pointer; text-decoration: underline; }
 .kom-sw .kom-link:focus-visible { outline: 2px solid var(--focus); outline-offset: 1px; }
 
@@ -48211,8 +48353,6 @@ form_on_load: function (FORM) {
 /* Sammlung: Überschrift eines AB, dessen Baugruppen einzeln im Schweißen liegen */
 .kom-sw .kom-sammlung td { background: color-mix(in srgb, var(--brand-gray) 22%, var(--surface-100)); }
 .kom-sw .kom-kacheln { display: flex; flex-wrap: wrap; gap: var(--space-2); white-space: normal; }
-.kom-sw .kom-kachel-rot { padding: var(--space-1) var(--space-3); border-radius: var(--radius-sm);
-  border: none; background: var(--brand-red); color: var(--on-brand); font: inherit; font-size: var(--fs-small); white-space: nowrap; cursor: pointer; }
 .kom-sw .kom-komzeile td { white-space: normal; overflow: visible; }
 
 .kom-sw .kom-schalter, .kom-sw .kom-feldknopf, .kom-sw .kom-auswahl { box-sizing: border-box; }
@@ -52065,8 +52205,11 @@ karteZeichnen: function (karte, d) {
     });
 
     imSw.forEach(z => {
-        const str = this.el(koerper, "tr", "kom-dbg kom-dsw");
-        this.zeileBauen(str, "sw", { knoten: {}, d: d, g: null, sw: z, klapp: null });
+        const str = this.el(koerper, "tr", "kom-dsw");
+        const td = this.el(str, "td", "kom-kacheln");
+        td.colSpan = this.listeSpalten.length;
+        this.rotKnopf(td, "▶ " + this.text(z.baugruppe) + " befindet sich im Schweißen", "Im Schweißen ansehen",
+            () => this.bereichOeffnen("schweissen", { suche: this.text(z.ab_nr) }));
     });
 },
 
@@ -53493,6 +53636,17 @@ bereichsleisteBauen: function (view) {
 /* In einen anderen Bereich wechseln. optionen.suche: dort gleich nach diesem Text suchen (z. B. die AB-Nummer).
    Den Wechsel selbst macht window.KOM_BEREICH_WECHSELN (setzt die Testseite). OFFEN (Symolo): Wie öffnet Symolo
    ein anderes Formular aus einem Hook heraus? Bis das geklärt ist, steht in Symolo nur ein Hinweis. */
+/* Rote Zeile (Ben, 16.10.): eine Baugruppe liegt im anderen Bereich (Schweißen oder Kommissionierlager).
+   Der Knopf springt dorthin (ziel). */
+rotKnopf: function (parent, text, titel, ziel) {
+
+    const k = this.el(parent, "button", "kom-rotknopf", text);
+    k.type = "button";
+    k.title = titel;
+    k.onclick = ziel;
+    return k;
+},
+
 bereichOeffnen: function (name, optionen) {
 
     if (name === this.ansicht.name && !(optionen && optionen.suche)) return;
@@ -54014,6 +54168,11 @@ form_on_load: function (FORM) {
 .kom-ap .kom-titel { margin: 0; font-size: var(--fs-h3); line-height: var(--lh-h3); font-weight: var(--fw-h3); }
 .kom-ap .kom-info { font-size: var(--fs-small); line-height: var(--lh-small); color: var(--ink-muted); }
 
+.kom-ap .kom-ap .kom-kacheln { white-space: normal; }
+.kom-ap .kom-rotknopf { padding: var(--space-1) var(--space-3); border-radius: var(--radius-sm); border: none;
+  background: var(--brand-red); color: var(--on-brand); font: inherit; font-size: var(--fs-small); white-space: nowrap; cursor: pointer; }
+.kom-ap .kom-rotknopf:hover { background: var(--red-grad-end); }
+.kom-ap .kom-rotknopf:focus-visible { outline: 2px solid var(--focus); outline-offset: 1px; }
 .kom-ap .kom-menue { flex: 0 0 auto; display: flex; flex-wrap: wrap; gap: var(--space-1);
   padding: var(--space-2) var(--space-4); background: var(--surface-100); border-bottom: 1px solid var(--line); }
 .kom-ap .kom-menuepunkt { min-height: 32px; padding: 0 var(--space-3); border: 1px solid transparent;
@@ -57974,8 +58133,11 @@ karteZeichnen: function (karte, d) {
     });
 
     imSw.forEach(z => {
-        const str = this.el(koerper, "tr", "kom-dbg kom-dsw");
-        this.zeileBauen(str, "sw", { knoten: {}, d: d, g: null, sw: z, klapp: null });
+        const str = this.el(koerper, "tr", "kom-dsw");
+        const td = this.el(str, "td", "kom-kacheln");
+        td.colSpan = this.listeSpalten.length;
+        this.rotKnopf(td, "▶ " + this.text(z.baugruppe) + " befindet sich im Schweißen", "Im Schweißen ansehen",
+            () => this.bereichOeffnen("schweissen", { suche: this.text(z.ab_nr) }));
     });
 },
 
@@ -59402,6 +59564,17 @@ bereichsleisteBauen: function (view) {
 /* In einen anderen Bereich wechseln. optionen.suche: dort gleich nach diesem Text suchen (z. B. die AB-Nummer).
    Den Wechsel selbst macht window.KOM_BEREICH_WECHSELN (setzt die Testseite). OFFEN (Symolo): Wie öffnet Symolo
    ein anderes Formular aus einem Hook heraus? Bis das geklärt ist, steht in Symolo nur ein Hinweis. */
+/* Rote Zeile (Ben, 16.10.): eine Baugruppe liegt im anderen Bereich (Schweißen oder Kommissionierlager).
+   Der Knopf springt dorthin (ziel). */
+rotKnopf: function (parent, text, titel, ziel) {
+
+    const k = this.el(parent, "button", "kom-rotknopf", text);
+    k.type = "button";
+    k.title = titel;
+    k.onclick = ziel;
+    return k;
+},
+
 bereichOeffnen: function (name, optionen) {
 
     if (name === this.ansicht.name && !(optionen && optionen.suche)) return;
@@ -59917,6 +60090,11 @@ form_on_load: function (FORM) {
 .kom-rg .kom-titel { margin: 0; font-size: var(--fs-h3); line-height: var(--lh-h3); font-weight: var(--fw-h3); }
 .kom-rg .kom-info { font-size: var(--fs-small); line-height: var(--lh-small); color: var(--ink-muted); }
 
+.kom-rg .kom-rg .kom-kacheln { white-space: normal; }
+.kom-rg .kom-rotknopf { padding: var(--space-1) var(--space-3); border-radius: var(--radius-sm); border: none;
+  background: var(--brand-red); color: var(--on-brand); font: inherit; font-size: var(--fs-small); white-space: nowrap; cursor: pointer; }
+.kom-rg .kom-rotknopf:hover { background: var(--red-grad-end); }
+.kom-rg .kom-rotknopf:focus-visible { outline: 2px solid var(--focus); outline-offset: 1px; }
 .kom-rg .kom-menue { flex: 0 0 auto; display: flex; flex-wrap: wrap; gap: var(--space-1);
   padding: var(--space-2) var(--space-4); background: var(--surface-100); border-bottom: 1px solid var(--line); }
 .kom-rg .kom-menuepunkt { min-height: 32px; padding: 0 var(--space-3); border: 1px solid transparent;
@@ -63872,8 +64050,11 @@ karteZeichnen: function (karte, d) {
     });
 
     imSw.forEach(z => {
-        const str = this.el(koerper, "tr", "kom-dbg kom-dsw");
-        this.zeileBauen(str, "sw", { knoten: {}, d: d, g: null, sw: z, klapp: null });
+        const str = this.el(koerper, "tr", "kom-dsw");
+        const td = this.el(str, "td", "kom-kacheln");
+        td.colSpan = this.listeSpalten.length;
+        this.rotKnopf(td, "▶ " + this.text(z.baugruppe) + " befindet sich im Schweißen", "Im Schweißen ansehen",
+            () => this.bereichOeffnen("schweissen", { suche: this.text(z.ab_nr) }));
     });
 },
 
@@ -65300,6 +65481,17 @@ bereichsleisteBauen: function (view) {
 /* In einen anderen Bereich wechseln. optionen.suche: dort gleich nach diesem Text suchen (z. B. die AB-Nummer).
    Den Wechsel selbst macht window.KOM_BEREICH_WECHSELN (setzt die Testseite). OFFEN (Symolo): Wie öffnet Symolo
    ein anderes Formular aus einem Hook heraus? Bis das geklärt ist, steht in Symolo nur ein Hinweis. */
+/* Rote Zeile (Ben, 16.10.): eine Baugruppe liegt im anderen Bereich (Schweißen oder Kommissionierlager).
+   Der Knopf springt dorthin (ziel). */
+rotKnopf: function (parent, text, titel, ziel) {
+
+    const k = this.el(parent, "button", "kom-rotknopf", text);
+    k.type = "button";
+    k.title = titel;
+    k.onclick = ziel;
+    return k;
+},
+
 bereichOeffnen: function (name, optionen) {
 
     if (name === this.ansicht.name && !(optionen && optionen.suche)) return;
@@ -65660,6 +65852,11 @@ form_on_load: function (FORM) {
 .kom-vt .kom-titel { margin: 0; font-size: var(--fs-h3); line-height: var(--lh-h3); font-weight: var(--fw-h3); }
 .kom-vt .kom-info { font-size: var(--fs-small); line-height: var(--lh-small); color: var(--ink-muted); }
 
+.kom-vt .kom-vt .kom-kacheln { white-space: normal; }
+.kom-vt .kom-rotknopf { padding: var(--space-1) var(--space-3); border-radius: var(--radius-sm); border: none;
+  background: var(--brand-red); color: var(--on-brand); font: inherit; font-size: var(--fs-small); white-space: nowrap; cursor: pointer; }
+.kom-vt .kom-rotknopf:hover { background: var(--red-grad-end); }
+.kom-vt .kom-rotknopf:focus-visible { outline: 2px solid var(--focus); outline-offset: 1px; }
 .kom-vt .kom-menue { flex: 0 0 auto; display: flex; flex-wrap: wrap; gap: var(--space-1);
   padding: var(--space-2) var(--space-4); background: var(--surface-100); border-bottom: 1px solid var(--line); }
 .kom-vt .kom-menuepunkt { min-height: 32px; padding: 0 var(--space-3); border: 1px solid transparent;

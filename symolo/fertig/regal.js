@@ -3842,8 +3842,11 @@ karteZeichnen: function (karte, d) {
     });
 
     imSw.forEach(z => {
-        const str = this.el(koerper, "tr", "kom-dbg kom-dsw");
-        this.zeileBauen(str, "sw", { knoten: {}, d: d, g: null, sw: z, klapp: null });
+        const str = this.el(koerper, "tr", "kom-dsw");
+        const td = this.el(str, "td", "kom-kacheln");
+        td.colSpan = this.listeSpalten.length;
+        this.rotKnopf(td, "▶ " + this.text(z.baugruppe) + " befindet sich im Schweißen", "Im Schweißen ansehen",
+            () => this.bereichOeffnen("schweissen", { suche: this.text(z.ab_nr) }));
     });
 },
 
@@ -5270,6 +5273,17 @@ bereichsleisteBauen: function (view) {
 /* In einen anderen Bereich wechseln. optionen.suche: dort gleich nach diesem Text suchen (z. B. die AB-Nummer).
    Den Wechsel selbst macht window.KOM_BEREICH_WECHSELN (setzt die Testseite). OFFEN (Symolo): Wie öffnet Symolo
    ein anderes Formular aus einem Hook heraus? Bis das geklärt ist, steht in Symolo nur ein Hinweis. */
+/* Rote Zeile (Ben, 16.10.): eine Baugruppe liegt im anderen Bereich (Schweißen oder Kommissionierlager).
+   Der Knopf springt dorthin (ziel). */
+rotKnopf: function (parent, text, titel, ziel) {
+
+    const k = this.el(parent, "button", "kom-rotknopf", text);
+    k.type = "button";
+    k.title = titel;
+    k.onclick = ziel;
+    return k;
+},
+
 bereichOeffnen: function (name, optionen) {
 
     if (name === this.ansicht.name && !(optionen && optionen.suche)) return;
@@ -5785,6 +5799,11 @@ form_on_load: function (FORM) {
 .kom-rg .kom-titel { margin: 0; font-size: var(--fs-h3); line-height: var(--lh-h3); font-weight: var(--fw-h3); }
 .kom-rg .kom-info { font-size: var(--fs-small); line-height: var(--lh-small); color: var(--ink-muted); }
 
+.kom-rg .kom-rg .kom-kacheln { white-space: normal; }
+.kom-rg .kom-rotknopf { padding: var(--space-1) var(--space-3); border-radius: var(--radius-sm); border: none;
+  background: var(--brand-red); color: var(--on-brand); font: inherit; font-size: var(--fs-small); white-space: nowrap; cursor: pointer; }
+.kom-rg .kom-rotknopf:hover { background: var(--red-grad-end); }
+.kom-rg .kom-rotknopf:focus-visible { outline: 2px solid var(--focus); outline-offset: 1px; }
 .kom-rg .kom-menue { flex: 0 0 auto; display: flex; flex-wrap: wrap; gap: var(--space-1);
   padding: var(--space-2) var(--space-4); background: var(--surface-100); border-bottom: 1px solid var(--line); }
 .kom-rg .kom-menuepunkt { min-height: 32px; padding: 0 var(--space-3); border: 1px solid transparent;
