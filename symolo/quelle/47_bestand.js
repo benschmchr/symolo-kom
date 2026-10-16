@@ -49,10 +49,13 @@ idVergleich: function (a, b) {
 },
 
 /* Alle ABs der Bestandsliste (nicht archiviert) mit BGs und Teilen.
-   Drei Abfragen; BGs und Teile in Stücken über die AB-IDs. */
-bestandLaden: async function () {
+   Drei Abfragen; BGs und Teile in Stücken über die AB-IDs.
+   abIds: nur diese ABs neu laden (nach einer Änderung). */
+bestandLaden: async function (abIds) {
 
-    const auftraege = await this.datenLesen("auftrag", { wo: { bereich: "bestand" }, aufloesen: false });
+    const wo = { bereich: "bestand" };
+    if (abIds) wo.id = abIds;
+    const auftraege = await this.datenLesen("auftrag", { wo: wo, aufloesen: false });
 
     auftraege.sort((a, b) =>
         (this.mengeMilli(a.reihenfolge) - this.mengeMilli(b.reihenfolge)) || this.idVergleich(a._id, b._id));

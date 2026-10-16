@@ -72,7 +72,7 @@ Das schreibt `symolo/fertig/<bereich>.js` neu und prüft dabei die Regeln aus de
 3. Der Netzweg stellt sich selbst um: Ist `window.symolo.internal.connection` vorhanden, nutzt die App `internal.connection.websocket.request`, sonst `network.websocket.request` (Methode `netzweg` in `40_daten.js`). Das ist die einzige Stelle dafür.
 4. Nicht einfügen: `symolo/lokal/` (Nachbau, Beispieldaten, Testleiste), `symolo/test.html` und `fertig/lokal_ansichten.js`.
 
-Jede Ansicht hat eine eigene Wrapper-Klasse (`kom-bl`, `kom-vt` …), eine eigene CSS-ID (`KOMBLCSS`, `KOMVTCSS` …) und ein eigenes ID-Präfix. So können auch mehrere Ansichten im selben Formular liegen.
+Jede Ansicht hat eine eigene Wrapper-Klasse (`kom-bl`, `kom-rg`, `kom-vt` …), eine eigene CSS-ID (`KOMBLCSS`, `KOMRGCSS`, `KOMVTCSS` …) und ein eigenes ID-Präfix. So können auch mehrere Ansichten im selben Formular liegen.
 
 ## 4. Regeln, an die sich die App hält
 
@@ -98,6 +98,9 @@ Jede Ansicht hat eine eigene Wrapper-Klasse (`kom-bl`, `kom-vt` …), eine eigen
 | SQL-Sprache, Zeilengrenze | `sqlBauen` | einfache Abfragen; einige tausend Zeilen |
 | Länge einer Abfrage | `datenLesenIn` in `40_daten.js` | `in (…)` in Stücken zu 500 IDs |
 | Mengen als Zahl oder Text | `mengeMilli` in `45_rechnen.js` | beides geht; Text, der keine Zahl ist, zählt 0 |
+| Datumsformat beim Schreiben | `heuteText` in `45_rechnen.js` | wie beim Lesen (`…T00:00:00.0000000Z`) |
+| Rückgabe von `UpdateObjectJson` | `schreiben` in `40_daten.js` | kein Objekt: das gesendete gilt |
+| Sammel-Update | `datenAendernViele` in `40_daten.js` | einzeln, je 8 gleichzeitig |
 | Endpunkt im Fenster | `10_einstellungen.js` | setzt `internal.connection` selbst |
 | Benutzer, Rollen, Rechte | `50_benutzer.js`, Rechte in Symolo | vorerst keine |
 | Schrift und Farben im Fenster | `symolo/quelle/gemeinsam.css` | FWM-Variablen an der Ansicht, Thema light |
@@ -107,7 +110,7 @@ Jede Ansicht hat eine eigene Wrapper-Klasse (`kom-bl`, `kom-vt` …), eine eigen
 
 1. **Verbindungstest** (`fertig/verbindungstest.js`): Die Ansicht zeigt `fwm.stamm_prozesse` mit Gruppennamen und ohne IDs. Das ist die erste Ansicht, die Sie einbinden. Sie braucht nur `prozess` und `gruppe` in `20_tabellen.js`.
 2. **Bestandsliste** (`fertig/bestandsliste.js`, nur lesen): braucht `auftrag`, `baugruppe` und `teil` in `20_tabellen.js`. Sie liest drei Abfragen (ABs mit `bereich = 'bestand'`, dann Baugruppen und Teile dieser ABs) und zeigt Status und Fortschritt wie die Excel-Liste.
-3. Mit einer Testtabelle `schreibenErlaubtInSymolo` einschalten und anlegen und ändern prüfen. Die ID darf beim Anlegen nicht gesetzt werden, und beim Ändern muss das Komplettobjekt ankommen.
+3. Mit einer Testtabelle `schreibenErlaubtInSymolo` einschalten und anlegen und ändern prüfen. Die ID darf beim Anlegen nicht gesetzt werden, und beim Ändern muss das Komplettobjekt ankommen. Danach in der Bestandsliste eintragen (Vorhanden, Lagerort, Soll) und das **Regal** (`fertig/regal.js`) prüfen. Ein Lagerort am AB ändert alle Baugruppen und Teile darunter, also viele Einträge auf einmal.
 4. Die Bereiche der Reihe nach, sobald sie gebaut sind.
 5. Tests: `python -m pytest tests/test_symolo.py`. Das umfasst die Skill-Prüfungen und die Datenschicht gegen den Nachbau.
 

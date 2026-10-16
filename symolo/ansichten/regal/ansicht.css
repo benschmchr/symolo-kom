@@ -1,0 +1,42 @@
+/* Regal: 6 Etagen, links und rechts. Statusfarben sind Bedeutungsfarben. */
+
+.ANSICHT .kom-leise { color: var(--ink-muted); font-size: var(--fs-small); }
+
+.ANSICHT .kom-regal { display: grid; grid-template-columns: 40px 1fr 1fr; gap: var(--space-2); margin-bottom: var(--space-4); }
+.ANSICHT .kom-seite { font-size: var(--fs-label); color: var(--ink-muted); text-align: center; }
+.ANSICHT .kom-etage { display: flex; align-items: center; justify-content: center; font-weight: var(--fw-label); color: var(--ink-muted); }
+.ANSICHT .kom-fach { min-height: 72px; padding: var(--space-2); display: flex; flex-wrap: wrap; align-content: flex-start;
+  gap: var(--space-1); border: 1px solid var(--line-strong); border-radius: var(--radius-sm); background: var(--surface-100); }
+.ANSICHT .kom-fach.kom-sperr { border-style: dashed; }
+.ANSICHT .kom-fach.kom-ziel, .ANSICHT .kom-liste-karte.kom-ziel { outline: 2px solid var(--focus); outline-offset: 1px; }
+.ANSICHT .kom-platz { flex: 0 0 100%; font-size: var(--fs-label); color: var(--ink-muted); }
+
+.ANSICHT .kom-eintrag { display: inline-block; padding: 2px var(--space-2); border: 1px solid var(--line-strong);
+  border-radius: var(--radius-sm); background: var(--surface-100); font-size: var(--fs-small); cursor: pointer; white-space: nowrap; }
+.ANSICHT .kom-eintrag.kom-komplett { background: var(--status-komplett); border-color: var(--status-komplett); color: var(--on-status); }
+.ANSICHT .kom-eintrag.kom-teilweise { background: var(--status-teilweise); border-color: var(--status-teilweise); color: var(--on-status); }
+.ANSICHT .kom-eintrag:focus-visible { outline: 2px solid var(--focus); outline-offset: 1px; }
+.ANSICHT .kom-eintrag-platz { opacity: .8; }
+
+.ANSICHT .kom-listen { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: var(--space-3); }
+.ANSICHT .kom-liste-karte { padding: var(--space-3); border: 1px solid var(--line); border-radius: var(--radius-lg); background: var(--surface-100); }
+.ANSICHT .kom-liste-titel { margin: 0 0 var(--space-2); font-size: var(--fs-body); }
+.ANSICHT .kom-anzahl { padding: 0 var(--space-2); border-radius: 999px; background: var(--line); font-size: var(--fs-label); }
+.ANSICHT .kom-eintraege { display: flex; flex-wrap: wrap; gap: var(--space-1); }
+.ANSICHT .kom-einsortiert { margin: var(--space-2) 0 0; padding-left: 0; list-style: none; font-size: var(--fs-small); }
+.ANSICHT .kom-einsortiert li { display: flex; align-items: center; gap: var(--space-2); }
+.ANSICHT .kom-punkt { width: 10px; height: 10px; border-radius: 50%; border: 1px solid var(--line-strong); background: var(--surface-100); }
+.ANSICHT .kom-punkt.kom-komplett { background: var(--status-komplett); border-color: var(--status-komplett); }
+.ANSICHT .kom-punkt.kom-teilweise { background: var(--status-teilweise); border-color: var(--status-teilweise); }
+
+/* Fenster "Platz ändern": Raster wie das Regal */
+.ANSICHT .kom-platzraster { display: grid; grid-template-columns: 1fr 1fr; gap: var(--space-2); margin: var(--space-3) 0; }
+.ANSICHT .kom-platzraster .kom-knopf { min-height: 44px; }
+.ANSICHT .kom-knopf.kom-knopf-gewaehlt { background: var(--brand-gray); border-color: var(--brand-gray); color: var(--on-brand); }
+.ANSICHT .kom-feld { display: flex; flex-direction: column; gap: var(--space-1); }
+.ANSICHT .kom-feldname { font-size: var(--fs-label); color: var(--ink-muted); }
+.ANSICHT .kom-suchzeile { display: flex; gap: var(--space-2); }
+.ANSICHT .kom-eingabe { flex: 1 1 auto; min-width: 0; min-height: 36px; padding: 0 var(--space-2); border: 1px solid var(--line-strong);
+  border-radius: var(--radius-sm); background: var(--surface-100); color: var(--ink); font: inherit; }
+
+.ANSICHT .kom-fach, .ANSICHT .kom-eintrag, .ANSICHT .kom-liste-karte, .ANSICHT .kom-eingabe { box-sizing: border-box; }

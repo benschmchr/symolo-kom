@@ -46,6 +46,23 @@
 .ANSICHT .kom-status.kom-zeigen { opacity: .95; }
 .ANSICHT .kom-status.kom-fehler { background: var(--brand-red); pointer-events: auto; }
 
+.ANSICHT .kom-knopf-rot { background: var(--brand-red); border-color: var(--brand-red); color: var(--on-brand); }
+.ANSICHT .kom-knopf-rot:hover { background: var(--red-grad-end); color: var(--on-brand); }
+.ANSICHT .kom-knopf:disabled { opacity: .5; cursor: default; }
+
+/* Fenster in der Mitte (Dialog, Menü) */
+.ANSICHT .kom-dialog-hinter { position: fixed; inset: 0; z-index: 30; display: flex; align-items: center;
+  justify-content: center; padding: var(--space-4); background: color-mix(in srgb, var(--ink) 35%, transparent); }
+.ANSICHT .kom-dialog { width: min(560px, 100%); max-height: 90vh; overflow: auto; padding: var(--space-4);
+  border-radius: var(--radius-lg); background: var(--surface-100); color: var(--ink);
+  box-shadow: 0 8px 32px color-mix(in srgb, var(--ink) 30%, transparent); }
+.ANSICHT .kom-dialog-titel { margin: 0 0 var(--space-3); text-align: center; font-size: var(--fs-h3); }
+.ANSICHT .kom-dialog-inhalt { font-size: var(--fs-small); }
+.ANSICHT .kom-dialog-knoepfe { display: flex; flex-wrap: wrap; justify-content: center; gap: var(--space-2);
+  margin-top: var(--space-3); }
+.ANSICHT .kom-dialog-knoepfe.kom-dialog-spalte { flex-direction: column; align-items: stretch; }
+.ANSICHT .kom-dialog-knoepfe .kom-knopf { min-height: 44px; }
+
 /* box-sizing an einer Stelle (Skill, Falle 5). Jede neue Box kommt hierher. */
 .ANSICHT .kom-kopf, .ANSICHT .kom-koerper, .ANSICHT .kom-fuss, .ANSICHT .kom-knopf,
-.ANSICHT .kom-tabelle, .ANSICHT .kom-status { box-sizing: border-box; }
+.ANSICHT .kom-tabelle, .ANSICHT .kom-status, .ANSICHT .kom-dialog { box-sizing: border-box; }

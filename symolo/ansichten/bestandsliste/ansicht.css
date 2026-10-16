@@ -96,5 +96,17 @@
 .ANSICHT .kom-ab .kom-balken { background: var(--surface-100); }
 .ANSICHT .kom-ab .kom-balken span { background: var(--ink); }
 
+/* Eintragen (Phase 2) */
+.ANSICHT .kom-statusknopf { cursor: pointer; font: inherit; font-weight: var(--fw-label); }
+.ANSICHT .kom-statusknopf:hover { border-color: var(--glow-red); }
+.ANSICHT .kom-statusknopf:focus-visible { outline: 2px solid var(--focus); outline-offset: 1px; }
+.ANSICHT .kom-bestand .kom-eingabe { width: 100%; min-height: 28px; text-align: right; }
+.ANSICHT .kom-platzwahl { width: 100%; min-height: 28px; border: 1px solid var(--line-strong); border-radius: var(--radius-sm);
+  background: var(--surface-100); color: var(--ink); font: inherit; }
+.ANSICHT .kom-eingabe.kom-ungueltig { border: 2px solid var(--glow-red); }
+.ANSICHT .kom-feldfehler { color: var(--glow-red); font-size: var(--fs-label); white-space: normal; }
+.ANSICHT .kom-feldfehler:empty { display: none; }
+.ANSICHT .kom-soll-tabelle .kom-eingabe { width: 110px; text-align: right; }
+
 .ANSICHT .kom-pille, .ANSICHT .kom-eingabe, .ANSICHT .kom-karte, .ANSICHT .kom-bestand,
-.ANSICHT .kom-balken, .ANSICHT .kom-statusmarke { box-sizing: border-box; }
+.ANSICHT .kom-balken, .ANSICHT .kom-statusmarke, .ANSICHT .kom-platzwahl { box-sizing: border-box; }

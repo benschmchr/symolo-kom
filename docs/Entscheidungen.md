@@ -186,3 +186,10 @@ Offen (werden vor ihrer Phase gefragt): W4 Morgenmail, W5 Datenübernahme, W7 Ä
 - **Nur lesen:** Vorhanden, Lagerort, „alles ✓“ und AB bearbeiten folgen in Phase 2, Entnehmen und „Befinden sich im Schweißen“ in Phase 6, Import in Phase 7. Handy-Karten entfallen vorerst; im Fenster scrollt die Liste waagerecht.
 - **Rechnen in JS** (`symolo/quelle/45_rechnen.js`) wie `bestand/rechnen.py`; Mengen in Tausendsteln, damit Kommazahlen genau bleiben. Prüffall 9.1 läuft auch gegen den JS-Code, und ein Vergleichstest prüft alle Beispieldaten gegen `rechnen.py`.
 - **Schnell bei vielen ABs:** Zeilen unter einem zugeklappten AB werden nicht gebaut; Karten außerhalb des Bildes rechnet der Browser erst beim Hinscrollen. Gemessen mit 313 ABs und gut 5.000 Teilen im Nachbau: Laden 0,4 s, Suche mit allen ABs offen 0,7 s.
+
+## Umbau für Symolo, Phase 2: Eintragen und Regal (16.10.2026)
+- **Bestandsliste:** Vorhanden eintragen (speichert beim Verlassen oder mit Enter, Doppelklick = Soll, nochmal 0), Status eines Teils antippen (R-M2), Status an AB/BG antippen = alles ✓ mit Rückfrage (R-M3), Lagerort-Auswahl an AB und BG mit „Anderer Platz …“ (R-L1 bis R-L4), Rechtsklick auf einen AB: „AB bearbeiten (Soll ändern)“ und „Nur diesen AB anzeigen“. Datum nach R-T1 wie bisher.
+- **Gleichzeitig ändern:** Vorhanden wie bisher (letzte Eingabe gilt, Hinweis ohne Namen). Lagerort und Soll prüfen nicht (wie bisher).
+- **Regal** als eigene Ansicht wie bisher: Antippen = Platz wählen („Kein Platz“, „Abbrechen“ rot), Ziehen auf ein Fach oder „Nicht einsortiert“, Rechtsklick: aufsplitten (ab zwei Baugruppen) oder zusammenführen, Rückfrage „AB ist zusammengeführt.“. **Annahme:** „In der Bestandsliste anzeigen“ fehlt, bis klar ist, wie Symolo zwischen Formularen wechselt.
+- **Nicht in Phase 2:** Änderungsprotokoll (Phase 4), Handy-Karten.
+- **Schreiben in Symolo** bleibt gesperrt (`schreibenErlaubtInSymolo: false`); getestet wird im Nachbau.

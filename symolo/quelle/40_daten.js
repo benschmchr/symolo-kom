@@ -353,8 +353,12 @@ rohSetzen: function (name, roh, werte) {
 
 /* DER EINZIGE SCHREIBPFAD (Skill, Abschnitt 8).
    art: "anlegen" oder "aendern". stand: geaendert_am, wie es die Ansicht
-   gelesen hat (zum Erkennen, ob inzwischen jemand anderes geändert hat). */
-schreiben: async function (art, name, id, werte, stand) {
+   gelesen hat (zum Erkennen, ob inzwischen jemand anderes geändert hat).
+   werte: { feld: wert } oder beim Ändern eine Funktion (frisch) => werte,
+   die mit dem frisch geholten Eintrag rechnet (z. B. Daten nach R-T1).
+   optionen.trotzdem: bei fremder Änderung trotzdem speichern; das
+   Ergebnis hat dann _inzwischen = true (für einen Hinweis). */
+schreiben: async function (art, name, id, werte, stand, optionen) {
 
     if (!this.schreibenErlaubt()) {
         throw new Error("Speichern ist noch nicht freigegeben. Die Tabellen werden noch geprüft.");
@@ -388,20 +392,28 @@ schreiben: async function (art, name, id, werte, stand) {
         );
         if (!roh) throw new Error("Der Eintrag ist nicht mehr da. Bitte neu laden.");
 
+        let inzwischen = false;
         if (stand !== undefined) {
             const jetzt = this.text(this.field(roh, this.tabellen._standard.geaendert_am));
-            if (jetzt !== this.text(stand)) {
+            inzwischen = jetzt !== this.text(stand);
+            if (inzwischen && !(optionen && optionen.trotzdem)) {
                 throw new Error("Jemand anderes hat den Eintrag inzwischen geändert. Bitte neu laden.");
             }
         }
 
-        this.rohSetzen(name, roh, werte);
+        const frisch = this.zeileLesen(name, roh);
+        this.rohSetzen(name, roh, typeof werte === "function" ? werte(frisch) : werte);
 
         const neu = this.antwortObjekt(
             await this.anfrage("dsf.dbo.UpdateObjectJson", [tabelle, JSON.stringify(roh)])
         );
 
-        return this.zeileLesen(name, neu || roh);
+        /* OFFEN (Symolo): Was liefert UpdateObjectJson zurück? Ist es kein
+           Objekt, gilt das gesendete. */
+        const ergebnis = this.zeileLesen(name, neu && typeof neu === "object" ? neu : roh);
+        ergebnis._inzwischen = inzwischen;
+        ergebnis._vorher = frisch;
+        return ergebnis;
     }
 
     throw new Error("Unbekannte Schreibart: " + art);
@@ -412,10 +424,29 @@ datenAnlegen: async function (name, werte) {
     return this.schreiben("anlegen", name, null, werte);
 },
 
-/* zeile = Objekt aus datenLesen (enthält _id und geaendert_am). */
-datenAendern: async function (name, zeile, werte) {
+/* zeile = Objekt aus datenLesen (enthält _id und geaendert_am).
+   optionen.ohnePruefung: Folgeänderungen (z. B. der Lagerort, den alle
+   Teile eines AB erben) prüfen nicht, ob jemand anderes geändert hat. */
+datenAendern: async function (name, zeile, werte, optionen) {
 
-    return this.schreiben("aendern", name, zeile._id, werte, zeile.geaendert_am);
+    const o = optionen || {};
+    return this.schreiben("aendern", name, zeile._id, werte, o.ohnePruefung ? undefined : zeile.geaendert_am, o);
+},
+
+/* Mehrere Aufgaben, je 8 gleichzeitig (nicht alle auf einmal an Symolo). */
+jeAcht: async function (liste, aufgabe) {
+
+    for (let i = 0; i < liste.length; i += 8) {
+        await Promise.all(liste.slice(i, i + 8).map(x => aufgabe(x)));
+    }
+},
+
+/* Viele Einträge ändern. aufgaben: [{ name, zeile, werte }].
+   Folgeänderungen ohne Prüfung auf fremde Änderungen.
+   OFFEN (Symolo): Gibt es ein Sammel-Update? Bis dahin einzeln. */
+datenAendernViele: async function (aufgaben) {
+
+    await this.jeAcht(aufgaben, a => this.datenAendern(a.name, a.zeile, a.werte, { ohnePruefung: true }));
 },
 
 /* Archivieren statt löschen (Ben, 16.10.2026).

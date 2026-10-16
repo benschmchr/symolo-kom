@@ -5,8 +5,10 @@
    Referenzen auf eigene Elemente liegen am Objekt (this.koerper usw.).
    =========================================================================== */
 
+wurzel: null,
 koerper: null,
 fuss: null,
+dialogEl: null,
 infoZeile: null,
 statusEl: null,
 statusTimer: null,
@@ -36,6 +38,7 @@ geruestBauen: function (parent) {
 
     /* Die Klasse der Ansicht: jede CSS-Regel hängt daran. */
     const view = this.el(parent, "div", this.ansicht.klasse);
+    this.wurzel = view;
 
     const kopf = this.el(view, "div", "kom-kopf");
     this.el(kopf, "h2", "kom-titel", this.ansicht.titel);
@@ -133,3 +136,46 @@ tabelleBauen: function (parent, spalten, zeilen, leerText, aktionen) {
 
     return tab;
 },
+
+/* Fenster in der Mitte (Dialog), liegt in der Ansicht, damit das CSS greift.
+   bauen(inhalt, knoepfe) füllt es. Escape oder Klick daneben schließt. */
+dialogZeigen: function (titel, bauen) {
+
+    this.dialogSchliessen();
+
+    const hinter = this.el(this.wurzel, "div", "kom-dialog-hinter");
+    const box = this.el(hinter, "div", "kom-dialog");
+    box.setAttribute("role", "dialog");
+    box.setAttribute("aria-modal", "true");
+    this.el(box, "h3", "kom-dialog-titel", titel);
+    const inhalt = this.el(box, "div", "kom-dialog-inhalt");
+    const knoepfe = this.el(box, "div", "kom-dialog-knoepfe");
+
+    hinter.onclick = e => { if (e.target === hinter) this.dialogSchliessen(); };
+    hinter.onkeydown = e => { if (e.key === "Escape") this.dialogSchliessen(); };
+
+    this.dialogEl = hinter;
+    bauen(inhalt, knoepfe);
+
+    const erstes = box.getElementsByTagName("input")[0] || box.getElementsByTagName("button")[0];
+    if (erstes) erstes.focus();
+    return box;
+},
+
+dialogSchliessen: function () {
+
+    if (this.dialogEl) this.dialogEl.remove();
+    this.dialogEl = null;
+},
+
+/* Menü (Rechtsklick): Titel, Knöpfe untereinander, "Abbrechen" rot unten
+   (Ben, 15.10.2026). eintraege: [[text, aktion]] */
+menueZeigen: function (titel, eintraege) {
+
+    this.dialogZeigen(titel, (inhalt, knoepfe) => {
+        knoepfe.classList.add("kom-dialog-spalte");
+        eintraege.forEach(([text, aktion]) => this.knopf(knoepfe, text, () => { this.dialogSchliessen(); aktion(); }));
+        this.knopf(knoepfe, "Abbrechen", () => this.dialogSchliessen(), "rot");
+    });
+},
+
