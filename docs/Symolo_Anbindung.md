@@ -98,6 +98,10 @@ Jede Ansicht hat eine eigene Wrapper-Klasse (`kom-bl`, `kom-db`, `kom-rg`, `kom-
 | SQL-Sprache, Zeilengrenze | `sqlBauen` | einfache Abfragen; einige tausend Zeilen |
 | Länge einer Abfrage | `datenLesenIn` in `40_daten.js` | `in (…)` in Stücken zu 500 IDs |
 | Mengen als Zahl oder Text | `mengeMilli` in `45_rechnen.js` | beides geht; Text, der keine Zahl ist, zählt 0 |
+| Tabelle `aenderung` (Protokoll), Felder am AB für das Archiv | `20_tabellen.js` | `fwm.kom_aenderung`; `archiviert_am`, `archiv_herkunft`, `archiv_status` am Auftrag. Reichen Ihnen die Standardfelder als Protokoll, entfällt die Tabelle |
+| Name der angemeldeten Person (Protokoll) | `benutzer` in `50_benutzer.js` | leer: das Protokoll zeigt „–“ |
+| Protokoll leeren, Aufbewahren | `protokollLeeren`, `protokollAufraeumen` in `4B_protokoll.js` | blendet aus (`archiviert`), löscht nie |
+| Suche im Archiv (Zeilen) | `archivZeilenAlle` in `4D_archiv.js` | lädt alle Zeilen der archivierten ABs; besser mit „like“ in der Abfrage |
 | Klappzustand je Benutzer (Dashboard) | `gemerkt` in `dashboard/ansicht.js` | nur im offenen Fenster; dauerhaft braucht eine Tabelle und den Benutzer |
 | Datumsformat beim Schreiben | `heuteText` in `45_rechnen.js` | wie beim Lesen (`…T00:00:00.0000000Z`) |
 | Rückgabe von `UpdateObjectJson` | `schreiben` in `40_daten.js` | kein Objekt: das gesendete gilt |
@@ -113,8 +117,9 @@ Jede Ansicht hat eine eigene Wrapper-Klasse (`kom-bl`, `kom-db`, `kom-rg`, `kom-
 2. **Bestandsliste** (`fertig/bestandsliste.js`, nur lesen): braucht `auftrag`, `baugruppe` und `teil` in `20_tabellen.js`. Sie liest drei Abfragen (ABs mit `bereich = 'bestand'`, dann Baugruppen und Teile dieser ABs) und zeigt Status und Fortschritt wie die Excel-Liste.
 3. Mit einer Testtabelle `schreibenErlaubtInSymolo` einschalten und anlegen und ändern prüfen. Die ID darf beim Anlegen nicht gesetzt werden, und beim Ändern muss das Komplettobjekt ankommen. Danach in der Bestandsliste eintragen (Vorhanden, Lagerort, Soll) und das **Regal** (`fertig/regal.js`) prüfen. Ein Lagerort am AB ändert alle Baugruppen und Teile darunter, also viele Einträge auf einmal.
 4. **Dashboard** (`fertig/dashboard.js`, nur lesen): liest wie die Bestandsliste und braucht keine weitere Tabelle.
-5. Die Bereiche der Reihe nach, sobald sie gebaut sind.
-6. Tests: `python -m pytest tests/test_symolo.py`. Das umfasst die Skill-Prüfungen und die Datenschicht gegen den Nachbau.
+5. **Archiv** (`fertig/archiv.js`) und **Änderungsprotokoll** (`fertig/protokoll.js`): lesen `auftrag` (archivierte), `baugruppe`, `teil`, `schweisszeile`, `aenderung` und `einstellung`. Archivieren und Wiederherstellen schreiben nur Markierungen am AB (`archiviert`, `archiviert_am`, `archiv_herkunft`, `archiv_status`); das Protokoll schreibt eine Zeile je Änderung in `aenderung`. Es wird nichts gelöscht.
+6. Die weiteren Bereiche der Reihe nach, sobald sie gebaut sind.
+7. Tests: `python -m pytest tests/test_symolo.py`. Das umfasst die Skill-Prüfungen und die Datenschicht gegen den Nachbau.
 
 ## 7. Lokal testen (ohne Symolo)
 

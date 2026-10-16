@@ -19,6 +19,8 @@ BASIS = Path(__file__).resolve().parent.parent
 ZIEL = BASIS / "symolo" / "lokal" / "beispieldaten.js"
 STANDARD = ["id", "iuser", "idate", "uuser", "udate"]
 BENUTZER = 1  # erfundener Beispiel-Benutzer
+HERKUNFT_SCHWEISSEN = "Archiviert aus Schweißen"
+HERKUNFT_BESTAND = "Archiviert aus Bestandsliste"  # wie archivHerkunftBestand in 4D_archiv.js
 
 # Aus Bens Nachricht vom 16.10.2026 (Ergebnis von „select * from fwm.stamm_prozesse“ in einer Testsitzung).
 STAMM_PROZESSE = [
@@ -80,6 +82,7 @@ ZEILE = [
 
 
 def exportieren():
+    from bestand import archiv
     from bestand import models as m
 
     auftrag_felder = [
@@ -87,22 +90,47 @@ def exportieren():
         "datum_liste", "dispoliste", "lagerort", "regal_geteilt", "bereich", "reihenfolge", "quelldatei",
         "archiviert", "archiviert_am", "archiv_herkunft", "archiv_status",
     ]  # fmt: skip
-    auftraege = aus_modell(
-        m.Auftrag.objects.order_by("id"),
-        auftrag_felder[:14],
-        extra=lambda o: {"archiviert": False, "archiviert_am": None, "archiv_herkunft": "", "archiv_status": ""},
-    )
-    # Archiv: nur die Köpfe als archivierte ABs. Ihre Zeilen kommen mit dem Archiv (Phase 4).
+    # Archiv (Phase 4): Ben, 16.10.2026: archivieren statt löschen. Ein AB aus der Bestandsliste wird in der
+    # Wegwerf-Datenbank zurückgeholt und als archiviert markiert (BGs und Teile bleiben dran). Ein AB aus dem
+    # Schweißen ist ein Kopf (bereich "archiv") plus archivierte Schweißzeilen.
+    vorgaenge = list(m.Archivvorgang.objects.order_by("id"))
+    aus_bestand = {}
+    kopf_nur = []
+    for v in vorgaenge:
+        if v.herkunft == HERKUNFT_SCHWEISSEN:
+            kopf_nur.append(v)
+            continue
+        try:
+            aus_bestand[archiv.wiederherstellen(v.id).id] = v
+        except archiv.ArchivFehler:
+            kopf_nur.append(v)  # AB steht inzwischen wieder in der Liste: nur der Kopf bleibt
+
+    def archiv_felder(o):
+        v = aus_bestand.get(o.id)
+        if v is None:
+            return {"archiviert": False, "archiviert_am": None, "archiv_herkunft": "", "archiv_status": ""}
+        return {
+            "archiviert": True,
+            "archiviert_am": zeit(v.geloescht_am),
+            "archiv_herkunft": HERKUNFT_BESTAND,
+            "archiv_status": v.status,
+        }
+
+    auftraege = aus_modell(m.Auftrag.objects.order_by("id"), auftrag_felder[:14], extra=archiv_felder)
     naechste = max([a["id"] for a in auftraege] or [0]) + 1
-    for i, v in enumerate(m.Archivvorgang.objects.order_by("id")):
+    kopf_ids = {}
+    for i, v in enumerate(kopf_nur):
         z = standard(naechste + i, v.geloescht_am)
         z.update({f: "" for f in auftrag_felder})
         z.update(
             ab_anzeige=v.ab_anzeige, ab_schluessel=v.ab_schluessel, kunde=v.kunde, verkaufsartikel=v.verkaufsartikel,
             quelldatei=v.quelldatei, reihenfolge=v.reihenfolge, regal_geteilt=False, bereich="archiv",
-            archiviert=True, archiviert_am=zeit(v.geloescht_am), archiv_herkunft=v.herkunft, archiv_status=v.status,
+            archiviert=True, archiviert_am=zeit(v.geloescht_am),
+            archiv_herkunft=v.herkunft if v.herkunft == HERKUNFT_SCHWEISSEN else HERKUNFT_BESTAND,
+            archiv_status=v.status,
         )  # fmt: skip
         auftraege.append(z)
+        kopf_ids[v.id] = z["id"]
 
     bg_felder = ["auftrag_id_auftrag", "name", "kurz"] + ZEILE
     teil_felder = ["auftrag_id_auftrag", "baugruppe_id_baugruppe"] + ZEILE + [
@@ -124,6 +152,43 @@ def exportieren():
         ("protokoll_tage", str(pe.tage if pe else 90)),
         ("forecast_link", fe.quelle if fe else ""),
     ]
+
+    schweisszeilen = aus_modell(
+        m.Schweisszeile.objects.order_by("id"), sw_felder, extra=lambda o: {"archiviert": False}
+    )
+    sw_id = max([z["id"] for z in schweisszeilen] or [0])
+    for v in vorgaenge:
+        if v.herkunft != HERKUNFT_SCHWEISSEN or v.id not in kopf_ids:
+            continue
+        kopf = json.dumps(
+            {"kunde": v.kunde, "verkaufsartikel": v.verkaufsartikel, "reihenfolge": v.reihenfolge,
+             "quelldatei": v.quelldatei}, ensure_ascii=False
+        )  # fmt: skip
+        for az in v.zeilen.order_by("nr"):
+            sw_id += 1
+            z = standard(sw_id, v.geloescht_am)
+            z.update({f: "" for f in sw_felder})
+            z.update(
+                nr=az.nr, ab_nr=az.ab, ab_schluessel=v.ab_schluessel, anzeige=az.zeichnungsnummer or az.baugruppe,
+                ebene=az.ebene, baugruppe=az.baugruppe, zeichnungsnummer=az.zeichnungsnummer, benennung=az.benennung,
+                menge_bg=az.menge_bg, menge_gesamt=az.menge_gesamt, index=az.index, lk_nummer=az.lk_nummer,
+                arbeitsgang=az.arbeitsgang, material=az.material, profil=az.profil, abmasse=az.abmasse,
+                vorhanden=az.vorhanden, bemerkung=az.bemerkung, lagerort=az.lagerort, status=az.status,
+                fortschritt=az.fortschritt, eingelagert=zeit(az.eingelagert), komplett=zeit(az.komplett),
+                entnommen=zeit(az.entnommen), mitarbeiter=az.mitarbeiter, arbeitsplatz=az.arbeitsplatz,
+                liefertermin_stahlbau=zeit(az.liefertermin_stahlbau), termin_versand=zeit(az.termin_versand),
+                kopf=kopf, ap_geteilt=False, archiviert=True,
+            )  # fmt: skip
+            schweisszeilen.append(z)
+
+    aenderungen = []
+    for a in m.Aenderung.objects.order_by("id"):
+        z = standard(a.id, a.zeit)
+        z.update(
+            zeit=zeit(a.zeit), benutzer_name=a.benutzer_name, art=a.art, ab=a.ab, objekt=a.objekt, alt=a.alt,
+            neu=a.neu, archiviert=False,
+        )  # fmt: skip
+        aenderungen.append(z)
 
     planung = []
     for p in m.Planungsmarke.objects.order_by("id"):
@@ -160,7 +225,7 @@ def exportieren():
         ),
         "fwm.kom_schweisszeile": tabelle(
             sw_felder + ["archiviert"],
-            aus_modell(m.Schweisszeile.objects.order_by("id"), sw_felder, extra=lambda o: {"archiviert": False}),
+            schweisszeilen,
         ),
         "fwm.kom_mitarbeiter": tabelle(
             ["name", "aktiv"],
@@ -176,6 +241,9 @@ def exportieren():
                 ["forecast_id_forecast", "nr", "schluessel", "termin", "werte"],
                 {"forecast_id": "forecast_id_forecast"},
             ),
+        ),
+        "fwm.kom_aenderung": tabelle(
+            ["zeit", "benutzer_name", "art", "ab", "objekt", "alt", "neu", "archiviert"], aenderungen
         ),
         "fwm.kom_einstellung": tabelle(
             ["name", "wert"], [{**standard(i + 1), "name": n, "wert": w} for i, (n, w) in enumerate(einstellungen)]

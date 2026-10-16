@@ -9,6 +9,7 @@ wurzel: null,
 koerper: null,
 fuss: null,
 dialogEl: null,
+dialogFokus: null,
 infoZeile: null,
 statusEl: null,
 statusTimer: null,
@@ -138,7 +139,10 @@ tabelleBauen: function (parent, spalten, zeilen, leerText, aktionen) {
 },
 
 /* Fenster in der Mitte (Dialog), liegt in der Ansicht, damit das CSS greift.
-   bauen(inhalt, knoepfe) füllt es. Escape oder Klick daneben schließt. */
+   bauen(inhalt, knoepfe) füllt es. Escape oder Klick daneben schließt.
+   Den Fokus bekommt das erste Eingabefeld, sonst der erste Knopf. Bei einer
+   Sicherheitsfrage setzt bauen() this.dialogFokus auf "Abbrechen": ein
+   versehentliches Enter bestätigt dann nichts. */
 dialogZeigen: function (titel, bauen) {
 
     this.dialogSchliessen();
@@ -155,9 +159,11 @@ dialogZeigen: function (titel, bauen) {
     hinter.onkeydown = e => { if (e.key === "Escape") this.dialogSchliessen(); };
 
     this.dialogEl = hinter;
+    this.dialogFokus = null;
     bauen(inhalt, knoepfe);
 
-    const erstes = box.getElementsByTagName("input")[0] || box.getElementsByTagName("button")[0];
+    const erstes = this.dialogFokus || box.getElementsByTagName("input")[0] || box.getElementsByTagName("button")[0];
+    this.dialogFokus = null;
     if (erstes) erstes.focus();
     return box;
 },

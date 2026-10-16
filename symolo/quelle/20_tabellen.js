@@ -244,5 +244,27 @@ tabellen: {
             name: "name",
             wert: "wert"
         }
+    },
+
+    /* ---- Änderungsprotokoll (VERMUTET, Vorschlag; Umbauplan Abschnitt 6) ----
+       OFFEN (Symolo): Reichen die Standardfelder (iuser, idate, uuser, udate)
+       als Protokoll? Dann entfiele diese Tabelle. Bis dahin schreibt die App
+       jede Änderung als eigene Zeile.
+       archiviert: Ausblenden statt Löschen ("Aufbewahren", "Leeren"). */
+    aenderung: {
+        tabelle: "fwm.kom_aenderung",
+        felder: {
+            /* Zeitpunkt mit Uhrzeit (UTC) */
+            zeit: "zeit",
+            /* leer, wenn Namen nicht gespeichert werden */
+            benutzer_name: "benutzer_name",
+            art: "art",
+            ab: "ab",
+            objekt: "objekt",
+            alt: "alt",
+            neu: "neu",
+            archiviert: "archiviert"
+        },
+        archiv: "archiviert"
     }
 },

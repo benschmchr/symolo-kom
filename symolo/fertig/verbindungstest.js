@@ -300,6 +300,28 @@ tabellen: {
             name: "name",
             wert: "wert"
         }
+    },
+
+    /* ---- Änderungsprotokoll (VERMUTET, Vorschlag; Umbauplan Abschnitt 6) ----
+       OFFEN (Symolo): Reichen die Standardfelder (iuser, idate, uuser, udate)
+       als Protokoll? Dann entfiele diese Tabelle. Bis dahin schreibt die App
+       jede Änderung als eigene Zeile.
+       archiviert: Ausblenden statt Löschen ("Aufbewahren", "Leeren"). */
+    aenderung: {
+        tabelle: "fwm.kom_aenderung",
+        felder: {
+            /* Zeitpunkt mit Uhrzeit (UTC) */
+            zeit: "zeit",
+            /* leer, wenn Namen nicht gespeichert werden */
+            benutzer_name: "benutzer_name",
+            art: "art",
+            ab: "ab",
+            objekt: "objekt",
+            alt: "alt",
+            neu: "neu",
+            archiviert: "archiviert"
+        },
+        archiv: "archiviert"
     }
 },
 
@@ -1091,12 +1113,13 @@ idVergleich: function (a, b) {
 
 /* Alle ABs der Bestandsliste (nicht archiviert) mit BGs und Teilen.
    Drei Abfragen; BGs und Teile in Stücken über die AB-IDs.
-   abIds: nur diese ABs neu laden (nach einer Änderung). */
-bestandLaden: async function (abIds) {
+   abIds: nur diese ABs neu laden (nach einer Änderung).
+   optionen.archiv: "nur" lädt archivierte ABs (fürs Archiv), sonst nur nicht archivierte. */
+bestandLaden: async function (abIds, optionen) {
 
     const wo = { bereich: "bestand" };
     if (abIds) wo.id = abIds;
-    const auftraege = await this.datenLesen("auftrag", { wo: wo, aufloesen: false });
+    const auftraege = await this.datenLesen("auftrag", { wo: wo, aufloesen: false, archiv: (optionen || {}).archiv });
 
     auftraege.sort((a, b) =>
         (this.mengeMilli(a.reihenfolge) - this.mengeMilli(b.reihenfolge)) || this.idVergleich(a._id, b._id));
@@ -1144,6 +1167,10 @@ bestandBaum: function (auftraege, baugruppen, teile) {
         const ohne = teileJeAb[String(a._id)] || [];
         const bgs = bgsJeAb[String(a._id)] || [];
         const alle = ohne.concat(...bgs.map(b => b.teile));
+
+        /* Für das Protokoll: jeder Teil kennt AB-Nummer und BG-Kurzname (nur Text, kein Rückverweis). */
+        ohne.forEach(t => { t.abName = this.text(a.ab_anzeige); });
+        bgs.forEach(b => b.teile.forEach(t => { t.abName = this.text(a.ab_anzeige); t.bgKurz = this.text(b.o.kurz); }));
         return { art: "ab", o: a, w: this.sammelWerte(alle.map(t => t.w)), ohne: ohne, bgs: bgs, zeigen: true, offen: true };
     });
 },
@@ -1273,7 +1300,7 @@ bestandFiltern: function (abs, anzeige, status) {
    Alles läuft über datenAendern (der einzige Schreibpfad). Danach lädt die
    Ansicht den AB neu; gerechnet wird beim Anzeigen (45_rechnen.js).
 
-   Das Änderungsprotokoll kommt in Phase 4 dazu.
+   Geänderte Mengen kommen ins Änderungsprotokoll (4B_protokoll.js).
    =========================================================================== */
 
 /* Ist der gespeicherte Wert gleich der Eingabe (Tausendstel oder null)? */
@@ -1296,8 +1323,13 @@ vorhandenSetzen: async function (teil, milli) {
     }, { trotzdem: true });
 
     const alt = neu._vorher.vorhanden;
+    const altText = this.protokollMenge(alt);
+
+    if (!this.mengeGleich(alt, milli)) {
+        await this.protokollSchreiben("menge", teil.abName, this.protokollTeil(teil), altText, this.protokollMenge(this.mengeWert(milli)));
+    }
+
     if (neu._inzwischen && !this.mengeGleich(alt, milli)) {
-        const altText = this.mengeGleich(alt, null) ? "leer" : this.zahlText(this.mengeMilli(alt));
         return "Achtung: " + this.text(teil.o.zeichnungsnummer) + " wurde inzwischen von jemand anderem geändert (zuletzt " +
             altText + "). Dein Wert gilt jetzt.";
     }
@@ -1341,11 +1373,17 @@ sollSetzen: async function (neu) {
 
     const geaendert = neu.filter(([t, milli]) => !this.mengeGleich(t.o.menge_gesamt, milli));
 
-    await this.jeAcht(geaendert, ([t, milli]) => this.datenAendern("teil", t.o, frisch => {
-        const [ein, fertig] = this.datenStempeln(frisch.vorhanden, this.mengeWert(milli),
-            frisch.datum_eingelagert, frisch.datum_komplett, this.heuteText());
-        return { menge_gesamt: this.mengeWert(milli), menge_gesamt_text: "", datum_eingelagert: ein, datum_komplett: fertig };
-    }, { ohnePruefung: true }));
+    await this.jeAcht(geaendert, async ([t, milli]) => {
+        const alt = this.sollText(t.o) || "leer";
+
+        await this.datenAendern("teil", t.o, frisch => {
+            const [ein, fertig] = this.datenStempeln(frisch.vorhanden, this.mengeWert(milli),
+                frisch.datum_eingelagert, frisch.datum_komplett, this.heuteText());
+            return { menge_gesamt: this.mengeWert(milli), menge_gesamt_text: "", datum_eingelagert: ein, datum_komplett: fertig };
+        }, { ohnePruefung: true });
+
+        await this.protokollSchreiben("soll", t.abName, this.protokollTeil(t), alt, this.protokollMenge(this.mengeWert(milli)));
+    });
 
     return geaendert.length;
 },
@@ -1422,13 +1460,18 @@ platzAufgaben: function (name, knoten, teile, p) {
 
 /* R-L2: Platz am AB -> alle BGs und alle Teile bekommen ihn; leer leert alle.
    Ein aufgesplitteter AB bleibt aufgesplittet. Gibt den Platz zurück. */
-lagerortAb: async function (ab, text) {
+lagerortAb: async function (ab, text, ohneProtokoll) {
 
     const p = this.platzEingabe(text);
+    const alt = this.platzVon(ab.o);
     let aufgaben = this.platzAufgaben("auftrag", ab, ab.ohne, p);
     ab.bgs.forEach(b => { aufgaben = aufgaben.concat(this.platzAufgaben("baugruppe", b, b.teile, p)); });
 
     await this.knotenSetzen(aufgaben);
+
+    if (!ohneProtokoll && alt !== p) {
+        await this.protokollSchreiben("lagerort", ab.o.ab_anzeige, "", alt || "leer", p || "leer");
+    }
     return p;
 },
 
@@ -1437,12 +1480,17 @@ lagerortAb: async function (ab, text) {
 lagerortBg: async function (ab, bg, text, imRegal) {
 
     const p = this.platzEingabe(text);
+    const alt = this.platzVon(bg.o);
 
-    if (imRegal && ab.bgs.length > 1 && !this.istJa(ab.o.regal_geteilt)) await this.regalTeilen(ab);
+    if (imRegal && ab.bgs.length > 1 && !this.istJa(ab.o.regal_geteilt)) await this.regalTeilenOhneProtokoll(ab);
 
     await this.knotenSetzen(this.platzAufgaben("baugruppe", bg, bg.teile, p));
 
     if (!this.istJa(ab.o.regal_geteilt)) await this.abgleichen(ab);
+
+    if (alt !== p) {
+        await this.protokollSchreiben("lagerort", ab.o.ab_anzeige, "BG " + this.text(bg.o.name), alt || "leer", p || "leer");
+    }
     return p;
 },
 
@@ -1482,6 +1530,14 @@ abgleichen: async function (ab) {
    Jede BG ohne eigenen Platz bekommt den bisherigen AB-Platz ausdrücklich. */
 regalTeilen: async function (ab) {
 
+    await this.regalTeilenOhneProtokoll(ab);
+    await this.protokollSchreiben("lagerort", ab.o.ab_anzeige, "Regal", "AB", "Baugruppen einzeln");
+},
+
+/* Wie regalTeilen, aber ohne Eintrag: wer eine BG einzeln verschiebt, trägt
+   nur diesen Platzwechsel ein. */
+regalTeilenOhneProtokoll: async function (ab) {
+
     if (ab.bgs.length < 2) throw new Error("Dieser AB hat keine Baugruppen zum Aufsplitten (mindestens zwei nötig).");
 
     const p = this.platzVon(ab.o);
@@ -1509,8 +1565,9 @@ regalZusammenfuehren: async function (ab, bg) {
     let p = this.platzVon(bg.o);
     if (!p) p = this.istJa(ab.o.regal_geteilt) || !this.text(ab.o.lagerort) ? "" : this.platzVon(ab.o);
 
-    await this.lagerortAb(ab, p);
+    await this.lagerortAb(ab, p, true);
     await this.knotenSetzen([{ name: "auftrag", knoten: ab, werte: { regal_geteilt: false } }]);
+    await this.protokollSchreiben("lagerort", ab.o.ab_anzeige, "Regal", "Baugruppen einzeln", "AB zusammen (" + (p || "kein Platz") + ")");
     return p;
 },
 
@@ -1720,6 +1777,629 @@ dashKlappen: function (liste, ansichtWert, gemerkt) {
 
 
 /* ===========================================================================
+   ÄNDERUNGSPROTOKOLL (W7)
+   Nachbau von bestand/protokoll.py: wer hat wann welche Menge, welchen
+   Platz, welches Soll geändert; Archivieren, Wiederherstellen, Import.
+
+   Betriebsrat/Datenschutz sind noch offen (Übergabe 7.3). Darum lässt sich
+   das Protokoll abschalten, ohne Namen führen und zeitlich begrenzen. Die
+   Einstellungen stehen in der Tabelle "einstellung" (Name/Wert).
+
+   Geschrieben wird immer über datenAnlegen (der einzige Schreibpfad). Ein
+   Fehler im Protokoll darf die eigentliche Änderung nie verhindern: er
+   steht als Hinweis oben im Fenster.
+
+   Gelöscht wird nie (Ben, 16.10.2026): "Aufbewahren" und "Leeren" blenden
+   Einträge aus (archiviert). Endgültig löschen kann nur die IT in der
+   Datenbank. OFFEN (Symolo): Soll das Protokoll hier eine Ausnahme sein?
+   Namen entfernen geht dagegen wirklich (die Namen werden überschrieben).
+
+   OFFEN (Symolo): Wer ist angemeldet (Name)? Bis dahin steht kein Name
+   drin. Symolo selbst führt Person und Zeit in den Standardfeldern
+   (iuser, idate, uuser, udate) jeder Zeile.
+   =========================================================================== */
+
+protokollArten: [
+    ["menge", "Vorhanden"],
+    ["lagerort", "Lagerort"],
+    ["soll", "Soll"],
+    ["import", "Import"],
+    ["ersetzt", "Ersetzt (Import)"],
+    ["archiviert", "Archiviert"],
+    ["wiederhergestellt", "Wiederhergestellt"],
+    ["forecast", "Forecast importiert"],
+    ["entnommen", "Entnommen (Schweißen)"],
+    ["zurueck", "Zurück in Bestandsliste"],
+    ["schweissen", "Zuweisung Schweißen"]
+],
+
+protokollEinst: null,
+protokollSeite: 100,
+
+/* Jetzt, als UTC im Format von Symolo ("2026-10-16T13:20:33.1230000Z"). */
+zeitJetzt: function () {
+
+    return new Date().toISOString().replace("Z", "0000Z");
+},
+
+/* "2026-10-16T13:20:33.0000000Z" -> Millisekunden (UTC); null, wenn es keine Zeit ist.
+   Reine Datumsangaben zählen als 0 Uhr UTC. */
+zeitMs: function (wert) {
+
+    const m = this.text(wert).match(/^(\d{4})-(\d{2})-(\d{2})(?:[T ](\d{2}):(\d{2})(?::(\d{2}))?)?/);
+    if (!m) return null;
+
+    return Date.UTC(Number(m[1]), Number(m[2]) - 1, Number(m[3]), Number(m[4] || 0), Number(m[5] || 0), Number(m[6] || 0));
+},
+
+/* Zeit in der Ortszeit des Browsers: "16.10.2026 15:20" (mitSekunden: "… 15:20:33").
+   Fehlt die Uhrzeit, bleibt es beim Datum. */
+zeitOrtText: function (wert, mitSekunden) {
+
+    const ms = this.zeitMs(wert);
+    if (ms === null) return this.text(wert);
+    if (!/[T ]\d{2}:/.test(this.text(wert))) return this.datumText(wert);
+
+    const d = new Date(ms);
+    const z = n => String(n).padStart(2, "0");
+    return z(d.getDate()) + "." + z(d.getMonth() + 1) + "." + d.getFullYear() + " " +
+        z(d.getHours()) + ":" + z(d.getMinutes()) + (mitSekunden ? ":" + z(d.getSeconds()) : "");
+},
+
+/* Einstellungen laden (einmal je Fenster, neuLaden = erzwingen).
+   Ohne Eintrag gilt: an, mit Namen, 90 Tage. */
+protokollEinstellung: async function (neuLaden) {
+
+    if (this.protokollEinst && !neuLaden) return this.protokollEinst;
+
+    const zeilen = await this.datenLesen("einstellung", { aufloesen: false });
+    const e = { aktiv: true, namen: true, tage: 90, zeilen: {} };
+    zeilen.forEach(z => { e.zeilen[this.text(z.name)] = z; });
+
+    const wert = n => (n in e.zeilen ? this.text(e.zeilen[n].wert) : null);
+    if (wert("protokoll_aktiv") !== null) e.aktiv = wert("protokoll_aktiv") === "1";
+    if (wert("protokoll_namen") !== null) e.namen = wert("protokoll_namen") === "1";
+    if (wert("protokoll_tage") !== null && /^\d+$/.test(wert("protokoll_tage"))) e.tage = Number(wert("protokoll_tage"));
+
+    this.protokollEinst = e;
+    return e;
+},
+
+/* Einstellungen speichern. tage: 0 bis 3650 (0 = unbegrenzt). */
+protokollEinstellen: async function (aktiv, namen, tage) {
+
+    const e = await this.protokollEinstellung(true);
+    const paare = [
+        ["protokoll_aktiv", aktiv ? "1" : "0"],
+        ["protokoll_namen", namen ? "1" : "0"],
+        ["protokoll_tage", String(tage)]
+    ];
+
+    for (const [name, wert] of paare) {
+        const zeile = e.zeilen[name];
+        if (zeile) await this.datenAendern("einstellung", zeile, { wert: wert });
+        else await this.datenAnlegen("einstellung", { name: name, wert: wert });
+    }
+
+    this.protokollEinst = null;
+    return this.protokollEinstellung(true);
+},
+
+/* Einen Eintrag schreiben, wenn das Protokoll an ist. Namen nur, wenn
+   eingeschaltet. Gibt true zurück, wenn geschrieben wurde. */
+protokollSchreiben: async function (art, ab, objekt, alt, neu) {
+
+    const kurz = (t, n) => this.text(t).slice(0, n);
+
+    try {
+        const e = await this.protokollEinstellung();
+        if (!e.aktiv) return false;
+
+        await this.datenAnlegen("aenderung", {
+            zeit: this.zeitJetzt(),
+            art: art,
+            ab: kurz(ab, 80),
+            objekt: kurz(objekt, 400),
+            alt: kurz(alt, 200),
+            neu: kurz(neu, 200),
+            benutzer_name: e.namen ? kurz(this.benutzer().name, 150) : "",
+            archiviert: false
+        });
+        return true;
+    } catch (fehler) {
+        console.warn("Protokoll:", fehler);
+        const hinweis = "Protokoll konnte nicht geschrieben werden";
+        if (this.datenHinweise.indexOf(hinweis) < 0) this.datenHinweise.push(hinweis);
+        if (this.infoZeigen) this.infoZeigen();
+        return false;
+    }
+},
+
+/* Alle sichtbaren Einträge, neueste zuerst. */
+protokollLesen: async function () {
+
+    const liste = await this.datenLesen("aenderung", { aufloesen: false });
+    liste.sort((a, b) => ((this.zeitMs(b.zeit) || 0) - (this.zeitMs(a.zeit) || 0)) || this.idVergleich(b._id, a._id));
+    return liste;
+},
+
+/* Teil im Protokoll: "Teil SK1990-977452.002.0 (BG 100)". Der Teil-Knoten
+   kennt AB-Name und BG-Kurzname (47_bestand.js). */
+protokollTeil: function (t) {
+
+    const bg = t.bgKurz === undefined ? "" : " (BG " + t.bgKurz + ")";
+    return "Teil " + (this.text(t.o.zeichnungsnummer) || "(ohne Nr.)") + bg;
+},
+
+/* Menge fürs Protokoll: Zahl wie in der Liste, leer = "leer". */
+protokollMenge: function (wert) {
+
+    return this.mengeGleich(wert, null) ? "leer" : this.zahlText(this.mengeMilli(wert));
+},
+
+/* Suche (AB oder Zeile, ohne Groß-/Kleinschreibung), Art und Person. */
+protokollFiltern: function (liste, suche, art, wer) {
+
+    const q = this.text(suche).toLowerCase();
+
+    return liste.filter(z =>
+        (!q || this.text(z.ab).toLowerCase().indexOf(q) > -1 || this.text(z.objekt).toLowerCase().indexOf(q) > -1) &&
+        (!art || this.text(z.art) === art) &&
+        (!wer || this.text(z.benutzer_name) === wer));
+},
+
+/* Namen aller Personen im Protokoll, alphabetisch. */
+protokollNamen: function (liste) {
+
+    const je = {};
+    liste.forEach(z => { if (this.text(z.benutzer_name)) je[this.text(z.benutzer_name)] = true; });
+    return Object.keys(je).sort();
+},
+
+/* Alte Einträge ausblenden (älter als tage; 0 = nichts tun). Gibt die Zahl zurück. */
+protokollAufraeumen: async function (liste, tage) {
+
+    if (!tage) return 0;
+
+    const grenze = Date.now() - tage * 86400000;
+    const alt = liste.filter(z => (this.zeitMs(z.zeit) || 0) < grenze);
+
+    await this.jeAcht(alt, z => this.datenAendern("aenderung", z, { archiviert: true }, { ohnePruefung: true }));
+    return alt.length;
+},
+
+/* Alle sichtbaren Einträge ausblenden. */
+protokollLeeren: async function (liste) {
+
+    await this.jeAcht(liste, z => this.datenAendern("aenderung", z, { archiviert: true }, { ohnePruefung: true }));
+    return liste.length;
+},
+
+/* Namen aus allen Einträgen entfernen (wenn "Namen speichern" ausgeschaltet
+   wird), auch aus den ausgeblendeten. Gibt die Zahl zurück. */
+protokollNamenEntfernen: async function () {
+
+    const alle = await this.datenLesen("aenderung", { archiv: "alle", aufloesen: false });
+    const mit = alle.filter(z => this.text(z.benutzer_name));
+
+    await this.jeAcht(mit, z => this.datenAendern("aenderung", z, { benutzer_name: "" }, { ohnePruefung: true }));
+    return mit.length;
+},
+
+
+/* ===========================================================================
+   AB-NUMMERN (R-AB1 bis R-AB5)
+   Nachbau von bestand/ab_nummer.py, Zeichen für Zeichen (VBA: ABForm,
+   Ziffern, LosNr, ABSchluessel, FcSchluessel). Gebraucht beim AB archivieren
+   (Eingabe finden) und später beim Import.
+   =========================================================================== */
+
+/* Führendes "AB" (beliebige Schreibweise) samt Leerzeichen entfernen. */
+abOhneAb: function (s) {
+
+    return s.slice(0, 2).toUpperCase() === "AB" ? s.slice(2).replace(/^ +/, "") : s;
+},
+
+/* Nur Leerzeichen am Rand weg (wie Python strip(" ")). */
+abRand: function (t) {
+
+    return this.text(t).replace(/^ +| +$/g, "");
+},
+
+/* Führende Ziffern: "123456 L1" -> "123456". */
+abZiffern: function (s) {
+
+    return s.match(/^[0-9]*/)[0];
+},
+
+/* R-AB2: Losnummer aus dem Los-Teil (" L1", "/ Los 1", "Los01" -> "1"); "" = kein Los. */
+abLosNr: function (rest) {
+
+    let k = rest.toUpperCase().replace(/[ \/\-.]/g, "");
+
+    if (k.indexOf("LOS") === 0) k = k.slice(3);
+    else if (k.indexOf("L") === 0) k = k.slice(1);
+    else return "";
+
+    if (!k || !/^[0-9]+$/.test(k)) return "";
+    return k.replace(/^0+/, "") || "0";
+},
+
+/* R-AB1 Anzeigeform: "123456" -> "AB123456", "Ab123456 / Los 2" -> "AB123456 / Los 2". */
+abForm: function (eingabe) {
+
+    const t = this.abRand(eingabe).replace(/ {2,}/g, " ");
+    const s = this.abOhneAb(t);
+    const d = this.abZiffern(s);
+    if (!d) return t;
+
+    const rest = s.slice(d.length);
+    if (rest === "") return "AB" + d;
+    if (rest.charAt(0) === " " || rest.charAt(0) === "/" || this.abLosNr(rest)) return "AB" + d + rest;
+    return t;
+},
+
+/* R-AB3 Vergleichsschlüssel: "AB123456 L1", "123456 / Los 1" -> "AB123456|L1". */
+abSchluessel: function (eingabe) {
+
+    const s = this.abOhneAb(this.abRand(eingabe));
+    const d = this.abZiffern(s);
+    if (!d) return s.replace(/ /g, "").toUpperCase();
+
+    const rest = s.slice(d.length);
+    if (rest.replace(/^ +| +$/g, "") === "") return "AB" + d;
+
+    const los = this.abLosNr(rest);
+    if (los) return "AB" + d + "|L" + los;
+    return "AB" + d + "|" + rest.replace(/ /g, "").toUpperCase();
+},
+
+/* R-AB5 Forecast-Schlüssel ohne Los: "AB2515204 L1" -> "AB2515204"; ohne Ziffern "". */
+abForecastSchluessel: function (eingabe) {
+
+    const s = this.abRand(eingabe);
+    if (!s) return "";
+
+    const d = this.abZiffern(this.abOhneAb(s));
+    return d ? "AB" + d : "";
+},
+
+/* R-AB4 (AB finden): erst die Anzeigeform, dann über den Schlüssel die
+   vorhandene Schreibweise. abs = Liste der ABs der Bestandsliste.
+   "2515204" -> AB2515204, "AB2616200 Los1" -> "AB2616200 / Los 1". null = nicht da. */
+abFinden: function (abs, eingabe) {
+
+    const ab = this.abForm(eingabe);
+    if (!ab) return null;
+
+    const schluessel = this.abSchluessel(ab);
+    return abs.find(a => this.text(a.o.ab_anzeige) === ab) ||
+        abs.find(a => this.text(a.o.ab_schluessel) === schluessel) || null;
+},
+
+
+/* ===========================================================================
+   ARCHIV (R-X1 bis R-X3)
+   Nachbau von bestand/archiv.py. Ben (16.10.2026): Archivieren statt
+   Löschen. Der AB bleibt mit allen BGs und Teilen in der Datenbank stehen
+   und trägt nur die Markierung "archiviert" (Tabelle auftrag):
+     archiviert, archiviert_am, archiv_herkunft, archiv_status.
+   Das ersetzt die Kopie in die Archivtabelle: Wiederherstellen ist die
+   Markierung wieder zu entfernen (kein Zurückbauen aus flachen Zeilen).
+
+   Archiviert werden zwei Arten von ABs:
+   - aus der Bestandsliste (Herkunft "Archiviert aus Bestandsliste"): BGs und
+     Teile liegen in den Tabellen baugruppe und teil;
+   - aus dem Schweißen (Herkunft "Archiviert aus Schweißen", Phase 6): die
+     Zeilen liegen in der Tabelle schweisszeile (archiviert = ja).
+   R-X2: Das Archiv zeigt je Zeile (AB, BG, Teil) die 28 Spalten wie das
+   Excel-Blatt (ArchivKopf), hier aus diesen Tabellen zusammengesetzt.
+
+   Planungshäkchen (Phase 5): archivierte ABs stehen nicht in der Planung,
+   das Häkchen bleibt aber in der Tabelle (Django löschte es mit dem AB).
+   =========================================================================== */
+
+archivHerkunftBestand: "Archiviert aus Bestandsliste",
+archivHerkunftSchweissen: "Archiviert aus Schweißen",
+archivOhneBg: "(ohne BG)",
+archivSeite: 50,
+
+/* R-X2 / ArchivKopf: (Spaltenname wie Excel, Feld der Zeile) */
+archivKopf: [
+    ["AB", "ab"],
+    ["Zeichnungsnummer", "zeichnungsnummer"],
+    ["Benennung", "benennung"],
+    ["Menge / BG", "menge_bg"],
+    ["Menge Gesamt", "menge_gesamt"],
+    ["Index", "index"],
+    ["LK Nummer", "lk_nummer"],
+    ["Arbeitsgang", "arbeitsgang"],
+    ["Material", "material"],
+    ["Profil", "profil"],
+    ["Abmaße", "abmasse"],
+    ["Vorhanden", "vorhanden"],
+    ["Bemerkung", "bemerkung"],
+    ["Status", "status"],
+    ["Fortschritt", "fortschritt"],
+    ["Ebene", "ebene"],
+    ["Baugruppe", "baugruppe"],
+    ["Gelöscht am", "geloescht_am"],
+    ["Eingelagert", "eingelagert"],
+    ["Komplett", "komplett"],
+    ["DLZ", "dlz"],
+    ["Lagerort", "lagerort"],
+    ["Zuweisung Mitarbeiter", "mitarbeiter"],
+    ["Zuweisung Arbeitsplatz", "arbeitsplatz"],
+    ["Entnommen", "entnommen"],
+    ["Liefertermin Stahlbau", "liefertermin_stahlbau"],
+    ["Termin Versand", "termin_versand"],
+    ["Herkunft", "herkunft"]
+],
+
+/* Spalten, die als Datum bzw. Zahl angezeigt werden. */
+archivDatumFelder: ["eingelagert", "komplett", "entnommen", "liefertermin_stahlbau", "termin_versand"],
+archivZahlFelder: ["menge_gesamt", "vorhanden", "dlz"],
+
+/* Kopfdaten in der AB-Zeile (R-D2, wie ImportiereBlatt): Feld der Zeile -> [Vorsatz, Feld im AB] */
+archivKopfEtiketten: {
+    arbeitsgang: ["Kunde: ", "kunde"],
+    material: ["Haupt-AB: ", "haupt_ab"],
+    profil: ["Ersteller: ", "ersteller"],
+    abmasse: ["Datum: ", "datum_liste"],
+    bemerkung: ["Dispoliste: ", "dispoliste"]
+},
+
+/* Felder, die BG und Teil unverändert aus der Tabelle übernehmen. */
+archivUebernehmen: ["zeichnungsnummer", "benennung", "menge_bg", "index", "lk_nummer", "arbeitsgang", "material",
+    "profil", "abmasse", "bemerkung", "lagerort"],
+
+archivAusSchweissen: function (kopf) {
+
+    return this.text(kopf.archiv_herkunft) === this.archivHerkunftSchweissen;
+},
+
+/* Zeilen wie in Excel: die AB-Zeile, jede BG und jedes Teil (R-X1, Sicherheitsfrage). */
+archivZeilenZahl: function (ab) {
+
+    return 1 + ab.bgs.length + this.bestandTeile(ab).length;
+},
+
+/* ---------------------------------------------------------------------------
+   Archivieren und Wiederherstellen
+   --------------------------------------------------------------------------- */
+
+/* R-X1: AB archivieren. ab = AB aus bestandLaden. Gibt die Zeilenzahl zurück. */
+abArchivieren: async function (ab) {
+
+    const n = this.archivZeilenZahl(ab);
+
+    await this.datenAendern("auftrag", ab.o, frisch => {
+        if (this.istJa(frisch.archiviert)) throw new Error(this.text(ab.o.ab_anzeige) + " ist schon im Archiv.");
+        return {
+            archiviert: true,
+            archiviert_am: this.zeitJetzt(),
+            archiv_herkunft: this.archivHerkunftBestand,
+            archiv_status: ab.w.status
+        };
+    });
+
+    await this.protokollSchreiben("archiviert", ab.o.ab_anzeige, "", n + " Zeilen", "Archiv");
+    return n;
+},
+
+/* R-X3 neu: AB aus dem Archiv in die Bestandsliste zurückholen. kopf = Zeile
+   aus archivLaden. Einen AB aus dem Schweißen holt die Ansicht Schweißen
+   zurück (Phase 6). Hat der AB inzwischen seinen Platz in der Reihenfolge
+   verloren, kommt er ans Ende (wie bisher). */
+archivWiederherstellen: async function (kopf) {
+
+    const name = this.text(kopf.ab_anzeige);
+
+    if (this.archivAusSchweissen(kopf)) {
+        throw new Error(name + " wurde im Schweißen archiviert. Dorthin holt ihn die Ansicht Schweißen zurück (kommt noch).");
+    }
+
+    /* nicht archivierte ABs mit demselben Schlüssel */
+    const da = await this.datenLesen("auftrag", { wo: { ab_schluessel: kopf.ab_schluessel }, aufloesen: false });
+    if (da.length) {
+        throw new Error(name + " steht schon wieder in der Bestandsliste (neu importiert). " +
+            "Erst dort archivieren, dann wiederherstellen.");
+    }
+
+    const live = await this.datenLesen("auftrag", { wo: { bereich: "bestand" }, aufloesen: false });
+    const leer = v => v === null || v === undefined || v === "";
+    const milli = live.map(a => this.mengeMilli(a.reihenfolge));
+    const belegt = leer(kopf.reihenfolge) || milli.indexOf(this.mengeMilli(kopf.reihenfolge)) > -1;
+    const ende = (milli.length ? Math.max(...milli) / 1000 : 0) + 1;
+
+    await this.datenAendern("auftrag", kopf, frisch => {
+        if (!this.istJa(frisch.archiviert)) throw new Error(name + " ist schon nicht mehr im Archiv.");
+        return {
+            archiviert: false,
+            archiviert_am: null,
+            archiv_herkunft: "",
+            archiv_status: "",
+            reihenfolge: belegt ? ende : frisch.reihenfolge
+        };
+    });
+
+    await this.protokollSchreiben("wiederhergestellt", name, "", "Archiv", "Bestandsliste");
+},
+
+/* ---------------------------------------------------------------------------
+   Lesen
+   --------------------------------------------------------------------------- */
+
+/* Alle archivierten ABs, zuletzt archivierte zuerst. */
+archivLaden: async function () {
+
+    const liste = await this.datenLesen("auftrag", { archiv: "nur", aufloesen: false });
+
+    liste.sort((a, b) =>
+        ((this.zeitMs(b.archiviert_am) || 0) - (this.zeitMs(a.archiviert_am) || 0)) || this.idVergleich(b._id, a._id));
+    return liste;
+},
+
+/* R-X3: Treffer im Kopf eines AB (AB, Kunde, Verkaufsartikel), Teilwort, ohne Groß-/Kleinschreibung. */
+archivKopfTreffer: function (kopf, suche) {
+
+    const q = this.text(suche).toLowerCase();
+    if (!q) return true;
+
+    return ["ab_anzeige", "kunde", "verkaufsartikel"].some(f => this.text(kopf[f]).toLowerCase().indexOf(q) > -1);
+},
+
+/* R-X3: Treffer in einer Zeile (Zeichnungsnummer, Benennung, LK, Lagerort, Baugruppe). */
+archivZeileTreffer: function (zeile, suche) {
+
+    const q = this.text(suche).toLowerCase();
+    return Boolean(q) && ["zeichnungsnummer", "benennung", "lk_nummer", "lagerort", "baugruppe"]
+        .some(f => this.text(zeile[f]).toLowerCase().indexOf(q) > -1);
+},
+
+/* DLZ (R-W5): Termin Versand minus Eingelagert in Tagen; leer, solange eins fehlt. */
+archivDlz: function (eingelagert, versand) {
+
+    const a = this.zeitMs(eingelagert), b = this.zeitMs(versand);
+    if (a === null || b === null) return "";
+    return Math.round((b - a) / 86400000);
+},
+
+archivLeereZeile: function () {
+
+    const z = {};
+    this.archivKopf.forEach(([, feld]) => { z[feld] = ""; });
+    return z;
+},
+
+/* Die 28 Spalten für einen AB aus der Bestandsliste (Teile ohne BG vorn, wie in Excel).
+   Zahlen stehen als Text da, wie sie in der Bestandsliste angezeigt wurden. */
+archivZeilenAusBestand: function (ab, kopf) {
+
+    const gemeinsam = { geloescht_am: this.text(kopf.archiviert_am), herkunft: this.text(kopf.archiv_herkunft) };
+    const mitWerten = (z, w) => Object.assign(z, {
+        status: w.status, fortschritt: w.fortschritt, eingelagert: this.text(w.eingelagert), komplett: this.text(w.komplett)
+    });
+    const uebernehmen = (z, o) => this.archivUebernehmen.forEach(f => { z[f] = this.text(o[f]); });
+
+    const zeilen = [];
+
+    const abZeile = Object.assign(this.archivLeereZeile(), gemeinsam, {
+        ab: this.text(ab.o.ab_anzeige),
+        ebene: "AB",
+        zeichnungsnummer: this.text(ab.o.ab_anzeige),
+        benennung: this.text(ab.o.verkaufsartikel),
+        lagerort: this.text(ab.o.lagerort)
+    });
+    for (const feld in this.archivKopfEtiketten) {
+        const [vorsatz, quelle] = this.archivKopfEtiketten[feld];
+        const wert = this.text(ab.o[quelle]);
+        abZeile[feld] = wert ? vorsatz + wert : "";
+    }
+    zeilen.push(mitWerten(abZeile, ab.w));
+
+    const teilZeile = (t, bgName) => {
+        const z = Object.assign(this.archivLeereZeile(), gemeinsam, {
+            ab: this.text(ab.o.ab_anzeige),
+            ebene: "Teil",
+            baugruppe: bgName,
+            menge_gesamt: this.sollText(t.o),
+            vorhanden: this.mengeGleich(t.o.vorhanden, null) ? "" : this.zahlText(this.mengeMilli(t.o.vorhanden))
+        });
+        uebernehmen(z, t.o);
+        return mitWerten(z, t.w);
+    };
+
+    ab.ohne.forEach(t => zeilen.push(teilZeile(t, this.archivOhneBg)));
+
+    ab.bgs.forEach(b => {
+        const z = Object.assign(this.archivLeereZeile(), gemeinsam, {
+            ab: this.text(ab.o.ab_anzeige),
+            ebene: "BG",
+            baugruppe: this.text(b.o.name),
+            menge_gesamt: this.sollText(b.o)
+        });
+        uebernehmen(z, b.o);
+        zeilen.push(mitWerten(z, b.w));
+        b.teile.forEach(t => zeilen.push(teilZeile(t, this.text(b.o.name))));
+    });
+
+    return zeilen;
+},
+
+/* Die 28 Spalten für einen AB aus dem Schweißen (Zeilen der Tabelle schweisszeile, nach nr). */
+archivZeilenAusSchweissen: function (zeilen, kopf) {
+
+    const felder = ["zeichnungsnummer", "benennung", "menge_bg", "menge_gesamt", "index", "lk_nummer", "arbeitsgang",
+        "material", "profil", "abmasse", "vorhanden", "bemerkung", "status", "fortschritt", "ebene", "baugruppe",
+        "eingelagert", "komplett", "lagerort", "mitarbeiter", "arbeitsplatz", "entnommen", "liefertermin_stahlbau",
+        "termin_versand"];
+
+    return zeilen.slice().sort((a, b) => (this.mengeMilli(a.nr) - this.mengeMilli(b.nr)) || this.idVergleich(a._id, b._id))
+        .map(s => {
+            const z = this.archivLeereZeile();
+            felder.forEach(f => { z[f] = this.text(s[f]); });
+            z.ab = this.text(s.ab_nr);
+            z.geloescht_am = this.text(kopf.archiviert_am);
+            z.herkunft = this.text(kopf.archiv_herkunft);
+            z.dlz = this.archivDlz(s.eingelagert, s.termin_versand);
+            return z;
+        });
+},
+
+/* Zeilen eines archivierten AB (28 Spalten). kopf = Zeile aus archivLaden. */
+archivZeilenLaden: async function (kopf) {
+
+    if (this.archivAusSchweissen(kopf)) {
+        const sz = await this.datenLesen("schweisszeile", {
+            wo: { ab_schluessel: kopf.ab_schluessel }, archiv: "nur", aufloesen: false, sortierung: ["nr"]
+        });
+        return this.archivZeilenAusSchweissen(sz, kopf);
+    }
+
+    const baum = await this.bestandLaden([kopf._id], { archiv: "nur" });
+    return baum.length ? this.archivZeilenAusBestand(baum[0], baum[0].o) : [];
+},
+
+/* Zeilen aller archivierten ABs für die Suche in den Zeilen (R-X3). Lädt BGs,
+   Teile und Schweißzeilen in Stücken. Ergebnis: { AB-ID als Text: Zeilen }.
+   OFFEN (Symolo): Das lädt alle Zeilen des Archivs. Gibt es eine Suche mit
+   "like" oder einen Befehl dafür, wäre das nicht nötig. */
+archivZeilenAlle: async function (koepfe) {
+
+    const ergebnis = {};
+    const bestand = koepfe.filter(k => !this.archivAusSchweissen(k));
+    const schweissen = koepfe.filter(k => this.archivAusSchweissen(k));
+
+    if (bestand.length) {
+        const baum = await this.bestandLaden(bestand.map(k => k._id), { archiv: "nur" });
+        baum.forEach(ab => { ergebnis[String(ab.o._id)] = this.archivZeilenAusBestand(ab, ab.o); });
+    }
+
+    if (schweissen.length) {
+        const sz = await this.datenLesenIn("schweisszeile", "ab_schluessel", schweissen.map(k => k.ab_schluessel),
+            { archiv: "nur" });
+        schweissen.forEach(k => {
+            ergebnis[String(k._id)] = this.archivZeilenAusSchweissen(
+                sz.filter(s => this.text(s.ab_schluessel) === this.text(k.ab_schluessel)), k);
+        });
+    }
+
+    koepfe.forEach(k => { if (!ergebnis[String(k._id)]) ergebnis[String(k._id)] = []; });
+    return ergebnis;
+},
+
+/* Text einer Zelle im Archiv: Gelöscht am mit Uhrzeit, andere Daten ohne. */
+archivWert: function (zeile, feld) {
+
+    const w = zeile[feld];
+    if (feld === "geloescht_am") return this.zeitOrtText(w);
+    if (this.archivDatumFelder.indexOf(feld) > -1) return this.datumText(w);
+    return this.text(w);
+},
+
+
+/* ===========================================================================
    BENUTZER UND ROLLEN
    Vorerst OHNE Anmeldung und Rechte (Ben, 16.10.2026): Alle sehen und
    dürfen alles. Diese Stelle ist nur vorbereitet, damit Rollen später
@@ -1755,6 +2435,7 @@ wurzel: null,
 koerper: null,
 fuss: null,
 dialogEl: null,
+dialogFokus: null,
 infoZeile: null,
 statusEl: null,
 statusTimer: null,
@@ -1884,7 +2565,10 @@ tabelleBauen: function (parent, spalten, zeilen, leerText, aktionen) {
 },
 
 /* Fenster in der Mitte (Dialog), liegt in der Ansicht, damit das CSS greift.
-   bauen(inhalt, knoepfe) füllt es. Escape oder Klick daneben schließt. */
+   bauen(inhalt, knoepfe) füllt es. Escape oder Klick daneben schließt.
+   Den Fokus bekommt das erste Eingabefeld, sonst der erste Knopf. Bei einer
+   Sicherheitsfrage setzt bauen() this.dialogFokus auf "Abbrechen": ein
+   versehentliches Enter bestätigt dann nichts. */
 dialogZeigen: function (titel, bauen) {
 
     this.dialogSchliessen();
@@ -1901,9 +2585,11 @@ dialogZeigen: function (titel, bauen) {
     hinter.onkeydown = e => { if (e.key === "Escape") this.dialogSchliessen(); };
 
     this.dialogEl = hinter;
+    this.dialogFokus = null;
     bauen(inhalt, knoepfe);
 
-    const erstes = box.getElementsByTagName("input")[0] || box.getElementsByTagName("button")[0];
+    const erstes = this.dialogFokus || box.getElementsByTagName("input")[0] || box.getElementsByTagName("button")[0];
+    this.dialogFokus = null;
     if (erstes) erstes.focus();
     return box;
 },

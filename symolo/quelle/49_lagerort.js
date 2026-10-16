@@ -69,13 +69,18 @@ platzAufgaben: function (name, knoten, teile, p) {
 
 /* R-L2: Platz am AB -> alle BGs und alle Teile bekommen ihn; leer leert alle.
    Ein aufgesplitteter AB bleibt aufgesplittet. Gibt den Platz zurück. */
-lagerortAb: async function (ab, text) {
+lagerortAb: async function (ab, text, ohneProtokoll) {
 
     const p = this.platzEingabe(text);
+    const alt = this.platzVon(ab.o);
     let aufgaben = this.platzAufgaben("auftrag", ab, ab.ohne, p);
     ab.bgs.forEach(b => { aufgaben = aufgaben.concat(this.platzAufgaben("baugruppe", b, b.teile, p)); });
 
     await this.knotenSetzen(aufgaben);
+
+    if (!ohneProtokoll && alt !== p) {
+        await this.protokollSchreiben("lagerort", ab.o.ab_anzeige, "", alt || "leer", p || "leer");
+    }
     return p;
 },
 
@@ -84,12 +89,17 @@ lagerortAb: async function (ab, text) {
 lagerortBg: async function (ab, bg, text, imRegal) {
 
     const p = this.platzEingabe(text);
+    const alt = this.platzVon(bg.o);
 
-    if (imRegal && ab.bgs.length > 1 && !this.istJa(ab.o.regal_geteilt)) await this.regalTeilen(ab);
+    if (imRegal && ab.bgs.length > 1 && !this.istJa(ab.o.regal_geteilt)) await this.regalTeilenOhneProtokoll(ab);
 
     await this.knotenSetzen(this.platzAufgaben("baugruppe", bg, bg.teile, p));
 
     if (!this.istJa(ab.o.regal_geteilt)) await this.abgleichen(ab);
+
+    if (alt !== p) {
+        await this.protokollSchreiben("lagerort", ab.o.ab_anzeige, "BG " + this.text(bg.o.name), alt || "leer", p || "leer");
+    }
     return p;
 },
 
@@ -129,6 +139,14 @@ abgleichen: async function (ab) {
    Jede BG ohne eigenen Platz bekommt den bisherigen AB-Platz ausdrücklich. */
 regalTeilen: async function (ab) {
 
+    await this.regalTeilenOhneProtokoll(ab);
+    await this.protokollSchreiben("lagerort", ab.o.ab_anzeige, "Regal", "AB", "Baugruppen einzeln");
+},
+
+/* Wie regalTeilen, aber ohne Eintrag: wer eine BG einzeln verschiebt, trägt
+   nur diesen Platzwechsel ein. */
+regalTeilenOhneProtokoll: async function (ab) {
+
     if (ab.bgs.length < 2) throw new Error("Dieser AB hat keine Baugruppen zum Aufsplitten (mindestens zwei nötig).");
 
     const p = this.platzVon(ab.o);
@@ -156,8 +174,9 @@ regalZusammenfuehren: async function (ab, bg) {
     let p = this.platzVon(bg.o);
     if (!p) p = this.istJa(ab.o.regal_geteilt) || !this.text(ab.o.lagerort) ? "" : this.platzVon(ab.o);
 
-    await this.lagerortAb(ab, p);
+    await this.lagerortAb(ab, p, true);
     await this.knotenSetzen([{ name: "auftrag", knoten: ab, werte: { regal_geteilt: false } }]);
+    await this.protokollSchreiben("lagerort", ab.o.ab_anzeige, "Regal", "Baugruppen einzeln", "AB zusammen (" + (p || "kein Platz") + ")");
     return p;
 },
 

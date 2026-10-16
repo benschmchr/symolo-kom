@@ -182,6 +182,9 @@ Tabelle `fwm.stamm_prozesse` (BEKANNT), Ergebnis von `select * from fwm.stamm_pr
 | `symolo/quelle/48_eintragen.js` | Vorhanden, Vorhanden = Soll, alles ✓, Soll ändern (mit Datum nach R-T1) |
 | `symolo/quelle/49_lagerort.js` | Lagerort an AB und BG, Abgleich, Regal, aufsplitten und zusammenführen |
 | `symolo/quelle/4A_dashboard.js` | Dashboard: Sortierung wie Excel (DASH), Filter, Kopf, Klappzustand |
+| `symolo/quelle/4B_protokoll.js` | Änderungsprotokoll: Einstellungen, Eintrag schreiben, lesen, filtern, ausblenden |
+| `symolo/quelle/4C_ab_nummer.js` | AB-Nummern (R-AB1 bis R-AB5): Anzeigeform, Schlüssel, Losnummer, AB finden |
+| `symolo/quelle/4D_archiv.js` | Archiv: AB archivieren, wiederherstellen, die 28 Spalten, Suche |
 | `symolo/quelle/50_benutzer.js` | Platzhalter für Benutzer und Rollen (vorerst ohne) |
 | `symolo/ansichten/<bereich>/` | eine Ansicht je Bereich |
 | `symolo/fertig/<bereich>.js` | fertiges Hook-Objekt zum Einfügen in Symolo (gebaut mit `tools/symolo_bauen.py`) |
@@ -199,6 +202,10 @@ Im Code steht **OFFEN (Symolo)** an jeder ungeklärten Stelle und **VERMUTET** a
 | Tabellen, Felder, Feldtypen | Vorschlag `fwm.kom_…`, Felder wie in der bisherigen App |
 | Muster der Verknüpfungsfelder, Gruppentabelle | `<feld>_id_<ziel>`, `fwm.standard_gruppe` |
 | Archiv-Feld (Name, Typ) | `archiviert`, ja/nein |
+| Archiv und Protokoll: Tabelle `kom_aenderung`, Felder `archiviert_am`, `archiv_herkunft`, `archiv_status` am AB | Vorschlag; Protokoll eventuell über die Standardfelder (`iuser`, `idate`, `uuser`, `udate`) |
+| Name der angemeldeten Person (fürs Protokoll) | leer, bis klar ist, woher er kommt |
+| Protokoll „leeren“ und „aufbewahren“ ohne Löschen | Einträge werden ausgeblendet (`archiviert`); endgültig löschen macht die IT |
+| Suche im Archiv nach Zeilen (Zeichnungsnummer, Benennung …) | lädt beim ersten Suchen alle Zeilen; mit „like“ in der Abfrage wäre das nicht nötig |
 | Rückgabe von Create, Update und List | JSON-Text in `data.result` |
 | Fehlerformat von Symolo | unbekannt; wir zeigen die Meldung an |
 | Reihenfolge von `par`, Form der `idList` | wie der Pfad; Text mit Kommas |

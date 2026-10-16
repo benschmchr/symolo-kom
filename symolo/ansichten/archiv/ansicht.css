@@ -1,0 +1,44 @@
+/* Archiv: Liste der archivierten ABs und ihre Zeilen. Statusfarben sind Bedeutungsfarben. */
+
+.ANSICHT .kom-leise { margin: 0 0 var(--space-3); color: var(--ink-muted); font-size: var(--fs-small); }
+
+.ANSICHT .kom-leiste { display: flex; flex-wrap: wrap; align-items: flex-end; gap: var(--space-3); margin-bottom: var(--space-3); }
+.ANSICHT .kom-feld { display: flex; flex-direction: column; gap: var(--space-1); }
+.ANSICHT .kom-feldname { font-size: var(--fs-label); color: var(--ink-muted); }
+.ANSICHT .kom-suchfeld { flex: 1 1 320px; max-width: 560px; }
+.ANSICHT .kom-suchzeile { display: flex; gap: var(--space-2); }
+.ANSICHT .kom-eingabe { min-height: 36px; padding: 0 var(--space-2); border: 1px solid var(--line-strong);
+  border-radius: var(--radius-sm); background: var(--surface-100); color: var(--ink); font: inherit; }
+.ANSICHT .kom-suchzeile .kom-eingabe { flex: 1 1 auto; min-width: 0; }
+.ANSICHT .kom-eingabe:focus-visible { outline: 2px solid var(--focus); outline-offset: 1px; }
+
+.ANSICHT .kom-zaehler { display: flex; flex-wrap: wrap; gap: var(--space-2); margin-bottom: var(--space-3); }
+.ANSICHT .kom-zaehler:empty { display: none; }
+.ANSICHT .kom-pille { display: inline-flex; gap: var(--space-1); padding: var(--space-1) var(--space-3);
+  border: 1px solid var(--line-strong); border-radius: 999px; background: var(--surface-100); font-size: var(--fs-small); }
+
+.ANSICHT .kom-rahmen { overflow-x: auto; border: 1px solid var(--line); border-radius: var(--radius-lg); background: var(--surface-100); }
+.ANSICHT .kom-link { padding: 0; border: 0; background: none; color: var(--ink); font: inherit; font-weight: var(--fw-label);
+  text-decoration: underline; cursor: pointer; }
+.ANSICHT .kom-link:hover { color: var(--glow-red); }
+.ANSICHT .kom-link:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+.ANSICHT .kom-kurz { max-width: 280px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+.ANSICHT .kom-st { display: inline-block; padding: 0 var(--space-2); border: 1px solid var(--line-strong);
+  border-radius: var(--radius-sm); font-size: var(--fs-small); }
+.ANSICHT .kom-st.kom-komplett { background: var(--status-komplett); border-color: var(--status-komplett); color: var(--on-status); }
+.ANSICHT .kom-st.kom-teilweise { background: var(--status-teilweise); border-color: var(--status-teilweise); color: var(--on-status); }
+
+.ANSICHT .kom-seiten { display: flex; align-items: center; justify-content: center; gap: var(--space-3); margin-top: var(--space-3); }
+
+.ANSICHT .kom-detailkopf { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-3); margin-bottom: var(--space-3); }
+.ANSICHT .kom-detailtitel { margin: 0; font-size: var(--fs-h3); }
+
+.ANSICHT .kom-breit .kom-tabelle { min-width: 2600px; }
+.ANSICHT .kom-ebene-ab td { font-weight: var(--fw-label); background: var(--surface-0); }
+.ANSICHT .kom-ebene-bg td { font-weight: var(--fw-label); }
+.ANSICHT .kom-ebene-teil.kom-komplett td:first-child { box-shadow: inset 3px 0 0 var(--status-komplett); }
+.ANSICHT .kom-ebene-teil.kom-teilweise td:first-child { box-shadow: inset 3px 0 0 var(--status-teilweise); }
+.ANSICHT .kom-treffer td { background: var(--surface-0); box-shadow: inset 0 0 0 1px var(--focus); }
+
+.ANSICHT .kom-eingabe, .ANSICHT .kom-pille, .ANSICHT .kom-rahmen { box-sizing: border-box; }

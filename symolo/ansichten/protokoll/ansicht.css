@@ -1,0 +1,34 @@
+/* Änderungsprotokoll: Liste mit Filter und Einstellungen. */
+
+.ANSICHT .kom-leise { margin: 0 0 var(--space-3); color: var(--ink-muted); font-size: var(--fs-small); }
+.ANSICHT td.kom-leise, .ANSICHT span.kom-leise { margin: 0; }
+
+.ANSICHT .kom-hinweis { margin-bottom: var(--space-3); font-size: var(--fs-small); }
+.ANSICHT .kom-hinweis:empty { display: none; }
+.ANSICHT .kom-warnung { padding: var(--space-2) var(--space-3); border: 1px solid var(--status-teilweise);
+  border-radius: var(--radius-sm); background: var(--surface-100); }
+.ANSICHT .kom-warnung.kom-ruhig { border-color: var(--line-strong); }
+
+.ANSICHT .kom-einstellungen { margin-bottom: var(--space-3); border: 1px solid var(--line); border-radius: var(--radius-lg);
+  background: var(--surface-100); padding: var(--space-3); }
+.ANSICHT .kom-einst-zeile { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); }
+.ANSICHT .kom-einst-box { margin-top: var(--space-3); }
+.ANSICHT .kom-einst-box.kom-zu { display: none; }
+.ANSICHT .kom-haken { display: flex; align-items: flex-start; gap: var(--space-2); margin-bottom: var(--space-2); }
+.ANSICHT .kom-knopfzeile { display: flex; flex-wrap: wrap; gap: var(--space-2); margin-top: var(--space-2); }
+
+.ANSICHT .kom-leiste { display: flex; flex-wrap: wrap; align-items: flex-end; gap: var(--space-3); margin-bottom: var(--space-3); }
+.ANSICHT .kom-feld { display: flex; flex-direction: column; gap: var(--space-1); }
+.ANSICHT .kom-feldname { font-size: var(--fs-label); color: var(--ink-muted); }
+.ANSICHT .kom-suchfeld { flex: 1 1 260px; max-width: 420px; }
+.ANSICHT .kom-suchzeile { display: flex; gap: var(--space-2); }
+.ANSICHT .kom-eingabe { min-height: 36px; padding: 0 var(--space-2); border: 1px solid var(--line-strong);
+  border-radius: var(--radius-sm); background: var(--surface-100); color: var(--ink); font: inherit; }
+.ANSICHT .kom-suchzeile .kom-eingabe { flex: 1 1 auto; min-width: 0; }
+.ANSICHT .kom-schmal { width: 140px; }
+.ANSICHT .kom-eingabe:focus-visible { outline: 2px solid var(--focus); outline-offset: 1px; }
+
+.ANSICHT .kom-rahmen { overflow-x: auto; border: 1px solid var(--line); border-radius: var(--radius-lg); background: var(--surface-100); }
+.ANSICHT .kom-seiten { display: flex; align-items: center; justify-content: center; gap: var(--space-3); margin-top: var(--space-3); }
+
+.ANSICHT .kom-eingabe, .ANSICHT .kom-einstellungen, .ANSICHT .kom-warnung, .ANSICHT .kom-rahmen { box-sizing: border-box; }
