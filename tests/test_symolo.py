@@ -128,3 +128,23 @@ def test_symolo_rechnet_wie_die_bisherige_app(tmp_path):
             ), a["ab"]
             geprueft += 1
     assert geprueft > 100
+
+
+@pytest.mark.skipif(NODE is None, reason="Node fehlt")
+def test_symolo_ab_nummern_wie_die_bisherige_app(tmp_path):
+    """R-AB1, R-AB3, R-AB5: 4C_ab_nummer.js gibt für viele Eingaben dasselbe aus wie bestand/ab_nummer.py."""
+    from bestand.ab_nummer import ab_form, ab_schluessel, forecast_schluessel
+
+    ausgabe = tmp_path / "ab.json"
+    datei = BASIS / "tests" / "symolo" / "archiv.test.js"
+    env = {**os.environ, "KOM_AB_AUSGABE": str(ausgabe)}
+    erg = subprocess.run([NODE, "--test", str(datei)], capture_output=True, text=True, env=env)
+    assert erg.returncode == 0, erg.stdout[-4000:]
+    faelle = json.loads(ausgabe.read_text(encoding="utf-8"))
+    assert len(faelle) > 40
+    for f in faelle:
+        assert (f["form"], f["schluessel"], f["forecast"]) == (
+            ab_form(f["ein"]),
+            ab_schluessel(f["ein"]),
+            forecast_schluessel(f["ein"]),
+        ), repr(f["ein"])

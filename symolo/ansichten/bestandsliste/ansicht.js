@@ -5,8 +5,9 @@
    Schalter "Weitere Spalten". Status und Fortschritt rechnet 45_rechnen.js.
    Eintragen (Phase 2): Vorhanden (Doppelklick = Soll, nochmal 0), Status
    antippen, alles ✓ an AB/BG, Lagerort an AB/BG, Rechtsklick auf einen AB:
-   AB bearbeiten (Soll). Entnehmen und "Befinden sich im Schweißen" kommen
-   in Phase 6, Archivieren und Protokoll in Phase 4.
+   AB bearbeiten (Soll), AB archivieren. Geänderte Mengen, Plätze und das
+   Archivieren kommen ins Änderungsprotokoll. Entnehmen und "Befinden sich im
+   Schweißen" kommen in Phase 6.
 
    Schnell auch bei vielen ABs: Zeilen unter einem AB werden erst gebaut,
    wenn der AB aufgeklappt ist.
@@ -36,6 +37,7 @@ before_set_values: async function (form, { data }) {
     this.geruestBauen(parent);
     this.leisteBauen();
     this.knopf(this.fuss, "Neu laden", () => this.laden());
+    this.knopf(this.fuss, "AB archivieren …", () => this.abEingabeDialog());
 
     await this.laden();
 },
@@ -583,8 +585,63 @@ abMenue: function (ab) {
 
     this.menueZeigen(this.text(ab.o.ab_anzeige), [
         ["AB bearbeiten (Soll ändern)", () => this.sollDialog(ab)],
+        ["AB archivieren …", () => this.archivierenFragen(ab)],
         ["Nur diesen AB anzeigen", () => { this.nurAb = ab.o._id; this.anzeigen(); }]
     ]);
+},
+
+/* R-X1: AB archivieren, erst mit Eingabe der Nummer (R-AB4 findet die vorhandene
+   Schreibweise: "2515204", "ab2515204", "AB2616200 Los1" ...). */
+abEingabeDialog: function () {
+
+    this.dialogZeigen("AB archivieren", (inhalt, knoepfe) => {
+        this.el(inhalt, "p", "kom-leise", "Welcher Arbeitsauftrag soll ins Archiv? Nummer eintragen, z. B. 2515204 " +
+            "oder AB2616200 Los 1.");
+        const feld = this.el(inhalt, "input", "kom-eingabe kom-breit");
+        feld.type = "text";
+        feld.placeholder = "AB-Nummer";
+        const fehler = this.el(inhalt, "div", "kom-feldfehler");
+
+        const weiter = () => {
+            const eingabe = this.text(feld.value);
+            const ab = this.abFinden(this.abs, eingabe);
+            if (!ab) {
+                fehler.textContent = "AB „" + (this.abForm(eingabe) || eingabe) + "“ ist nicht in der Liste.";
+                return;
+            }
+            /* Erst nach dem Tastendruck: sonst bestätigt dieselbe Eingabetaste gleich die Rückfrage. */
+            setTimeout(() => this.archivierenFragen(ab), 0);
+        };
+        feld.onkeydown = e => { if (e.key === "Enter") weiter(); };
+
+        this.knopf(knoepfe, "Weiter", weiter, "haupt");
+        this.knopf(knoepfe, "Abbrechen", () => this.dialogSchliessen(), "rot");
+    });
+},
+
+/* Sicherheitsfrage mit Zeilenzahl, dann archivieren (der AB bleibt in der Datenbank). */
+archivierenFragen: function (ab) {
+
+    const name = this.text(ab.o.ab_anzeige);
+    const n = this.archivZeilenZahl(ab);
+
+    this.dialogZeigen("AB archivieren", (inhalt, knoepfe) => {
+        const p = this.el(inhalt, "p");
+        this.el(p, "b", "", name);
+        this.el(p, "span", "", " mit " + n + " Zeilen ins Archiv legen?");
+        this.el(inhalt, "p", "kom-leise", "Er verschwindet aus der Bestandsliste. Im Archiv lässt er sich ansehen " +
+            "und wiederherstellen.");
+
+        this.knopf(knoepfe, "Ja, archivieren", async () => {
+            this.dialogSchliessen();
+            const fertig = await this.sicher(() => this.abArchivieren(ab));
+            if (fertig === null) return;
+            await this.abNeuLaden(ab);
+            this.statusZeigen(name + " wurde archiviert (" + n + " Zeilen).");
+        }, "haupt");
+        const nein = this.knopf(knoepfe, "Abbrechen", () => this.dialogSchliessen(), "rot");
+        this.dialogFokus = nein;   /* Sicherheitsfrage: ein versehentliches Enter archiviert nichts */
+    });
 },
 
 /* AB bearbeiten: Soll ("Menge Gesamt") der Teile ändern. Absichtlich nur

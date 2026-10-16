@@ -4,7 +4,7 @@
    Alles läuft über datenAendern (der einzige Schreibpfad). Danach lädt die
    Ansicht den AB neu; gerechnet wird beim Anzeigen (45_rechnen.js).
 
-   Das Änderungsprotokoll kommt in Phase 4 dazu.
+   Geänderte Mengen kommen ins Änderungsprotokoll (4B_protokoll.js).
    =========================================================================== */
 
 /* Ist der gespeicherte Wert gleich der Eingabe (Tausendstel oder null)? */
@@ -27,8 +27,13 @@ vorhandenSetzen: async function (teil, milli) {
     }, { trotzdem: true });
 
     const alt = neu._vorher.vorhanden;
+    const altText = this.protokollMenge(alt);
+
+    if (!this.mengeGleich(alt, milli)) {
+        await this.protokollSchreiben("menge", teil.abName, this.protokollTeil(teil), altText, this.protokollMenge(this.mengeWert(milli)));
+    }
+
     if (neu._inzwischen && !this.mengeGleich(alt, milli)) {
-        const altText = this.mengeGleich(alt, null) ? "leer" : this.zahlText(this.mengeMilli(alt));
         return "Achtung: " + this.text(teil.o.zeichnungsnummer) + " wurde inzwischen von jemand anderem geändert (zuletzt " +
             altText + "). Dein Wert gilt jetzt.";
     }
@@ -72,11 +77,17 @@ sollSetzen: async function (neu) {
 
     const geaendert = neu.filter(([t, milli]) => !this.mengeGleich(t.o.menge_gesamt, milli));
 
-    await this.jeAcht(geaendert, ([t, milli]) => this.datenAendern("teil", t.o, frisch => {
-        const [ein, fertig] = this.datenStempeln(frisch.vorhanden, this.mengeWert(milli),
-            frisch.datum_eingelagert, frisch.datum_komplett, this.heuteText());
-        return { menge_gesamt: this.mengeWert(milli), menge_gesamt_text: "", datum_eingelagert: ein, datum_komplett: fertig };
-    }, { ohnePruefung: true }));
+    await this.jeAcht(geaendert, async ([t, milli]) => {
+        const alt = this.sollText(t.o) || "leer";
+
+        await this.datenAendern("teil", t.o, frisch => {
+            const [ein, fertig] = this.datenStempeln(frisch.vorhanden, this.mengeWert(milli),
+                frisch.datum_eingelagert, frisch.datum_komplett, this.heuteText());
+            return { menge_gesamt: this.mengeWert(milli), menge_gesamt_text: "", datum_eingelagert: ein, datum_komplett: fertig };
+        }, { ohnePruefung: true });
+
+        await this.protokollSchreiben("soll", t.abName, this.protokollTeil(t), alt, this.protokollMenge(this.mengeWert(milli)));
+    });
 
     return geaendert.length;
 },

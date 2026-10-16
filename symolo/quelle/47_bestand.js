@@ -50,12 +50,13 @@ idVergleich: function (a, b) {
 
 /* Alle ABs der Bestandsliste (nicht archiviert) mit BGs und Teilen.
    Drei Abfragen; BGs und Teile in Stücken über die AB-IDs.
-   abIds: nur diese ABs neu laden (nach einer Änderung). */
-bestandLaden: async function (abIds) {
+   abIds: nur diese ABs neu laden (nach einer Änderung).
+   optionen.archiv: "nur" lädt archivierte ABs (fürs Archiv), sonst nur nicht archivierte. */
+bestandLaden: async function (abIds, optionen) {
 
     const wo = { bereich: "bestand" };
     if (abIds) wo.id = abIds;
-    const auftraege = await this.datenLesen("auftrag", { wo: wo, aufloesen: false });
+    const auftraege = await this.datenLesen("auftrag", { wo: wo, aufloesen: false, archiv: (optionen || {}).archiv });
 
     auftraege.sort((a, b) =>
         (this.mengeMilli(a.reihenfolge) - this.mengeMilli(b.reihenfolge)) || this.idVergleich(a._id, b._id));
@@ -103,6 +104,10 @@ bestandBaum: function (auftraege, baugruppen, teile) {
         const ohne = teileJeAb[String(a._id)] || [];
         const bgs = bgsJeAb[String(a._id)] || [];
         const alle = ohne.concat(...bgs.map(b => b.teile));
+
+        /* Für das Protokoll: jeder Teil kennt AB-Nummer und BG-Kurzname (nur Text, kein Rückverweis). */
+        ohne.forEach(t => { t.abName = this.text(a.ab_anzeige); });
+        bgs.forEach(b => b.teile.forEach(t => { t.abName = this.text(a.ab_anzeige); t.bgKurz = this.text(b.o.kurz); }));
         return { art: "ab", o: a, w: this.sammelWerte(alle.map(t => t.w)), ohne: ohne, bgs: bgs, zeigen: true, offen: true };
     });
 },

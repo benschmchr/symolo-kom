@@ -32,6 +32,8 @@ FERTIG = SYMOLO / "fertig"
 ANSICHTEN = [
     {"name": "bestandsliste", "titel": "Bestandsliste", "klasse": "kom-bl", "praefix": "komBl", "css_id": "KOMBLCSS"},
     {"name": "dashboard", "titel": "Dashboard", "klasse": "kom-db", "praefix": "komDb", "css_id": "KOMDBCSS"},
+    {"name": "archiv", "titel": "Archiv", "klasse": "kom-ar", "praefix": "komAr", "css_id": "KOMARCSS"},
+    {"name": "protokoll", "titel": "Änderungsprotokoll", "klasse": "kom-pr", "praefix": "komPr", "css_id": "KOMPRCSS"},
     {"name": "regal", "titel": "Regal", "klasse": "kom-rg", "praefix": "komRg", "css_id": "KOMRGCSS"},
     {"name": "verbindungstest", "titel": "Verbindungstest", "klasse": "kom-vt", "praefix": "komVt", "css_id": "KOMVTCSS"},
 ]  # fmt: skip
