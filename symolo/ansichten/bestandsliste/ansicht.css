@@ -1,0 +1,100 @@
+/* Bestandsliste (Entwurf D): eine Karte je AB, Tabelle wie Excel.
+   Statusfarben sind Bedeutungsfarben (grün/gelb/weiß) und bleiben. */
+
+.ANSICHT .kom-oben { display: flex; flex-direction: column; gap: var(--space-3); margin-bottom: var(--space-3); }
+
+.ANSICHT .kom-zaehler { display: flex; flex-wrap: wrap; gap: var(--space-2); }
+.ANSICHT .kom-pille { padding: var(--space-1) var(--space-3); border: 1px solid var(--line-strong);
+  border-radius: 999px; background: var(--surface-100); font-size: var(--fs-small); white-space: nowrap; }
+.ANSICHT .kom-pille.kom-komplett { border-color: var(--status-komplett); background: var(--status-komplett-bg); }
+.ANSICHT .kom-pille.kom-teilweise { border-color: var(--status-teilweise); background: var(--status-teilweise-bg); }
+
+.ANSICHT .kom-leiste { display: flex; flex-wrap: wrap; align-items: flex-end; gap: var(--space-3); }
+.ANSICHT .kom-feld { display: flex; flex-direction: column; gap: var(--space-1); }
+.ANSICHT .kom-feldname { font-size: var(--fs-label); color: var(--ink-muted); }
+.ANSICHT .kom-suchfeld { flex: 1 1 320px; }
+.ANSICHT .kom-suchzeile { display: flex; gap: var(--space-2); }
+.ANSICHT .kom-eingabe { min-height: 36px; padding: 0 var(--space-2); border: 1px solid var(--line-strong);
+  border-radius: var(--radius-sm); background: var(--surface-100); color: var(--ink);
+  font-family: inherit; font-size: var(--fs-small); }
+.ANSICHT .kom-suchzeile .kom-eingabe { flex: 1 1 auto; min-width: 0; }
+.ANSICHT .kom-eingabe:focus-visible { outline: 2px solid var(--focus); outline-offset: 1px; }
+.ANSICHT .kom-knopfgruppe { display: flex; gap: var(--space-1); }
+.ANSICHT .kom-knopf.kom-gewaehlt { background: var(--brand-gray); border-color: var(--brand-gray); color: var(--on-brand); }
+.ANSICHT .kom-schalter { display: flex; align-items: center; gap: var(--space-2); min-height: 36px;
+  font-size: var(--fs-small); cursor: pointer; }
+
+.ANSICHT .kom-hinweis { margin-bottom: var(--space-3); font-size: var(--fs-small); }
+.ANSICHT .kom-hinweis:empty { display: none; }
+.ANSICHT .kom-hinweis .kom-knopf { min-height: 28px; margin-left: var(--space-2); }
+
+/* Breite Liste scrollt waagerecht; die Kopfzeile scrollt mit. */
+.ANSICHT .kom-liste { overflow-x: auto; }
+.ANSICHT .kom-karte { min-width: 1400px; margin-bottom: var(--space-4); background: var(--surface-100);
+  border: 1px solid var(--line); border-radius: var(--radius-lg); overflow: hidden; }
+.ANSICHT .kom-mehr-an .kom-karte { min-width: 2410px; }
+/* Karten außerhalb des sichtbaren Bereichs rechnet der Browser erst beim Hinscrollen (schnell bei vielen ABs). */
+.ANSICHT .kom-karte { content-visibility: auto; contain-intrinsic-size: auto 120px; }
+
+.ANSICHT .kom-bestand { width: 100%; min-width: 1400px; table-layout: fixed; border-collapse: collapse;
+  font-size: var(--fs-small); line-height: var(--lh-small); }
+.ANSICHT .kom-mehr-an .kom-bestand { min-width: 2410px; }
+.ANSICHT .kom-bestand th { padding: var(--space-1) var(--space-2); text-align: left; font-weight: var(--fw-label);
+  color: var(--ink-muted); white-space: normal; }
+.ANSICHT .kom-bestand td { padding: var(--space-1) var(--space-2); border-bottom: 1px solid var(--line);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.ANSICHT .kom-bestand tbody:last-child tr:last-child td { border-bottom: none; }
+.ANSICHT .kom-bestand .kom-zahl { text-align: right; font-variant-numeric: tabular-nums; }
+.ANSICHT .kom-bestand .kom-mitte { text-align: center; }
+.ANSICHT .kom-bestand .kom-leise { color: var(--ink-muted); }
+
+/* Spaltenbreiten wie bisher; weitere Spalten nur mit dem Schalter. */
+.ANSICHT .kom-c-klapp { width: 40px; }
+.ANSICHT .kom-c-nr { width: 190px; }
+.ANSICHT .kom-c-ben { width: 170px; }
+.ANSICHT .kom-c-lk { width: 52px; }
+.ANSICHT .kom-c-soll { width: 60px; }
+.ANSICHT .kom-c-vh { width: 96px; }
+.ANSICHT .kom-c-lager { width: 80px; }
+.ANSICHT .kom-c-status { width: 108px; }
+.ANSICHT .kom-c-fort { width: 130px; }
+.ANSICHT .kom-c-balken { width: 80px; }
+.ANSICHT .kom-c-datum { width: 110px; }
+.ANSICHT .kom-c-mbg { width: 72px; }
+.ANSICHT .kom-c-idx { width: 88px; }
+.ANSICHT .kom-c-text { width: 150px; }
+.ANSICHT .kom-mehr { display: none; }
+.ANSICHT .kom-mehr-an td.kom-mehr, .ANSICHT .kom-mehr-an th.kom-mehr { display: table-cell; }
+.ANSICHT .kom-mehr-an col.kom-mehr { display: table-column; }
+
+/* Zeilen: AB kräftig, Baugruppe hell mit Balken links, Teil zart. */
+.ANSICHT .kom-ab td { font-weight: var(--fw-label); }
+.ANSICHT .kom-ab.kom-komplett td { background: var(--status-komplett); color: var(--on-status); }
+.ANSICHT .kom-ab.kom-teilweise td { background: var(--status-teilweise); color: var(--on-status); }
+.ANSICHT .kom-bg.kom-komplett td { background: color-mix(in srgb, var(--status-komplett) 55%, var(--surface-100)); }
+.ANSICHT .kom-bg.kom-teilweise td { background: color-mix(in srgb, var(--status-teilweise) 55%, var(--surface-100)); }
+.ANSICHT .kom-bg.kom-offen td, .ANSICHT .kom-bg.kom-leer-status td { background: color-mix(in srgb, var(--brand-gray) 22%, var(--surface-100)); }
+.ANSICHT .kom-bg.kom-komplett td:first-child { box-shadow: inset 6px 0 0 var(--status-komplett); }
+.ANSICHT .kom-bg.kom-teilweise td:first-child { box-shadow: inset 6px 0 0 var(--status-teilweise); }
+.ANSICHT .kom-teil.kom-komplett td { background: var(--status-komplett-bg); }
+.ANSICHT .kom-teil.kom-teilweise td { background: var(--status-teilweise-bg); }
+.ANSICHT .kom-bg-block tr:first-child td { border-top: var(--space-2) solid var(--surface-100); }
+
+.ANSICHT .kom-klapp, .ANSICHT .kom-name { padding: 0; border: none; background: none; color: inherit;
+  font: inherit; cursor: pointer; text-align: left; }
+.ANSICHT .kom-klapp { width: 28px; min-height: 28px; font-size: var(--fs-body); }
+.ANSICHT .kom-name { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; text-decoration: underline dotted; }
+.ANSICHT .kom-klapp:focus-visible, .ANSICHT .kom-name:focus-visible { outline: 2px solid var(--focus); outline-offset: 1px; }
+
+.ANSICHT .kom-statusmarke { display: inline-block; padding: 0 var(--space-2); border: 1px solid var(--line-strong);
+  border-radius: var(--radius-sm); background: var(--surface-100); color: var(--ink); font-weight: var(--fw-label); }
+.ANSICHT .kom-statusmarke.kom-komplett { border-color: var(--status-komplett); }
+.ANSICHT .kom-statusmarke.kom-teilweise { border-color: var(--status-teilweise); }
+
+.ANSICHT .kom-balken { height: 8px; border-radius: 4px; background: var(--line); overflow: hidden; }
+.ANSICHT .kom-balken span { display: block; height: 100%; background: var(--brand-gray); }
+.ANSICHT .kom-ab .kom-balken { background: var(--surface-100); }
+.ANSICHT .kom-ab .kom-balken span { background: var(--ink); }
+
+.ANSICHT .kom-pille, .ANSICHT .kom-eingabe, .ANSICHT .kom-karte, .ANSICHT .kom-bestand,
+.ANSICHT .kom-balken, .ANSICHT .kom-statusmarke { box-sizing: border-box; }

@@ -177,6 +177,8 @@ Tabelle `fwm.stamm_prozesse` (BEKANNT), Ergebnis von `select * from fwm.stamm_pr
 | `symolo/quelle/10_einstellungen.js` | Datenquelle, Endpunkt, Zeitlimit, Schreibsperre für Symolo |
 | `symolo/quelle/20_tabellen.js` | **einzige Stelle** mit Tabellen- und Spaltennamen (der Entwickler trägt die echten ein) |
 | `symolo/quelle/40_daten.js` | Datenschicht: lesen, auflösen, anlegen, ändern, archivieren; ein einziger Schreibpfad; kein Löschen |
+| `symolo/quelle/45_rechnen.js` | Status, Prozent, Fortschritt (wie die Excel-Formeln; Prüffall 9.1 in JS) |
+| `symolo/quelle/47_bestand.js` | ABs mit Baugruppen und Teilen laden, Suche, Filter, Sortierung |
 | `symolo/quelle/50_benutzer.js` | Platzhalter für Benutzer und Rollen (vorerst ohne) |
 | `symolo/ansichten/<bereich>/` | eine Ansicht je Bereich |
 | `symolo/fertig/<bereich>.js` | fertiges Hook-Objekt zum Einfügen in Symolo (gebaut mit `tools/symolo_bauen.py`) |
@@ -199,6 +201,8 @@ Im Code steht **OFFEN (Symolo)** an jeder ungeklärten Stelle und **VERMUTET** a
 | Reihenfolge von `par`, Form der `idList` | wie der Pfad; Text mit Kommas |
 | Schreibweise der Felder (Get gegenüber Select) | egal, die App liest tolerant |
 | SQL-Sprache, `where`/`order by`/`in`, Zeilengrenze | einfache Abfragen ohne `limit` und `join` |
+| Länge einer Abfrage | `in (…)` in Stücken zu 500 IDs |
+| Mengen als Zahl oder als Text (`21.000`) | beides wird gelesen; Text, der keine Zahl ist, zählt 0 |
 | Gleichzeitiges Ändern | `udate` vor dem Speichern vergleichen |
 | Benutzer, Rollen, Rechte | vorerst keine |
 | Schrift, Farben, Fenstergröße, Handy | FWM-Variablen innerhalb der Ansicht, Thema light |

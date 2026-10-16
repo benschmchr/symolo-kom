@@ -251,6 +251,23 @@ datenLesen: async function (name, optionen) {
     return liste;
 },
 
+/* Wie datenLesen mit "feld in (werte)", aber in Stücken zu 500 Werten,
+   damit die Abfrage nicht zu lang wird.
+   OFFEN (Symolo): Gibt es eine Grenze für die Länge einer Abfrage? */
+datenLesenIn: async function (name, feld, werte, optionen) {
+
+    const o = Object.assign({ aufloesen: false }, optionen || {});
+    let liste = [];
+
+    for (let i = 0; i < werte.length; i += 500) {
+        const wo = Object.assign({}, o.wo || {});
+        wo[feld] = werte.slice(i, i + 500);
+        liste = liste.concat(await this.datenLesen(name, Object.assign({}, o, { wo: wo })));
+    }
+
+    return liste;
+},
+
 /* OFFEN (Symolo): Typ von ja/nein. Wir verstehen alle üblichen Formen. */
 istJa: function (wert) {
 
