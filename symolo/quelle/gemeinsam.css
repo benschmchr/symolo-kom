@@ -80,3 +80,21 @@
 /* box-sizing an einer Stelle (Skill, Falle 5). Jede neue Box kommt hierher. */
 .ANSICHT .kom-menue, .ANSICHT .kom-menuepunkt, .ANSICHT .kom-kopf, .ANSICHT .kom-koerper, .ANSICHT .kom-fuss, .ANSICHT .kom-knopf,
 .ANSICHT .kom-tabelle, .ANSICHT .kom-status, .ANSICHT .kom-dialog { box-sizing: border-box; }
+
+/* Importe: Ablage für Dateien, Fragen in der Vorschau */
+.ANSICHT .kom-ablage { display: flex; flex-direction: column; gap: var(--space-1); padding: var(--space-4);
+  border: 2px dashed var(--line-strong); border-radius: var(--radius-lg); background: var(--surface-100); }
+.ANSICHT .kom-ablage.kom-ueber { border-color: var(--glow-red); background: var(--surface-0); }
+.ANSICHT .kom-datei { margin-top: var(--space-2); font: inherit; color: var(--ink); }
+.ANSICHT .kom-dateiliste { margin: var(--space-2) 0 0; padding-left: var(--space-4); font-size: var(--fs-small); }
+.ANSICHT .kom-dateiliste:empty { display: none; }
+.ANSICHT .kom-knopfzeile { display: flex; flex-wrap: wrap; gap: var(--space-2); margin-top: var(--space-4); }
+.ANSICHT .kom-frage { display: flex; flex-direction: column; gap: var(--space-1); margin: var(--space-2) 0; }
+.ANSICHT .kom-wahl { display: flex; align-items: flex-start; gap: var(--space-2); cursor: pointer; }
+.ANSICHT .kom-rahmen { max-width: 100%; overflow: auto; border: 1px solid var(--line); border-radius: var(--radius-lg); background: var(--surface-100); }
+.ANSICHT .kom-rahmen .kom-tabelle { white-space: nowrap; }
+.ANSICHT .kom-import-tabelle td { vertical-align: top; white-space: normal; }
+.ANSICHT .kom-feldblock { display: flex; flex-direction: column; gap: var(--space-1); max-width: 640px; margin: var(--space-3) 0; }
+.ANSICHT .kom-abgleich { background: color-mix(in srgb, var(--brand-gray) 18%, var(--surface-100)); }
+.ANSICHT .kom-seiten { display: flex; align-items: center; gap: var(--space-3); margin: var(--space-3) 0; }
+.ANSICHT .kom-zusammen { display: flex; flex-direction: column; gap: var(--space-3); max-width: 900px; }

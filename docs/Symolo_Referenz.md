@@ -36,10 +36,11 @@ Kennzeichnung: **BEKANNT** = gesehen oder vom Entwickler belegt, **VERMUTET** = 
 | Frage | Entscheidung |
 |---|---|
 | Wo läuft die App? | Nur noch als Fenster in Symolo. Eigener Server, Teams-Reiter und Gäste ohne Anmeldung entfallen. |
-| Anmeldung und Rechte | Vorerst **keine**. Alle sehen und dürfen alles. Die Stelle für Rollen ist im Code vorbereitet. |
+| Anmeldung und Rechte | **Keine Anmeldung und keine Rollen.** Symolo stellt ein einfaches Objekt `currentRights` bereit (Entwickler, 16.10.2026), z. B. `{ "kom.edit.canimportkomlisten": true }`; Format `<modul>.<gruppe>.<recht>`, sparsam. Die App nutzt zwei Rechte (Kommissionierlisten importieren, Forecast importieren). Lokal gilt alles als erlaubt. |
 | Löschen | **Archivieren statt Löschen**, auch bei „AB löschen“ und „AB ersetzen“ (weicht von Excel ab). |
 | Aufbau | **Eine Ansicht je Bereich** (Bestandsliste, Dashboard, Regal …), jede als in sich geschlossenes Hook-Objekt. |
-| Excel einlesen | Macht die App selbst. Eine Lesebibliothek (z. B. SheetJS) darf eingebunden werden; die Adresse ist OFFEN. |
+| Excel einlesen | Macht die App selbst. Entwickler (16.10.2026): Eine Bibliothek ist nicht zwingend, Symolo bringt selbst etwas mit; vorerst extern, an **einer** Stelle gekapselt. Die App hat dafür einen eigenen Leser (`4P_excel.js`), der später gegen die Symolo-Bibliothek getauscht wird. |
+| IDs | Intern dürfen IDs frei verwendet und weitergegeben werden (Verknüpfungen), nur **anzeigen** nie. „Nie setzen“ gilt nur für die ID beim Anlegen (Create). |
 | Reihenfolge | Schritt für Schritt: zuerst die Grundlage, dann die Bestandsliste, dann Bereich für Bereich. |
 | Testen | Lokaler Nachbau von Symolo mit Beispieldaten, als Testseite per Doppelklick. |
 | Fragen an den Entwickler | Formular je Bereich mit gemeinsamen Skripten und Excel-Bibliothek werden getestet. Die Tabellenliste (`GetAllDboTypesAvail`) ist gerade nicht möglich: Wir arbeiten mit eigenen, kommentierten Annahmen. |
@@ -197,7 +198,14 @@ Tabelle `fwm.stamm_prozesse` (BEKANNT), Ergebnis von `select * from fwm.stamm_pr
 | `symolo/quelle/4N_sw_liste.js` | Schweißen ansehen: Suche, Filter, Sortierung, Sammlungen, Zähler |
 | `symolo/quelle/liste.css` | gemeinsame Stile der Karten-Liste (eingebunden über `"css": ["liste"]` im Bauschritt) |
 | `symolo/quelle/bestand.css` | gemeinsame Stile von Bestandsliste und Schweißen (Spalten, Knöpfe, Links) |
-| `symolo/quelle/50_benutzer.js` | Platzhalter für Benutzer und Rollen (vorerst ohne) |
+| `symolo/quelle/4P_excel.js` | **einzige Stelle für Excel**: liest .xlsx (Zip, Inhalte, Formate, Füllfarben, Datumswerte); ersetzbar durch die Symolo-Bibliothek |
+| `symolo/quelle/4Q_import_lesen.js` | Kommissionierliste lesen (R-I1 bis R-I7, R-D1 bis R-D5, R-M4), gleich wie `bestand/importer.py` |
+| `symolo/quelle/4R_forecast_lesen.js` | Forecast lesen (R-F2, R-F3, R-F4), gleich wie `bestand/forecast.py` |
+| `symolo/quelle/4S_import_speichern.js` | Kommissionierlisten speichern: Vorschau, Ersetzen ohne Löschen (R-I8 bis R-I10) |
+| `symolo/quelle/4T_forecast_import.js` | Forecast ersetzen ohne Löschen (R-F4, R-F5), Link (R-F1), Daten ansehen (R-F11) |
+| `symolo/quelle/4U_import_anzeige.js` | Ablage für Dateien, Auswahlfragen (gemeinsam für beide Importe) |
+| `symolo/quelle/50_benutzer.js` | Rechte: liest `currentRights` aus Symolo (`darf`), Name fürs Protokoll |
+| `symolo/ansichten/import`, `forecast_import`, `forecast_daten` | Kommissionierlisten importieren, Forecast importieren, Forecast-Daten (keine Punkte der Bereichsleiste; Knöpfe in Bestandsliste und Forecast) |
 | `symolo/ansichten/<bereich>/` | eine Ansicht je Bereich |
 | `symolo/fertig/<bereich>.js` | fertiges Hook-Objekt zum Einfügen in Symolo (gebaut mit `tools/symolo_bauen.py`) |
 | `symolo/lokal/` | Nachbau von `window.symolo` mit Beispieldaten, nur zum Testen |
@@ -213,7 +221,7 @@ Im Code steht **OFFEN (Symolo)** an jeder ungeklärten Stelle und **VERMUTET** a
 | Endpunkt im Fenster | `internal.connection` setzt ihn selbst |
 | Tabellen, Felder, Feldtypen | Vorschlag `fwm.kom_…`, Felder wie in der bisherigen App |
 | Muster der Verknüpfungsfelder, Gruppentabelle | `<feld>_id_<ziel>`, `fwm.standard_gruppe` |
-| Archiv-Feld (Name, Typ) | `archiviert`, ja/nein |
+| Archiv-Feld (Name, Typ) | `archiviert`, ja/nein. **OFFEN (Symolo, Entwickler 16.10.2026):** Die meisten Symolo-Objekte haben kein Archiv-Feld, meist läuft es über einen Status, den nicht alle haben. Archiv-Feld oder Status muss in Symolo erst vorgesehen werden. Die App kapselt es an **einer** Stelle (`archiv:` je Tabelle in `20_tabellen.js`, `datenArchivieren` und der Archiv-Filter in `40_daten.js`) |
 | Archiv und Protokoll: Tabelle `kom_aenderung`, Felder `archiviert_am`, `archiv_herkunft`, `archiv_status` am AB | Vorschlag; Protokoll eventuell über die Standardfelder (`iuser`, `idate`, `uuser`, `udate`) |
 | Name der angemeldeten Person (fürs Protokoll) | leer, bis klar ist, woher er kommt |
 | Protokoll „leeren“ und „aufbewahren“ ohne Löschen | Einträge werden ausgeblendet (`archiviert`); endgültig löschen macht die IT |
@@ -235,9 +243,14 @@ Im Code steht **OFFEN (Symolo)** an jeder ungeklärten Stelle und **VERMUTET** a
 | Schweißen: Felder `auftrag.bereich`, `baugruppe.archiviert`, `teil.archiviert`, `schweisszeile.zurueckgeholt`; Tabellen `arbeitsplatz`, `mitarbeiter` | Vorschlag; entnommene Originale werden ausgeblendet, nie gelöscht |
 | Entnehmen ohne Transaktion und ohne Anlegen mehrerer Zeilen auf einmal | neue Zeilen zuerst, Originale zuletzt ausblenden; bei Abbruch steht höchstens etwas doppelt |
 | Ausgeblendete Originale (entnommen, zurückgeholt) | bleiben in der Datenbank; endgültig löschen macht die IT |
-| Benutzer, Rollen, Rechte | vorerst keine |
+| Rechte (`currentRights`) | Der Entwickler füllt das Objekt im Framework. Format `<modul>.<gruppe>.<recht>`; unsere zwei Rechte: `kom.edit.canimportkomlisten`, `kom.edit.canimportforecast` (anders benannt: nur `50_benutzer.js` ändern). Fehlt das Objekt im Symolo-Fenster, gilt alles als **nicht** erlaubt; lokal als erlaubt. Die Ansicht blendet nur Knöpfe aus, geschützt ist erst, wenn Symolo die Schreibrechte prüft |
+| Excel-Bibliothek | Eigener Leser in `4P_excel.js`; der Entwickler zieht später auf die Symolo-Bibliothek um (eine Stelle). Gelesen wird mit `file.arrayBuffer()` (kein `fetch`) |
+| Import ohne Transaktion und ohne Anlegen mehrerer Zeilen auf einmal | neue Zeilen zuerst, bisherige zuletzt archivieren; bei Abbruch steht höchstens etwas doppelt. Ein Sammel-Anlegen würde einen Import (rund 800 Forecast-Zeilen) deutlich beschleunigen |
+| Forecast ersetzen | der neue wird versteckt (`forecast.archiviert`) angelegt und erst am Ende sichtbar; die alten werden archiviert und bleiben mit allen Zeilen in der Datenbank |
+| Link zur Forecast-Datei | Tabelle `einstellung`, Eintrag `forecast_link` |
+| Formular öffnen aus einem Hook (Knöpfe „Importieren“ → Importansicht und zurück) | wie die Bereichsleiste: `window.KOM_BEREICH_WECHSELN` (OFFEN) |
 | Schrift, Farben, Fenstergröße, Handy | FWM-Variablen innerhalb der Ansicht, Thema light |
-| Gemeinsame Skripte je Formular, Excel-Bibliothek und deren Adresse | in Klärung (Ben testet); bis dahin jede Ansicht in sich geschlossen |
+| Gemeinsame Skripte je Formular | in Klärung (Ben testet); bis dahin jede Ansicht in sich geschlossen |
 | Geplante Aufgaben (Morgenmail), Sicherung, Testumgebung | bei Symolo |
 
 ---

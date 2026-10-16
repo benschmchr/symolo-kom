@@ -5,8 +5,8 @@
    Knöpfe ABs/BGs/Alles, Kunde und eine Karte je AB in Ampelfarbe.
    Rechnen: 4G_forecast.js, 4H_planung.js. Zeichnen: 4J_liste.js.
 
-   Noch nicht dabei: "Forecast importieren" und "Forecast-Daten ansehen"
-   (Phase 7, mit dem Einlesen der Excel-Datei).
+   Importieren und die Daten ansehen sind eigene Ansichten (forecast_import,
+   forecast_daten); die Knöpfe unten erscheinen nur mit dem Recht dazu.
 
    Ohne importierten Forecast hat kein AB einen Termin; die Liste ist dann
    (bei "Alle") nur nach Fortschritt sortiert und der Kopf sagt es.
@@ -43,6 +43,10 @@ before_set_values: async function (form, { data }) {
     this.meldungEl = this.el(this.koerper, "div", "kom-hinweis");
     this.listeEl = this.el(this.koerper, "div", "kom-liste");
     this.knopf(this.fuss, "Neu laden", () => this.laden());
+    if (this.darf(this.rechte.importForecast)) {
+        this.knopf(this.fuss, "Forecast importieren", () => this.bereichOeffnen("forecast_import"));
+        this.knopf(this.fuss, "Forecast-Daten", () => this.bereichOeffnen("forecast_daten"));
+    }
 
     await this.laden();
 },
