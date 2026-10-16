@@ -168,3 +168,15 @@ Offen (werden vor ihrer Phase gefragt): W4 Morgenmail, W5 Datenübernahme, W7 Ä
 - **Rechtsklick-Menü** (Arbeitsplätze, Regal, Bestandsliste): kleine Kachel, Titel mittig, alle Knöpfe untereinander gleich groß, „Abbrechen“ unten.
 - **Statistik:** Die Spalte „Überfällig seit“ war durch die Kachel-Zahlenschrift zu groß; Tabellenzellen bleiben jetzt in normaler Schrift.
 - **Hilfe-Seite (Punkt 7):** wartet auf Bens Ja zum Vorschaubild.
+
+## Umbau für Symolo, Phase 0 (Ben, 16.10.2026)
+- **Ziel:** Die App läuft nur noch als Fenster in Symolo; Daten (und später Benutzer) kommen aus Symolo, Zugriff nur per WebSocket. Einhängen und Datenbank-Anbindung macht der Symolo-Entwickler. Damit entfallen eigener Server, Teams-Reiter und Gäste ohne Anmeldung (ändert W1, W2 und das Hosting vom 14.10.).
+- **Pflicht:** Skill `.claude/skills/symolo-barebone-framework/` und `docs/Symolo_Referenz.md` (alle gesammelten Informationen). Nie auf Symolo oder dessen Datenbanken zugreifen.
+- **„Index nie eintragen“** meint die ID (beim Anlegen nie setzen); der Zeichnungsindex der Teile bleibt.
+- **Archivieren statt Löschen**, auch bei „AB löschen“ und „AB ersetzen“ (weicht von Excel und R-X1/R-X2 ab, von Ben bestätigt).
+- **Vorerst keine Anmeldung und keine Rechte**; `symolo/quelle/50_benutzer.js` ist vorbereitet.
+- **Aufbau:** eine Ansicht je Bereich, jede ein in sich geschlossenes Hook-Objekt; gemeinsamer Code steht einmal in `symolo/quelle/` und wird mit `tools/symolo_bauen.py` eingesetzt (Ben: „mach wie es übersichtlicher ist“).
+- **Excel einlesen** macht die App selbst; eine Lesebibliothek (z. B. SheetJS) ist erlaubt, Adresse offen.
+- **Reihenfolge:** Schritt für Schritt (Phase 0 Grundlage, dann Bestandsliste, dann Bereich für Bereich).
+- **Testen:** Nachbau von `window.symolo` mit den Beispiel- und Demo-Daten (`symolo/lokal/`), Testseite `symolo/test.html` per Doppelklick. In Symolo ist Schreiben gesperrt, bis der Entwickler die Tabellennamen geprüft hat (`schreibenErlaubtInSymolo`).
+- **Tabellen:** eigene Annahmen `fwm.kom_…` (Felder 1:1 aus der Django-App), kommentiert mit VERMUTET/OFFEN; die Tabellenliste aus Symolo gibt es noch nicht.
