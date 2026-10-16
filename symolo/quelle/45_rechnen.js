@@ -126,3 +126,71 @@ statusKlasse: function (w) {
 
     return { Komplett: "kom-komplett", Teilweise: "kom-teilweise", Offen: "kom-offen" }[w.status] || "kom-leer-status";
 },
+
+
+/* ---------------------------------------------------------------------------
+   Eingaben prüfen (R-M1, R-M4) und Daten stempeln (R-T1)
+   --------------------------------------------------------------------------- */
+
+mengeMeldungen: {
+    ganz: "Bitte eine ganze Zahl eintragen (0 oder mehr).",
+    zahl: "Bitte eine Zahl ab 0 eintragen.",
+    punkt: "Bitte ohne Punkt eintragen (1000 statt 1.000).",
+    gross: "Bitte eine Zahl bis 999.999.999 eintragen."
+},
+
+/* R-M4: "1.000" oder "1,000" kann 1 oder 1000 heißen; wird nicht geraten, sondern abgelehnt. */
+punktMehrdeutig: function (text) {
+
+    return /^[1-9]\d{0,2}([.,]\d{3})+$/.test(this.text(text));
+},
+
+/* Text -> Tausendstel, mit Prüfung. Gibt { milli, fehler } zurück; leer = milli null.
+   ganz: true = nur ganze Zahlen (Vorhanden, R-M1), sonst bis 3 Nachkommastellen (Soll). */
+mengeEingabe: function (text, ganz) {
+
+    const roh = this.text(text);
+    const t = roh.replace(",", ".");
+    const falsch = { milli: null, fehler: ganz ? this.mengeMeldungen.ganz : this.mengeMeldungen.zahl };
+
+    if (t === "") return { milli: null, fehler: "" };
+    if (this.punktMehrdeutig(roh)) return { milli: null, fehler: this.mengeMeldungen.punkt };
+    if (!/^\+?(\d+\.?\d*|\.\d+)([eE][+-]?\d+)?$/.test(t)) return falsch;
+
+    const zahl = Number(t);
+    if (!Number.isFinite(zahl) || zahl < 0) return falsch;
+    if (ganz && !Number.isInteger(zahl)) return falsch;
+    if (zahl > 999999999) return { milli: null, fehler: this.mengeMeldungen.gross };
+
+    return { milli: Math.round(zahl * 1000), fehler: "" };
+},
+
+/* Tausendstel -> Wert zum Speichern (Zahl), leer bleibt leer.
+   OFFEN (Symolo): Feldtyp der Mengen (Zahl mit 3 Nachkommastellen?). */
+mengeWert: function (milli) {
+
+    return milli === null || milli === undefined ? null : milli / 1000;
+},
+
+/* Heute als Datum im Format, das Symolo liefert ("2026-10-16T00:00:00.0000000Z").
+   OFFEN (Symolo): Erwartet Symolo beim Schreiben dasselbe Format? */
+heuteText: function () {
+
+    const d = new Date();
+    return d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0") + "-" +
+        String(d.getDate()).padStart(2, "0") + "T00:00:00.0000000Z";
+},
+
+/* R-T1: neue Daten (Eingelagert, Komplett) eines Teils nach einer Änderung
+   von Vorhanden oder Soll. Gibt [eingelagert, komplett] zurück (null = leer). */
+datenStempeln: function (vorhanden, soll, eingelagert, komplett, heute) {
+
+    const v = this.mengeMilli(vorhanden);
+    const s = this.mengeMilli(soll);
+
+    if (v <= 0) return [null, null];   /* Tippfehler korrigiert: beide leer */
+
+    const ein = this.text(eingelagert) || heute;
+    const fertig = v >= s ? (this.text(komplett) || heute) : null;
+    return [ein, fertig];
+},

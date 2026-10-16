@@ -1,10 +1,12 @@
 /* ===========================================================================
-   ANSICHT: Bestandsliste (Phase 1: nur lesen)
+   ANSICHT: Bestandsliste
    Eine Karte je AB (Entwurf D): AB-Zeile, Teile ohne BG, Baugruppen mit
    ihren Teilen. Suche, Status-Filter, Sortierung, Knöpfe ABs/BGs/Alles,
    Schalter "Weitere Spalten". Status und Fortschritt rechnet 45_rechnen.js.
-   Eintragen (Vorhanden, Lagerort, AB bearbeiten) kommt in Phase 2,
-   Entnehmen und "Befinden sich im Schweißen" in Phase 6.
+   Eintragen (Phase 2): Vorhanden (Doppelklick = Soll, nochmal 0), Status
+   antippen, alles ✓ an AB/BG, Lagerort an AB/BG, Rechtsklick auf einen AB:
+   AB bearbeiten (Soll). Entnehmen und "Befinden sich im Schweißen" kommen
+   in Phase 6, Archivieren und Protokoll in Phase 4.
 
    Schnell auch bei vielen ABs: Zeilen unter einem AB werden erst gebaut,
    wenn der AB aufgeklappt ist.
@@ -24,6 +26,7 @@ sucheEl: null,
 statusWahlEl: null,
 sortEl: null,
 anzeigeKnoepfe: {},
+kartenJeAb: {},
 
 before_set_values: async function (form, { data }) {
 
@@ -166,8 +169,10 @@ zeichnen: function () {
        bei vielen Zeilen, weil der Browser nur einmal neu rechnet. */
     const inhalt = this.el(null, "div", "kom-liste-inhalt");
     this.kopfzeileBauen(inhalt);
+    this.kartenJeAb = {};
     sichtbar.forEach(a => {
         const karte = this.el(inhalt, "section", "kom-karte");
+        this.kartenJeAb[String(a.o._id)] = karte;
         this.karteZeichnen(karte, a);
     });
     this.listeEl.replaceChildren(inhalt);
@@ -202,12 +207,12 @@ sichtbareAbs: function () {
     const gefiltert = Boolean(q) || this.anzeige !== "alles" || this.statusWahl !== "alle";
     let sichtbar = gefiltert ? this.abs.filter(a => a.zeigen) : this.abs.slice();
 
-    if (this.nurAb) sichtbar = sichtbar.filter(a => a === this.nurAb);
+    if (this.nurAb !== null) sichtbar = sichtbar.filter(a => String(a.o._id) === String(this.nurAb));
 
     sichtbar = this.bestandSortieren(sichtbar, this.sortierung);
 
     sichtbar.forEach((a, i) => {
-        if (this.nurAb) {
+        if (this.nurAb !== null) {
             a.offen = true;
         } else if (this.anzeige === "ab" || this.anzeige === "bg") {
             a.offen = this.anzeige === "bg";   /* "ABs": alles zu; "BGs": ABs auf, Baugruppen zu */
@@ -225,7 +230,7 @@ sichtbareAbs: function () {
     if (meldung) {
         this.meldungEl.textContent = meldung + " ";
         this.knopf(this.meldungEl, "Alles anzeigen", () => this.allesZeigen());
-    } else if (this.nurAb) {
+    } else if (this.nurAb !== null) {
         this.meldungEl.textContent = "Nur dieser AB wird angezeigt. ";
         this.knopf(this.meldungEl, "Alle ABs anzeigen", () => this.allesZeigen());
     }
@@ -280,10 +285,69 @@ zelle: function (tr, wert, klasse, titel) {
     return td;
 },
 
-statusZelle: function (tr, w) {
+/* Status als Knopf: Teil antippen = Vorhanden = Soll (R-M2), AB/BG = alles ✓ (R-M3). */
+statusZelle: function (tr, w, klick, titel) {
 
     const td = this.el(tr, "td");
-    this.el(td, "span", "kom-statusmarke " + this.statusKlasse(w), w.status);
+    if (!klick) {
+        this.el(td, "span", "kom-statusmarke " + this.statusKlasse(w), w.status);
+        return;
+    }
+    const b = this.el(td, "button", "kom-statusmarke kom-statusknopf " + this.statusKlasse(w), w.status);
+    b.type = "button";
+    b.title = titel;
+    b.onclick = klick;
+},
+
+/* Lagerort an AB oder BG (R-L1, R-L4): Auswahl statt Tippen. Teile haben
+   keine eigene Auswahl, sie bekommen den Platz automatisch. */
+platzZelle: function (tr, ab, bg) {
+
+    const o = bg ? bg.o : ab.o;
+    const wert = this.text(o.lagerort);
+    const aktiv = this.platzGueltig(wert) ? this.platzNorm(wert) : wert;
+    const td = this.el(tr, "td", "kom-mitte");
+    const sel = this.el(td, "select", "kom-platzwahl");
+    sel.title = "Lagerort " + this.text(bg ? bg.o.name : ab.o.ab_anzeige) + " (gilt für alles darunter)";
+
+    const option = (parent, w, text) => { const x = this.el(parent, "option", "", text); x.value = w; return x; };
+
+    /* Erst nur der aktuelle Platz; die ganze Liste beim ersten Antippen
+       (spart bei vielen ABs tausende Elemente). */
+    option(sel, aktiv, aktiv || "–");
+    const fuellen = () => {
+        if (sel.options.length > 1) return;
+        sel.replaceChildren();
+        option(sel, "", "–");
+        ["L", "R"].forEach(seite => {
+            const gruppe = this.el(sel, "optgroup");
+            gruppe.label = seite === "L" ? "Links" : "Rechts";
+            [1, 2, 3, 4, 5, 6].forEach(n => option(gruppe, seite + n, seite + n + (seite + n === "R3" ? " · Sperrlager" : "")));
+        });
+        if (aktiv && this.regalPlaetze.indexOf(aktiv) < 0) option(sel, aktiv, aktiv);
+        option(sel, "__frei__", "Anderer Platz …");
+        sel.value = aktiv;
+    };
+    sel.onmousedown = fuellen;
+    sel.onfocus = fuellen;
+    sel.ontouchstart = fuellen;
+
+    sel.onchange = () => {
+        let neu = sel.value;
+        sel.value = aktiv;
+        if (neu === "__frei__") {
+            neu = this.text(window.prompt("Anderer Platz (kein Regalfach), z. B. „Kiste 4“:", ""));
+            if (!neu) return;
+            const p = this.platzEingabe(neu);
+            if (p && !this.platzGueltig(p) && !window.confirm("„" + p + "“ ist kein Regalplatz (L1–L6, R1–R6). Trotzdem eintragen? " +
+                "Er steht dann im Regal unter „Sonstiges“.")) return;
+        }
+        const name = bg ? this.text(ab.o.ab_anzeige) + "_BG" + this.text(bg.o.kurz) : this.text(ab.o.ab_anzeige);
+        this.abAendern(ab, async () => {
+            const p = bg ? await this.lagerortBg(ab, bg, neu, false) : await this.lagerortAb(ab, neu);
+            return name + ": " + (p ? "Platz " + p : "kein Platz mehr") + ".";
+        });
+    };
 },
 
 balkenZelle: function (tr, w) {
@@ -339,15 +403,19 @@ karteZeichnen: function (karte, a) {
     const neu = () => this.karteZeichnen(karte, a);
     this.klappZellen(tr, a.o.ab_anzeige, a.offen,
         hatUnter ? () => { a.offen = !a.offen; neu(); } : null,
-        () => { this.nurAb = a; this.anzeigen(); });   /* Doppelklick: nur dieser AB */
+        () => { this.nurAb = a.o._id; this.anzeigen(); });   /* Doppelklick: nur dieser AB */
+
+    /* Rechtsklick auf den AB oder eine seiner Zeilen: AB-Menü */
+    karte.oncontextmenu = e => { e.preventDefault(); this.abMenue(a); };
 
     const kunde = this.text(a.o.kunde);
     this.zelle(tr, this.text(a.o.verkaufsartikel) + (kunde ? " · " + kunde : ""), "", a.o.verkaufsartikel);
     this.zelle(tr, "");
     this.zelle(tr, "");
     this.zelle(tr, "", "kom-zahl");
-    this.zelle(tr, a.o.lagerort, "kom-mitte");
-    this.statusZelle(tr, a.w);
+    this.platzZelle(tr, a, null);
+    this.statusZelle(tr, a.w, a.w.anzTeile ? () => this.allesFragen(a, a, "AB " + this.text(a.o.ab_anzeige)) : null,
+        "Antippen: alle Teile auf Soll setzen (bei Komplett: auf 0)");
     this.zelle(tr, a.w.fortschritt);
     this.balkenZelle(tr, a.w);
     this.zelle(tr, this.datumText(a.w.eingelagert));
@@ -362,7 +430,7 @@ karteZeichnen: function (karte, a) {
 
     if (!a.offen) return;
 
-    a.ohne.forEach(t => { if (t.zeigen) this.teilZeile(kopf, t); });
+    a.ohne.forEach(t => { if (t.zeigen) this.teilZeile(kopf, t, a); });
 
     a.bgs.forEach(b => {
         if (!b.zeigen) return;
@@ -374,19 +442,20 @@ karteZeichnen: function (karte, a) {
         this.zelle(btr, b.o.lk_nummer, "kom-zahl");
         this.zelle(btr, this.sollText(b.o), "kom-zahl");
         this.zelle(btr, "", "kom-zahl");
-        this.zelle(btr, b.o.lagerort, "kom-mitte");
-        this.statusZelle(btr, b.w);
+        this.platzZelle(btr, a, b);
+        this.statusZelle(btr, b.w, b.teile.length ? () => this.allesFragen(a, b, "Baugruppe " + this.text(b.o.name)) : null,
+            "Antippen: alle Teile auf Soll setzen (bei Komplett: auf 0)");
         this.zelle(btr, b.w.fortschritt);
         this.balkenZelle(btr, b.w);
         this.zelle(btr, this.datumText(b.w.eingelagert));
         this.zelle(btr, this.datumText(b.w.komplett));
         this.mehrZellen(btr, b.o);
 
-        if (b.offen) b.teile.forEach(t => { if (t.zeigen) this.teilZeile(block, t); });
+        if (b.offen) b.teile.forEach(t => { if (t.zeigen) this.teilZeile(block, t, a); });
     });
 },
 
-teilZeile: function (parent, t) {
+teilZeile: function (parent, t, a) {
 
     const tr = this.el(parent, "tr", "kom-teil " + this.statusKlasse(t.w));
     const o = t.o;
@@ -397,12 +466,175 @@ teilZeile: function (parent, t) {
     this.zelle(tr, o.benennung, "", o.benennung);
     this.zelle(tr, o.lk_nummer, "kom-zahl");
     this.zelle(tr, this.sollText(o), "kom-zahl");
-    this.zelle(tr, vh, "kom-zahl");
+    this.vorhandenZelle(tr, t, a, vh);
     this.zelle(tr, this.text(o.lagerort) || "–", "kom-mitte kom-leise");
-    this.statusZelle(tr, t.w);
+    const hatSoll = !(o.menge_gesamt === null || o.menge_gesamt === undefined || o.menge_gesamt === "");
+    this.statusZelle(tr, t.w, hatSoll ? () => this.abAendern(a, () => this.teilUmschalten(t)) : null,
+        "Antippen: Vorhanden = Soll (bei Komplett: 0)");
     this.zelle(tr, t.w.fortschritt);
     this.balkenZelle(tr, t.w);
     this.zelle(tr, this.datumText(t.w.eingelagert));
     this.zelle(tr, this.datumText(t.w.komplett));
     this.mehrZellen(tr, o);
+},
+
+/* Vorhanden eintragen (R-M1): gespeichert wird beim Verlassen oder mit Enter.
+   Doppelklick: Soll eintragen, noch einmal: 0 (Ben, 14.10.2026). */
+vorhandenZelle: function (tr, t, a, vh) {
+
+    const td = this.el(tr, "td", "kom-zahl");
+    const f = this.el(td, "input", "kom-eingabe kom-vh");
+    f.type = "text";
+    f.inputMode = "numeric";
+    f.autocomplete = "off";
+    f.value = vh;
+    f.setAttribute("aria-label", "Vorhanden " + this.text(t.o.zeichnungsnummer));
+
+    const speichern = () => {
+        if (this.text(f.value) === vh) return;
+        const e = this.mengeEingabe(f.value, true);
+        if (e.fehler) {
+            f.classList.add("kom-ungueltig");
+            f.title = e.fehler;
+            this.statusZeigen(e.fehler, "fehler");
+            return;
+        }
+        f.classList.remove("kom-ungueltig");
+        this.abAendern(a, () => this.vorhandenSetzen(t, e.milli));
+    };
+
+    f.onchange = speichern;
+    f.onkeydown = e => { if (e.key === "Enter") { e.preventDefault(); f.blur(); } };
+    f.ondblclick = () => {
+        const soll = this.sollText(t.o);
+        if (soll === "" || this.mengeMilli(t.o.menge_gesamt) % 1000 !== 0) return;
+        f.value = this.text(f.value) === soll ? "0" : soll;
+        speichern();
+    };
+},
+
+/* ---------------------------------------------------------------------------
+   Ändern: Aufgabe ausführen, AB neu laden, Karte und Zähler neu zeichnen
+   --------------------------------------------------------------------------- */
+
+/* aufgabe liefert optional eine Meldung (Hinweis oder Bestätigung). */
+abAendern: async function (ab, aufgabe) {
+
+    const meldung = await this.sicher(aufgabe);
+    await this.abNeuLaden(ab);
+    if (meldung) this.statusZeigen(meldung, meldung.indexOf("Achtung") === 0 ? "fehler" : "");
+    else if (meldung === "") this.statusZeigen("Gespeichert.");   /* null = Fehler, steht schon da */
+},
+
+/* Nur diesen AB neu lesen; Klappen und Treffer bleiben, wie sie waren. */
+abNeuLaden: async function (ab) {
+
+    const neu = await this.sicher(() => this.bestandLaden([ab.o._id]));
+    const i = this.abs.indexOf(ab);
+    if (!neu || i < 0) return;
+
+    if (neu.length === 0) {
+        this.abs.splice(i, 1);   /* nicht mehr in der Bestandsliste */
+        this.zeichnen();
+        return;
+    }
+
+    const n = neu[0];
+    const alt = {};
+    this.bestandZeilen(ab).forEach(z => { alt[z.art + String(z.o._id)] = z; });
+    this.bestandZeilen(n).forEach(z => {
+        const vorher = alt[z.art + String(z.o._id)];
+        if (vorher) { z.zeigen = vorher.zeigen; if ("offen" in vorher) z.offen = vorher.offen; }
+    });
+    this.abs[i] = n;
+
+    this.zaehlerZeichnen();
+    const karte = this.kartenJeAb[String(n.o._id)];
+    if (!karte) return;
+
+    /* Fokus behalten: wer mit Tab zum nächsten Feld gesprungen ist, tippt dort weiter. */
+    const fokus = document.activeElement;
+    const label = fokus && karte.contains(fokus) ? fokus.getAttribute("aria-label") : null;
+    this.karteZeichnen(karte, n);
+    if (label) {
+        const felder = karte.getElementsByTagName("input");
+        for (let k = 0; k < felder.length; k++) {
+            if (felder[k].getAttribute("aria-label") === label) { felder[k].focus(); felder[k].select(); break; }
+        }
+    }
+},
+
+/* R-M3: alles ✓ an AB oder BG, immer mit Rückfrage (am Handy tippt man leicht daneben). */
+allesFragen: function (ab, knoten, name) {
+
+    const frage = knoten.w.status === "Komplett"
+        ? name + " ist komplett.\n\nAlle Mengen darunter auf 0 setzen (Status Offen)?"
+        : "Alle Teile von " + name + " auf Soll setzen?\n(Teile mit größerer Menge behalten ihre Menge.)";
+    if (!window.confirm(frage)) return;
+
+    this.abAendern(ab, async () => {
+        const n = await this.allesSetzen(knoten);
+        return name + ": " + n + (n === 1 ? " Teil" : " Teile") + " eingetragen.";
+    });
+},
+
+/* Rechtsklick auf einen AB */
+abMenue: function (ab) {
+
+    this.menueZeigen(this.text(ab.o.ab_anzeige), [
+        ["AB bearbeiten (Soll ändern)", () => this.sollDialog(ab)],
+        ["Nur diesen AB anzeigen", () => { this.nurAb = ab.o._id; this.anzeigen(); }]
+    ]);
+},
+
+/* AB bearbeiten: Soll ("Menge Gesamt") der Teile ändern. Absichtlich nur
+   über das AB-Menü. Fehler stehen am Feld; gespeichert wird nur ohne Fehler. */
+sollDialog: function (ab) {
+
+    const teile = this.bestandTeile(ab);
+    if (teile.length === 0) {
+        this.statusZeigen("Dieser AB hat keine Teile.");
+        return;
+    }
+
+    this.dialogZeigen("AB bearbeiten: " + this.text(ab.o.ab_anzeige), (inhalt, knoepfe) => {
+        this.el(inhalt, "p", "kom-leise", "Soll (Menge Gesamt) ändern. Zahlen ab 0, Komma erlaubt (z. B. 0,06).");
+        const tab = this.el(inhalt, "table", "kom-tabelle kom-soll-tabelle");
+        const kopf = this.el(this.el(tab, "thead"), "tr");
+        ["Baugruppe", "Zeichnungsnummer", "Benennung", "Soll"].forEach((x, i) => this.el(kopf, "th", i === 3 ? "kom-zahl" : "", x));
+        const koerper = this.el(tab, "tbody");
+
+        const felder = teile.map(t => {
+            const tr = this.el(koerper, "tr");
+            const bg = ab.bgs.find(b => b.teile.indexOf(t) > -1);
+            this.el(tr, "td", "", bg ? bg.o.name : "(ohne BG)");
+            this.el(tr, "td", "", t.o.zeichnungsnummer);
+            this.el(tr, "td", "", t.o.benennung);
+            const td = this.el(tr, "td", "kom-zahl");
+            const f = this.el(td, "input", "kom-eingabe kom-vh");
+            f.type = "text";
+            f.inputMode = "decimal";
+            f.value = this.mengeGleich(t.o.menge_gesamt, null) ? "" : this.zahlText(this.mengeMilli(t.o.menge_gesamt));
+            const fehler = this.el(td, "div", "kom-feldfehler");
+            return [t, f, fehler];
+        });
+
+        this.knopf(knoepfe, "Speichern", () => {
+            let ok = true;
+            const neu = felder.map(([t, f, fehler]) => {
+                const e = this.mengeEingabe(f.value, false);
+                fehler.textContent = e.fehler;
+                f.classList.toggle("kom-ungueltig", Boolean(e.fehler));
+                if (e.fehler) ok = false;
+                return [t, e.milli];
+            });
+            if (!ok) return;
+            this.dialogSchliessen();
+            this.abAendern(ab, async () => {
+                const n = await this.sollSetzen(neu);
+                return this.text(ab.o.ab_anzeige) + ": " + (n ? "Soll bei " + n + (n === 1 ? " Teil" : " Teilen") + " geändert." : "nichts geändert.");
+            });
+        }, "haupt");
+        this.knopf(knoepfe, "Abbrechen", () => this.dialogSchliessen(), "rot");
+    });
 },

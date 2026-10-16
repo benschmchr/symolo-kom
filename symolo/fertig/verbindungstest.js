@@ -732,8 +732,12 @@ rohSetzen: function (name, roh, werte) {
 
 /* DER EINZIGE SCHREIBPFAD (Skill, Abschnitt 8).
    art: "anlegen" oder "aendern". stand: geaendert_am, wie es die Ansicht
-   gelesen hat (zum Erkennen, ob inzwischen jemand anderes geändert hat). */
-schreiben: async function (art, name, id, werte, stand) {
+   gelesen hat (zum Erkennen, ob inzwischen jemand anderes geändert hat).
+   werte: { feld: wert } oder beim Ändern eine Funktion (frisch) => werte,
+   die mit dem frisch geholten Eintrag rechnet (z. B. Daten nach R-T1).
+   optionen.trotzdem: bei fremder Änderung trotzdem speichern; das
+   Ergebnis hat dann _inzwischen = true (für einen Hinweis). */
+schreiben: async function (art, name, id, werte, stand, optionen) {
 
     if (!this.schreibenErlaubt()) {
         throw new Error("Speichern ist noch nicht freigegeben. Die Tabellen werden noch geprüft.");
@@ -767,20 +771,28 @@ schreiben: async function (art, name, id, werte, stand) {
         );
         if (!roh) throw new Error("Der Eintrag ist nicht mehr da. Bitte neu laden.");
 
+        let inzwischen = false;
         if (stand !== undefined) {
             const jetzt = this.text(this.field(roh, this.tabellen._standard.geaendert_am));
-            if (jetzt !== this.text(stand)) {
+            inzwischen = jetzt !== this.text(stand);
+            if (inzwischen && !(optionen && optionen.trotzdem)) {
                 throw new Error("Jemand anderes hat den Eintrag inzwischen geändert. Bitte neu laden.");
             }
         }
 
-        this.rohSetzen(name, roh, werte);
+        const frisch = this.zeileLesen(name, roh);
+        this.rohSetzen(name, roh, typeof werte === "function" ? werte(frisch) : werte);
 
         const neu = this.antwortObjekt(
             await this.anfrage("dsf.dbo.UpdateObjectJson", [tabelle, JSON.stringify(roh)])
         );
 
-        return this.zeileLesen(name, neu || roh);
+        /* OFFEN (Symolo): Was liefert UpdateObjectJson zurück? Ist es kein
+           Objekt, gilt das gesendete. */
+        const ergebnis = this.zeileLesen(name, neu && typeof neu === "object" ? neu : roh);
+        ergebnis._inzwischen = inzwischen;
+        ergebnis._vorher = frisch;
+        return ergebnis;
     }
 
     throw new Error("Unbekannte Schreibart: " + art);
@@ -791,10 +803,29 @@ datenAnlegen: async function (name, werte) {
     return this.schreiben("anlegen", name, null, werte);
 },
 
-/* zeile = Objekt aus datenLesen (enthält _id und geaendert_am). */
-datenAendern: async function (name, zeile, werte) {
+/* zeile = Objekt aus datenLesen (enthält _id und geaendert_am).
+   optionen.ohnePruefung: Folgeänderungen (z. B. der Lagerort, den alle
+   Teile eines AB erben) prüfen nicht, ob jemand anderes geändert hat. */
+datenAendern: async function (name, zeile, werte, optionen) {
 
-    return this.schreiben("aendern", name, zeile._id, werte, zeile.geaendert_am);
+    const o = optionen || {};
+    return this.schreiben("aendern", name, zeile._id, werte, o.ohnePruefung ? undefined : zeile.geaendert_am, o);
+},
+
+/* Mehrere Aufgaben, je 8 gleichzeitig (nicht alle auf einmal an Symolo). */
+jeAcht: async function (liste, aufgabe) {
+
+    for (let i = 0; i < liste.length; i += 8) {
+        await Promise.all(liste.slice(i, i + 8).map(x => aufgabe(x)));
+    }
+},
+
+/* Viele Einträge ändern. aufgaben: [{ name, zeile, werte }].
+   Folgeänderungen ohne Prüfung auf fremde Änderungen.
+   OFFEN (Symolo): Gibt es ein Sammel-Update? Bis dahin einzeln. */
+datenAendernViele: async function (aufgaben) {
+
+    await this.jeAcht(aufgaben, a => this.datenAendern(a.name, a.zeile, a.werte, { ohnePruefung: true }));
 },
 
 /* Archivieren statt löschen (Ben, 16.10.2026).
@@ -940,6 +971,74 @@ statusKlasse: function (w) {
 },
 
 
+/* ---------------------------------------------------------------------------
+   Eingaben prüfen (R-M1, R-M4) und Daten stempeln (R-T1)
+   --------------------------------------------------------------------------- */
+
+mengeMeldungen: {
+    ganz: "Bitte eine ganze Zahl eintragen (0 oder mehr).",
+    zahl: "Bitte eine Zahl ab 0 eintragen.",
+    punkt: "Bitte ohne Punkt eintragen (1000 statt 1.000).",
+    gross: "Bitte eine Zahl bis 999.999.999 eintragen."
+},
+
+/* R-M4: "1.000" oder "1,000" kann 1 oder 1000 heißen; wird nicht geraten, sondern abgelehnt. */
+punktMehrdeutig: function (text) {
+
+    return /^[1-9]\d{0,2}([.,]\d{3})+$/.test(this.text(text));
+},
+
+/* Text -> Tausendstel, mit Prüfung. Gibt { milli, fehler } zurück; leer = milli null.
+   ganz: true = nur ganze Zahlen (Vorhanden, R-M1), sonst bis 3 Nachkommastellen (Soll). */
+mengeEingabe: function (text, ganz) {
+
+    const roh = this.text(text);
+    const t = roh.replace(",", ".");
+    const falsch = { milli: null, fehler: ganz ? this.mengeMeldungen.ganz : this.mengeMeldungen.zahl };
+
+    if (t === "") return { milli: null, fehler: "" };
+    if (this.punktMehrdeutig(roh)) return { milli: null, fehler: this.mengeMeldungen.punkt };
+    if (!/^\+?(\d+\.?\d*|\.\d+)([eE][+-]?\d+)?$/.test(t)) return falsch;
+
+    const zahl = Number(t);
+    if (!Number.isFinite(zahl) || zahl < 0) return falsch;
+    if (ganz && !Number.isInteger(zahl)) return falsch;
+    if (zahl > 999999999) return { milli: null, fehler: this.mengeMeldungen.gross };
+
+    return { milli: Math.round(zahl * 1000), fehler: "" };
+},
+
+/* Tausendstel -> Wert zum Speichern (Zahl), leer bleibt leer.
+   OFFEN (Symolo): Feldtyp der Mengen (Zahl mit 3 Nachkommastellen?). */
+mengeWert: function (milli) {
+
+    return milli === null || milli === undefined ? null : milli / 1000;
+},
+
+/* Heute als Datum im Format, das Symolo liefert ("2026-10-16T00:00:00.0000000Z").
+   OFFEN (Symolo): Erwartet Symolo beim Schreiben dasselbe Format? */
+heuteText: function () {
+
+    const d = new Date();
+    return d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0") + "-" +
+        String(d.getDate()).padStart(2, "0") + "T00:00:00.0000000Z";
+},
+
+/* R-T1: neue Daten (Eingelagert, Komplett) eines Teils nach einer Änderung
+   von Vorhanden oder Soll. Gibt [eingelagert, komplett] zurück (null = leer). */
+datenStempeln: function (vorhanden, soll, eingelagert, komplett, heute) {
+
+    const v = this.mengeMilli(vorhanden);
+    const s = this.mengeMilli(soll);
+
+    if (v <= 0) return [null, null];   /* Tippfehler korrigiert: beide leer */
+
+    const ein = this.text(eingelagert) || heute;
+    const fertig = v >= s ? (this.text(komplett) || heute) : null;
+    return [ein, fertig];
+},
+
+
 /* ===========================================================================
    BESTAND: ABs mit Baugruppen und Teilen laden, Baum bauen, suchen,
    filtern, sortieren (R-A1 bis R-A4, R-S9)
@@ -991,10 +1090,13 @@ idVergleich: function (a, b) {
 },
 
 /* Alle ABs der Bestandsliste (nicht archiviert) mit BGs und Teilen.
-   Drei Abfragen; BGs und Teile in Stücken über die AB-IDs. */
-bestandLaden: async function () {
+   Drei Abfragen; BGs und Teile in Stücken über die AB-IDs.
+   abIds: nur diese ABs neu laden (nach einer Änderung). */
+bestandLaden: async function (abIds) {
 
-    const auftraege = await this.datenLesen("auftrag", { wo: { bereich: "bestand" }, aufloesen: false });
+    const wo = { bereich: "bestand" };
+    if (abIds) wo.id = abIds;
+    const auftraege = await this.datenLesen("auftrag", { wo: wo, aufloesen: false });
 
     auftraege.sort((a, b) =>
         (this.mengeMilli(a.reihenfolge) - this.mengeMilli(b.reihenfolge)) || this.idVergleich(a._id, b._id));
@@ -1166,6 +1268,314 @@ bestandFiltern: function (abs, anzeige, status) {
 
 
 /* ===========================================================================
+   EINTRAGEN: Vorhanden, Vorhanden = Soll, alles ✓, Soll ändern
+   (R-M1 bis R-M4, R-T1). Nachbau von bestand/views.py.
+   Alles läuft über datenAendern (der einzige Schreibpfad). Danach lädt die
+   Ansicht den AB neu; gerechnet wird beim Anzeigen (45_rechnen.js).
+
+   Das Änderungsprotokoll kommt in Phase 4 dazu.
+   =========================================================================== */
+
+/* Ist der gespeicherte Wert gleich der Eingabe (Tausendstel oder null)? */
+mengeGleich: function (wert, milli) {
+
+    const leer = wert === null || wert === undefined || wert === "";
+    if (leer || milli === null) return leer && milli === null;
+    return this.mengeMilli(wert) === milli;
+},
+
+/* Vorhanden eines Teils setzen und R-T1 anwenden. Die letzte Eingabe gilt;
+   hat jemand anderes inzwischen einen anderen Wert gespeichert, gibt es
+   einen Hinweis (ohne Namen, Betriebsrat/W7). Gibt den Hinweis zurück. */
+vorhandenSetzen: async function (teil, milli) {
+
+    const neu = await this.datenAendern("teil", teil.o, frisch => {
+        const [ein, fertig] = this.datenStempeln(this.mengeWert(milli), frisch.menge_gesamt,
+            frisch.datum_eingelagert, frisch.datum_komplett, this.heuteText());
+        return { vorhanden: this.mengeWert(milli), datum_eingelagert: ein, datum_komplett: fertig };
+    }, { trotzdem: true });
+
+    const alt = neu._vorher.vorhanden;
+    if (neu._inzwischen && !this.mengeGleich(alt, milli)) {
+        const altText = this.mengeGleich(alt, null) ? "leer" : this.zahlText(this.mengeMilli(alt));
+        return "Achtung: " + this.text(teil.o.zeichnungsnummer) + " wurde inzwischen von jemand anderem geändert (zuletzt " +
+            altText + "). Dein Wert gilt jetzt.";
+    }
+    return "";
+},
+
+/* R-M2: Status eines Teils antippen. Komplett -> 0, sonst Vorhanden = Soll. */
+teilUmschalten: async function (teil) {
+
+    const soll = teil.o.menge_gesamt;
+    if (soll === null || soll === undefined || soll === "") return "";
+
+    return this.vorhandenSetzen(teil, teil.w.code === 2 ? 0 : this.mengeMilli(soll));
+},
+
+/* R-M3: alles ✓ an AB oder BG. Nicht komplett -> alle Teile auf Soll
+   (größere Mengen bleiben); komplett -> alle auf 0. */
+allesSetzen: async function (knoten) {
+
+    const teile = knoten.art === "ab" ? this.bestandTeile(knoten) : knoten.teile;
+    const komplett = teile.length > 0 && knoten.w.status === "Komplett";
+
+    const zuSetzen = [];
+    teile.forEach(t => {
+        const soll = t.o.menge_gesamt;
+        const hatSoll = !(soll === null || soll === undefined || soll === "");
+        const v = t.o.vorhanden;
+        const leer = v === null || v === undefined || v === "";
+
+        if (komplett) zuSetzen.push([t, 0]);
+        else if (hatSoll && (leer || this.mengeMilli(v) < this.mengeMilli(soll))) zuSetzen.push([t, this.mengeMilli(soll)]);
+    });
+
+    await this.jeAcht(zuSetzen, ([t, milli]) => this.vorhandenSetzen(t, milli));
+    return zuSetzen.length;
+},
+
+/* AB bearbeiten: Soll der Teile ändern. neu: [[teil, milli|null]].
+   Nur geänderte Teile werden geschrieben; R-T1 läuft danach. */
+sollSetzen: async function (neu) {
+
+    const geaendert = neu.filter(([t, milli]) => !this.mengeGleich(t.o.menge_gesamt, milli));
+
+    await this.jeAcht(geaendert, ([t, milli]) => this.datenAendern("teil", t.o, frisch => {
+        const [ein, fertig] = this.datenStempeln(frisch.vorhanden, this.mengeWert(milli),
+            frisch.datum_eingelagert, frisch.datum_komplett, this.heuteText());
+        return { menge_gesamt: this.mengeWert(milli), menge_gesamt_text: "", datum_eingelagert: ein, datum_komplett: fertig };
+    }, { ohnePruefung: true }));
+
+    return geaendert.length;
+},
+
+
+/* ===========================================================================
+   LAGERORT UND REGAL (R-L1 bis R-L4, R-R1 bis R-R5)
+   Nachbau von bestand/lagerort.py. Abweichungen von Excel wie dort:
+   X1 ABs ohne Baugruppe erscheinen im Regal; X2 R3-Kurzformen werden "R3";
+   X3 beim Abgleich (siehe abgleichen).
+   Geschrieben wird über datenAendernViele (Folgeänderungen ohne Prüfung,
+   wie bisher). Danach lädt die Ansicht den AB neu.
+   =========================================================================== */
+
+/* R-L4: gültige Plätze, Etage 6 oben … 1 unten, links L, rechts R */
+regalEtagen: [6, 5, 4, 3, 2, 1],
+regalPlaetze: ["L6", "R6", "L5", "R5", "L4", "R4", "L3", "R3", "L2", "R2", "L1", "R1"],
+regalR3Name: "Sperrlager / Teile zum Vermessen",
+regalR3Aliase: ["R3S", "R3-S", "R3V", "R3-V", "SPERRLAGER", "SPERR", "VERMESSEN"],
+
+/* Vergleichsform: Großbuchstaben, ohne Leerzeichen. */
+platzKern: function (text) {
+
+    return this.text(text).split(/\s+/).join("").toUpperCase();
+},
+
+/* Gültiger Platz oder R3-Kurzform -> "L2", "R3"; sonst der Text groß. */
+platzNorm: function (text) {
+
+    const k = this.platzKern(text);
+    if (this.regalR3Aliase.indexOf(k) > -1) return "R3";
+    if (this.regalPlaetze.indexOf(k) > -1) return k;
+    return this.text(text).split(/\s+/).filter(Boolean).join(" ").toUpperCase();
+},
+
+platzGueltig: function (text) {
+
+    return this.regalPlaetze.indexOf(this.platzNorm(text)) > -1;
+},
+
+/* Was gespeichert wird: leer (bei "", "0", "-"), ein gültiger Platz
+   ("l 2" -> "L2", "SPERR" -> "R3") oder der freie Text. Zu lang -> Fehler. */
+platzEingabe: function (text) {
+
+    const t = this.text(text).split(/\s+/).filter(Boolean).join(" ");
+    if (t === "" || t === "0" || t === "-") return "";
+    if (t.length > 40) throw new Error("Der Lagerort ist zu lang (höchstens 40 Zeichen).");
+    return this.platzGueltig(t) ? this.platzNorm(t) : t;
+},
+
+/* Platz zum Vergleichen: normiert, leer bleibt leer. */
+platzVon: function (o) {
+
+    return this.text(o.lagerort) ? this.platzNorm(o.lagerort) : "";
+},
+
+/* Mehrere Knoten ändern und die Werte auch im Baum eintragen. */
+knotenSetzen: async function (aufgaben) {
+
+    await this.datenAendernViele(aufgaben.map(a => ({ name: a.name, zeile: a.knoten.o, werte: a.werte })));
+    aufgaben.forEach(a => Object.assign(a.knoten.o, a.werte));
+},
+
+/* Lagerort an einem Knoten und an allen Teilen darunter (nur wo er anders ist). */
+platzAufgaben: function (name, knoten, teile, p) {
+
+    const liste = [];
+    if (this.text(knoten.o.lagerort) !== p) liste.push({ name: name, knoten: knoten, werte: { lagerort: p } });
+    teile.forEach(t => {
+        if (this.text(t.o.lagerort) !== p) liste.push({ name: "teil", knoten: t, werte: { lagerort: p } });
+    });
+    return liste;
+},
+
+/* R-L2: Platz am AB -> alle BGs und alle Teile bekommen ihn; leer leert alle.
+   Ein aufgesplitteter AB bleibt aufgesplittet. Gibt den Platz zurück. */
+lagerortAb: async function (ab, text) {
+
+    const p = this.platzEingabe(text);
+    let aufgaben = this.platzAufgaben("auftrag", ab, ab.ohne, p);
+    ab.bgs.forEach(b => { aufgaben = aufgaben.concat(this.platzAufgaben("baugruppe", b, b.teile, p)); });
+
+    await this.knotenSetzen(aufgaben);
+    return p;
+},
+
+/* R-L2: Platz an der BG -> alle Teile der BG; danach R-L3 (außer der AB ist
+   aufgesplittet). imRegal: eine BG einzeln verschieben splittet den AB auf. */
+lagerortBg: async function (ab, bg, text, imRegal) {
+
+    const p = this.platzEingabe(text);
+
+    if (imRegal && ab.bgs.length > 1 && !this.istJa(ab.o.regal_geteilt)) await this.regalTeilen(ab);
+
+    await this.knotenSetzen(this.platzAufgaben("baugruppe", bg, bg.teile, p));
+
+    if (!this.istJa(ab.o.regal_geteilt)) await this.abgleichen(ab);
+    return p;
+},
+
+/* R-L3 (ABAbgleichen):
+   - alle BGs haben denselben Platz, keine ist leer -> AB bekommt ihn;
+   - ein Platz, Rest leer, AB leer oder gleich -> nichts ändern;
+   - sonst (verschiedene Plätze, oder X3: ein Platz, Rest leer, AB hat einen
+     anderen) -> BGs ohne Platz bekommen den bisherigen AB-Platz, der AB wird leer.
+   Teile ohne BG bleiben wie in Excel unberührt. */
+abgleichen: async function (ab) {
+
+    const belegt = ab.bgs.filter(b => this.text(b.o.lagerort)).map(b => this.platzVon(b.o));
+    const leere = ab.bgs.filter(b => !this.text(b.o.lagerort));
+    if (belegt.length === 0) return false;
+
+    const erster = belegt[0];
+    const verschieden = belegt.some(p => p !== erster);
+    const alt = this.platzVon(ab.o);
+
+    if (!verschieden && leere.length === 0) {
+        if (alt === erster) return false;
+        await this.knotenSetzen([{ name: "auftrag", knoten: ab, werte: { lagerort: erster } }]);
+        return true;
+    }
+    if (!verschieden && (alt === "" || alt === erster)) return false;
+    if (!alt) return false;
+
+    const abPlatz = this.text(ab.o.lagerort);
+    let aufgaben = [];
+    leere.forEach(b => { aufgaben = aufgaben.concat(this.platzAufgaben("baugruppe", b, b.teile, abPlatz)); });
+    aufgaben.push({ name: "auftrag", knoten: ab, werte: { lagerort: "" } });
+    await this.knotenSetzen(aufgaben);
+    return true;
+},
+
+/* Regal: AB in seine Baugruppen aufsplitten (mindestens zwei, Ben 15.10.).
+   Jede BG ohne eigenen Platz bekommt den bisherigen AB-Platz ausdrücklich. */
+regalTeilen: async function (ab) {
+
+    if (ab.bgs.length < 2) throw new Error("Dieser AB hat keine Baugruppen zum Aufsplitten (mindestens zwei nötig).");
+
+    const p = this.platzVon(ab.o);
+    let aufgaben = [];
+    if (p) {
+        ab.bgs.forEach(b => {
+            if (!this.text(b.o.lagerort)) aufgaben = aufgaben.concat(this.platzAufgaben("baugruppe", b, b.teile, p));
+        });
+    }
+    aufgaben.push({ name: "auftrag", knoten: ab, werte: { regal_geteilt: true } });
+    await this.knotenSetzen(aufgaben);
+},
+
+/* Liegen alle Baugruppen (mindestens zwei) am selben Platz? (Rückfrage im Regal) */
+alleBgsGleich: function (ab) {
+
+    const plaetze = new Set(ab.bgs.map(b => this.platzVon(b.o)));
+    return ab.bgs.length > 1 && plaetze.size === 1;
+},
+
+/* Regal: der ganze AB kommt dorthin, wo die gewählte Baugruppe liegt
+   (leer = nicht einsortiert), als ein Eintrag. */
+regalZusammenfuehren: async function (ab, bg) {
+
+    let p = this.platzVon(bg.o);
+    if (!p) p = this.istJa(ab.o.regal_geteilt) || !this.text(ab.o.lagerort) ? "" : this.platzVon(ab.o);
+
+    await this.lagerortAb(ab, p);
+    await this.knotenSetzen([{ name: "auftrag", knoten: ab, werte: { regal_geteilt: false } }]);
+    return p;
+},
+
+/* Regal (R-R1 bis R-R4): Einträge je Platz und die Listen darunter.
+   Je AB: Platz einer BG = eigener Platz, sonst der des AB. Alle BGs am selben
+   Platz und keine ohne -> ein Eintrag "AB…" mit AB-Status, sonst je BG und
+   Platz ein Eintrag "AB…_BGnnn". X1: AB ohne BG steht mit eigenem Platz da. */
+regalEintraege: function (abs) {
+
+    const einsortiert = [], nicht = [];
+    const eintrag = (name, platz, w, ab, bg) => ({ name: name, platz: platz, w: w, ab: ab, bg: bg || null });
+
+    abs.forEach(a => {
+        const abPlatz = this.platzVon(a.o);
+        const name = this.text(a.o.ab_anzeige);
+        const geteilt = this.istJa(a.o.regal_geteilt) && a.bgs.length > 0;
+
+        if (a.bgs.length === 0) {
+            (abPlatz ? einsortiert : nicht).push(eintrag(name, abPlatz, a.w, a));
+            return;
+        }
+
+        const jeBg = a.bgs.map(b => [b, this.platzVon(b.o) || (geteilt ? "" : abPlatz)]);
+        const mit = new Set(jeBg.filter(([, p]) => p).map(([, p]) => p));
+        const ohne = jeBg.filter(([, p]) => !p);
+
+        if (mit.size === 0 && !geteilt) {
+            nicht.push(eintrag(name, "", a.w, a));
+            return;
+        }
+        if (mit.size === 1 && ohne.length === 0 && !geteilt) {
+            einsortiert.push(eintrag(name, [...mit][0], a.w, a));
+            return;
+        }
+
+        const gesehen = new Set();
+        jeBg.forEach(([b, p]) => {
+            const bgName = name + "_BG" + this.text(b.o.kurz);
+            if (p && !gesehen.has(bgName + "|" + p)) {
+                gesehen.add(bgName + "|" + p);
+                einsortiert.push(eintrag(bgName, p, b.w, a, b));
+            } else if (!p) {
+                nicht.push(eintrag(bgName, "", b.w, a, b));
+            }
+        });
+    });
+
+    const sortiert = l => l.slice().sort((x, y) => {
+        const a = x.name.toLowerCase(), b = y.name.toLowerCase();
+        return a < b ? -1 : (a > b ? 1 : (x.platz < y.platz ? -1 : (x.platz > y.platz ? 1 : 0)));
+    });
+    const eins = sortiert(einsortiert);
+    const faecher = {};
+    this.regalPlaetze.forEach(p => { faecher[p] = eins.filter(e => e.platz === p); });
+
+    return {
+        faecher: faecher,
+        einsortiert: eins,
+        nicht: sortiert(nicht),
+        ungueltig: eins.filter(e => this.regalPlaetze.indexOf(e.platz) < 0)
+    };
+},
+
+
+/* ===========================================================================
    BENUTZER UND ROLLEN
    Vorerst OHNE Anmeldung und Rechte (Ben, 16.10.2026): Alle sehen und
    dürfen alles. Diese Stelle ist nur vorbereitet, damit Rollen später
@@ -1197,8 +1607,10 @@ darf: function (rolle) {
    Referenzen auf eigene Elemente liegen am Objekt (this.koerper usw.).
    =========================================================================== */
 
+wurzel: null,
 koerper: null,
 fuss: null,
+dialogEl: null,
 infoZeile: null,
 statusEl: null,
 statusTimer: null,
@@ -1228,6 +1640,7 @@ geruestBauen: function (parent) {
 
     /* Die Klasse der Ansicht: jede CSS-Regel hängt daran. */
     const view = this.el(parent, "div", this.ansicht.klasse);
+    this.wurzel = view;
 
     const kopf = this.el(view, "div", "kom-kopf");
     this.el(kopf, "h2", "kom-titel", this.ansicht.titel);
@@ -1324,6 +1737,48 @@ tabelleBauen: function (parent, spalten, zeilen, leerText, aktionen) {
     });
 
     return tab;
+},
+
+/* Fenster in der Mitte (Dialog), liegt in der Ansicht, damit das CSS greift.
+   bauen(inhalt, knoepfe) füllt es. Escape oder Klick daneben schließt. */
+dialogZeigen: function (titel, bauen) {
+
+    this.dialogSchliessen();
+
+    const hinter = this.el(this.wurzel, "div", "kom-dialog-hinter");
+    const box = this.el(hinter, "div", "kom-dialog");
+    box.setAttribute("role", "dialog");
+    box.setAttribute("aria-modal", "true");
+    this.el(box, "h3", "kom-dialog-titel", titel);
+    const inhalt = this.el(box, "div", "kom-dialog-inhalt");
+    const knoepfe = this.el(box, "div", "kom-dialog-knoepfe");
+
+    hinter.onclick = e => { if (e.target === hinter) this.dialogSchliessen(); };
+    hinter.onkeydown = e => { if (e.key === "Escape") this.dialogSchliessen(); };
+
+    this.dialogEl = hinter;
+    bauen(inhalt, knoepfe);
+
+    const erstes = box.getElementsByTagName("input")[0] || box.getElementsByTagName("button")[0];
+    if (erstes) erstes.focus();
+    return box;
+},
+
+dialogSchliessen: function () {
+
+    if (this.dialogEl) this.dialogEl.remove();
+    this.dialogEl = null;
+},
+
+/* Menü (Rechtsklick): Titel, Knöpfe untereinander, "Abbrechen" rot unten
+   (Ben, 15.10.2026). eintraege: [[text, aktion]] */
+menueZeigen: function (titel, eintraege) {
+
+    this.dialogZeigen(titel, (inhalt, knoepfe) => {
+        knoepfe.classList.add("kom-dialog-spalte");
+        eintraege.forEach(([text, aktion]) => this.knopf(knoepfe, text, () => { this.dialogSchliessen(); aktion(); }));
+        this.knopf(knoepfe, "Abbrechen", () => this.dialogSchliessen(), "rot");
+    });
 },
 
 
@@ -1545,9 +2000,26 @@ form_on_load: function (FORM) {
 .kom-vt .kom-status.kom-zeigen { opacity: .95; }
 .kom-vt .kom-status.kom-fehler { background: var(--brand-red); pointer-events: auto; }
 
+.kom-vt .kom-knopf-rot { background: var(--brand-red); border-color: var(--brand-red); color: var(--on-brand); }
+.kom-vt .kom-knopf-rot:hover { background: var(--red-grad-end); color: var(--on-brand); }
+.kom-vt .kom-knopf:disabled { opacity: .5; cursor: default; }
+
+/* Fenster in der Mitte (Dialog, Menü) */
+.kom-vt .kom-dialog-hinter { position: fixed; inset: 0; z-index: 30; display: flex; align-items: center;
+  justify-content: center; padding: var(--space-4); background: color-mix(in srgb, var(--ink) 35%, transparent); }
+.kom-vt .kom-dialog { width: min(560px, 100%); max-height: 90vh; overflow: auto; padding: var(--space-4);
+  border-radius: var(--radius-lg); background: var(--surface-100); color: var(--ink);
+  box-shadow: 0 8px 32px color-mix(in srgb, var(--ink) 30%, transparent); }
+.kom-vt .kom-dialog-titel { margin: 0 0 var(--space-3); text-align: center; font-size: var(--fs-h3); }
+.kom-vt .kom-dialog-inhalt { font-size: var(--fs-small); }
+.kom-vt .kom-dialog-knoepfe { display: flex; flex-wrap: wrap; justify-content: center; gap: var(--space-2);
+  margin-top: var(--space-3); }
+.kom-vt .kom-dialog-knoepfe.kom-dialog-spalte { flex-direction: column; align-items: stretch; }
+.kom-vt .kom-dialog-knoepfe .kom-knopf { min-height: 44px; }
+
 /* box-sizing an einer Stelle (Skill, Falle 5). Jede neue Box kommt hierher. */
 .kom-vt .kom-kopf, .kom-vt .kom-koerper, .kom-vt .kom-fuss, .kom-vt .kom-knopf,
-.kom-vt .kom-tabelle, .kom-vt .kom-status { box-sizing: border-box; }
+.kom-vt .kom-tabelle, .kom-vt .kom-status, .kom-vt .kom-dialog { box-sizing: border-box; }
 
 `, "KOMVTCSS");
 },
