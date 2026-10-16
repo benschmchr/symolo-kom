@@ -145,9 +145,14 @@ sqlWert: function (v) {
 
 /* optionen.wo:         { feld: wert | [werte] | null }  (alles mit "und")
    optionen.sortierung: ["feld", "-feld"]  (- = absteigend)
+   optionen.felder:     ["feld", …]  nur diese Spalten holen (plus ID, Änderungszeit
+                        und Archiv-Feld). Für große Tabellen, bei denen man nur
+                        wenige Spalten braucht (z. B. die Zeilen des Forecast).
+                        Die anderen Felder der Zeile sind dann leer (null).
    OFFEN (Symolo): Welche SQL-Sprache (das Datumsformat …0000000Z spricht
-   für SQL Server)? Wir benutzen nur: select * from … where … = / in /
-   is null … order by …  — kein limit/top, keine Verknüpfungen (join). */
+   für SQL Server)? Wir benutzen nur: select * / select spalte, spalte from … where … = / in /
+   is null … order by …  — kein limit/top, keine Verknüpfungen (join).
+   VERMUTET: Symolo versteht eine Spaltenliste statt "*". */
 sqlBauen: function (name, optionen) {
 
     const t = this.tabelleInfo(name);
@@ -155,7 +160,16 @@ sqlBauen: function (name, optionen) {
     const wo = [];
     const bedingungen = o.wo || {};
 
-    let sql = "select * from " + this.sqlName(t.tabelle);
+    let spalten = "*";
+    if (o.felder && o.felder.length) {
+        const st = this.tabellen._standard;
+        const namen = [st.id, st.geaendert_am];
+        if (t.archiv) namen.push(this.spalte(name, t.archiv));
+        o.felder.forEach(f => namen.push(this.spalte(name, f)));
+        spalten = namen.filter((n, i) => namen.indexOf(n) === i).map(n => this.sqlName(n)).join(", ");
+    }
+
+    let sql = "select " + spalten + " from " + this.sqlName(t.tabelle);
 
     for (const feld in bedingungen) {
         const sp = this.sqlName(this.spalte(name, feld));

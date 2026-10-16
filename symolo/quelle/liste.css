@@ -1,8 +1,10 @@
-/* Dashboard: Kopf mit vier Kacheln, darunter eine Karte je AB.
-   Statusfarben sind Bedeutungsfarben (grün/gelb/weiß) und bleiben. */
+/* Karten-Liste von Dashboard, Forecast und Planung: Kopf mit Kacheln, darunter eine Karte je AB.
+   Statusfarben (grün/gelb/weiß) und Ampel (rot/gelb) sind Bedeutungsfarben und bleiben.
+   Eingebunden über "css": ["liste"] in tools/symolo_bauen.py. */
 
 .ANSICHT .kom-label { margin: 0; font-size: var(--fs-label); color: var(--ink-muted); }
 .ANSICHT .kom-leise { color: var(--ink-muted); }
+.ANSICHT .kom-klein { font-size: var(--fs-label); }
 
 .ANSICHT .kom-dash-reihe { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: var(--space-3);
   margin: var(--space-2) 0 var(--space-4); }
@@ -61,6 +63,9 @@
 .ANSICHT .kom-c-proz { width: 90px; }
 .ANSICHT .kom-c-balken { width: 90px; }
 .ANSICHT .kom-c-stand { width: 120px; }
+.ANSICHT .kom-c-station { width: 100px; }
+.ANSICHT .kom-c-termin { width: 130px; }
+.ANSICHT .kom-c-planung { width: 80px; }
 
 /* AB-Zeile in Statusfarbe, Baugruppen und Teile weiß mit farbigem Status (wie Excel) */
 .ANSICHT .kom-dab td { font-weight: var(--fw-label); }
@@ -88,3 +93,27 @@
 
 .ANSICHT .kom-kachel, .ANSICHT .kom-eingabe, .ANSICHT .kom-karte, .ANSICHT .kom-dash,
 .ANSICHT .kom-balken, .ANSICHT .kom-statusmarke { box-sizing: border-box; }
+
+/* Planung: Häkchen */
+.ANSICHT .kom-haken { display: inline-flex; align-items: center; min-height: 28px; cursor: pointer; }
+.ANSICHT .kom-haken input { width: 20px; height: 20px; accent-color: var(--brand-red); cursor: pointer; }
+.ANSICHT .kom-haken input:disabled { cursor: default; opacity: .6; }
+
+/* Forecast: Ampel. AB-Zeile kräftig, Baugruppen und Teile hell in der Ampelfarbe. */
+.ANSICHT .kom-punkt { display: inline-block; width: 12px; height: 12px; margin-right: var(--space-1);
+  border: 1px solid var(--line); border-radius: 3px; vertical-align: -1px; }
+.ANSICHT .kom-punkt-rot { background: var(--ampel-rot); }
+.ANSICHT .kom-punkt-gelb { background: var(--ampel-gelb); }
+.ANSICHT .kom-ampel-rot tr.kom-dab td { background: var(--ampel-rot); color: var(--on-status); }
+.ANSICHT .kom-ampel-gelb tr.kom-dab td { background: var(--ampel-gelb); color: var(--on-status); }
+.ANSICHT .kom-ampel-rot tr.kom-dbg td, .ANSICHT .kom-ampel-rot tr.kom-dteil td { background: var(--ampel-rot-bg); }
+.ANSICHT .kom-ampel-gelb tr.kom-dbg td, .ANSICHT .kom-ampel-gelb tr.kom-dteil td { background: var(--ampel-gelb-bg); }
+.ANSICHT .kom-ampel-rot tr.kom-dab .kom-ab-text, .ANSICHT .kom-ampel-gelb tr.kom-dab .kom-ab-text { color: inherit; }
+
+/* Forecast: Kopf-Kacheln in Ampelfarbe, Erklärung */
+.ANSICHT .kom-kachel-rot { background: var(--ampel-rot); border-color: var(--ampel-rot); color: var(--on-status); }
+.ANSICHT .kom-kachel-gelb { background: var(--ampel-gelb); border-color: var(--ampel-gelb); color: var(--on-status); }
+.ANSICHT .kom-kachel-alt { background: var(--status-teilweise); border-color: var(--status-teilweise); color: var(--on-status); }
+.ANSICHT .kom-kachel-rot .kom-label, .ANSICHT .kom-kachel-gelb .kom-label, .ANSICHT .kom-kachel-alt .kom-label { color: var(--on-status); }
+.ANSICHT .kom-leise-kachel .kom-klein { color: var(--ink-muted); }
+.ANSICHT .kom-erklaerung { margin: 0 0 var(--space-3); }

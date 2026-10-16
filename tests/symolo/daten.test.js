@@ -119,3 +119,18 @@ test("Jede Spalte aus 20_tabellen.js gibt es in den Beispieldaten", () => {
         for (const sp of Object.values(v.tabellen._standard)) assert.ok(felder.includes(sp), t.tabelle + ": " + sp);
     }
 });
+
+test("Lesen mit Spaltenliste holt nur diese Spalten (und ID, Änderungszeit, Archiv-Feld)", async () => {
+    const { v } = umgebung();
+
+    const sql = v.sqlBauen("forecast_zeile", { felder: ["schluessel", "termin"], wo: { forecast: [1] } });
+    assert.equal(sql, "select id, udate, schluessel, termin from fwm.kom_forecast_zeile where forecast_id_forecast in (1)");
+    assert.equal(v.sqlBauen("planungsmarke", { felder: ["ab_schluessel"] }),
+        "select id, udate, archiviert, ab_schluessel from fwm.kom_planungsmarke");
+    assert.equal(v.sqlBauen("forecast", {}), "select * from fwm.kom_forecast");
+
+    const zeilen = await v.datenLesenIn("forecast_zeile", "forecast", [1], { felder: ["schluessel", "termin"] });
+    assert.ok(zeilen.length > 10);
+    assert.ok(zeilen.every(z => z.schluessel && z.werte === null && z.nr === null));
+    assert.throws(() => v.sqlBauen("forecast_zeile", { felder: ["gibt_es_nicht"] }), /Unbekanntes Feld/);
+});
