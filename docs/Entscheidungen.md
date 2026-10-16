@@ -193,3 +193,10 @@ Offen (werden vor ihrer Phase gefragt): W4 Morgenmail, W5 Datenübernahme, W7 Ä
 - **Regal** als eigene Ansicht wie bisher: Antippen = Platz wählen („Kein Platz“, „Abbrechen“ rot), Ziehen auf ein Fach oder „Nicht einsortiert“, Rechtsklick: aufsplitten (ab zwei Baugruppen) oder zusammenführen, Rückfrage „AB ist zusammengeführt.“. **Annahme:** „In der Bestandsliste anzeigen“ fehlt, bis klar ist, wie Symolo zwischen Formularen wechselt.
 - **Nicht in Phase 2:** Änderungsprotokoll (Phase 4), Handy-Karten.
 - **Schreiben in Symolo** bleibt gesperrt (`schreibenErlaubtInSymolo: false`); getestet wird im Nachbau.
+
+## Umbau für Symolo, Phase 3: Dashboard (16.10.2026)
+- **Ansicht `dashboard`** wie bisher: vier Kacheln (Komplett, Teilweise, Offen, Aufträge mit Gesamtfortschritt, zählen immer alle ABs), AB-Suche, Knöpfe ABs/BGs/Alles, Sortieren (absteigend ist Standard), Kunde, eine Karte je AB. Sortierung wie die Excel-Formel DASH (R-DB3), Prüffall 9.1 läuft auch hier gegen den JS-Code.
+- **Klappzustand (R-DB4):** Startzustand je Ansicht und Merken des Auf- und Zuklappens wie bisher, aber nur solange das Fenster offen ist. Dauerhaft je Benutzer geht erst mit Symolo-Benutzern und einer Tabelle (offen, siehe Anbindung).
+- **Noch nicht dabei:** Spalte „Planung“ (Phase 5), Zeilen „Befinden sich im Schweißen“ (Phase 6), Handy-Karten.
+- **Startseite entfällt:** Die Übersicht mit Kacheln und die Reiter ersetzt das Menü von Symolo; die Kacheln stehen im Dashboard. **Annahme, bitte prüfen.**
+- **Suche von überall** (R-SU) kommt mit dem Schweißen (Phase 6), weil sie dort ebenfalls sucht. Bis dahin suchen Bestandsliste und Dashboard je in ihrer eigenen Liste.

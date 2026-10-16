@@ -1,0 +1,90 @@
+/* Dashboard: Kopf mit vier Kacheln, darunter eine Karte je AB.
+   Statusfarben sind Bedeutungsfarben (grün/gelb/weiß) und bleiben. */
+
+.ANSICHT .kom-label { margin: 0; font-size: var(--fs-label); color: var(--ink-muted); }
+.ANSICHT .kom-leise { color: var(--ink-muted); }
+
+.ANSICHT .kom-dash-reihe { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: var(--space-3);
+  margin: var(--space-2) 0 var(--space-4); }
+.ANSICHT .kom-kachel { display: flex; flex-direction: column; gap: var(--space-1); padding: var(--space-3);
+  border: 1px solid var(--line); border-radius: var(--radius-lg); background: var(--surface-100); }
+.ANSICHT .kom-kachel-akzent { background: var(--brand-red); border-color: var(--brand-red); color: var(--on-brand); }
+.ANSICHT .kom-kachel-akzent .kom-label { color: var(--on-brand); }
+.ANSICHT .kom-zahl-gross { font-size: var(--fs-h2); line-height: var(--lh-h2); font-weight: var(--fw-h2); }
+.ANSICHT .kom-zahl-mittel { font-size: var(--fs-h3); line-height: var(--lh-h3); font-weight: var(--fw-h3); }
+.ANSICHT .kom-kachel-balken { display: block; height: 8px; border-radius: 4px; background: var(--line); overflow: hidden; }
+.ANSICHT .kom-kachel-balken span { display: block; height: 100%; background: var(--brand-gray); }
+.ANSICHT .kom-kachel-balken.kom-komplett span { background: var(--status-komplett); }
+.ANSICHT .kom-kachel-balken.kom-teilweise span { background: var(--status-teilweise); }
+.ANSICHT .kom-kachel-balken.kom-hell { background: color-mix(in srgb, var(--on-brand) 30%, transparent); }
+.ANSICHT .kom-kachel-balken.kom-hell span { background: var(--on-brand); }
+
+.ANSICHT .kom-leiste { display: flex; flex-wrap: wrap; align-items: flex-end; gap: var(--space-3); margin-bottom: var(--space-3); }
+.ANSICHT .kom-feld { display: flex; flex-direction: column; gap: var(--space-1); }
+.ANSICHT .kom-feldname { font-size: var(--fs-label); color: var(--ink-muted); }
+.ANSICHT .kom-suchfeld { flex: 1 1 280px; }
+.ANSICHT .kom-suchzeile { display: flex; gap: var(--space-2); }
+.ANSICHT .kom-eingabe { min-height: 36px; padding: 0 var(--space-2); border: 1px solid var(--line-strong);
+  border-radius: var(--radius-sm); background: var(--surface-100); color: var(--ink); font-family: inherit; font-size: var(--fs-small); }
+.ANSICHT .kom-suchzeile .kom-eingabe { flex: 1 1 auto; min-width: 0; }
+.ANSICHT .kom-eingabe:focus-visible { outline: 2px solid var(--focus); outline-offset: 1px; }
+.ANSICHT .kom-knopfgruppe { display: flex; gap: var(--space-1); }
+.ANSICHT .kom-knopf.kom-gewaehlt { background: var(--brand-gray); border-color: var(--brand-gray); color: var(--on-brand); }
+
+.ANSICHT .kom-hinweis { margin-bottom: var(--space-3); font-size: var(--fs-small); }
+.ANSICHT .kom-hinweis:empty { display: none; }
+.ANSICHT .kom-hinweis .kom-knopf { min-height: 28px; margin-left: var(--space-2); }
+
+/* Breite Liste scrollt waagerecht. */
+.ANSICHT .kom-liste { overflow-x: auto; }
+.ANSICHT .kom-karte { min-width: 1100px; margin-bottom: var(--space-4); background: var(--surface-100);
+  border: 1px solid var(--line); border-top: 4px solid var(--brand-gray); border-radius: var(--radius-lg); overflow: hidden;
+  content-visibility: auto; contain-intrinsic-size: auto 60px; }
+
+.ANSICHT .kom-dash { width: 100%; min-width: 1100px; table-layout: fixed; border-collapse: collapse;
+  font-size: var(--fs-small); line-height: var(--lh-small); }
+.ANSICHT .kom-dash th { padding: var(--space-1) var(--space-2); text-align: left; font-weight: var(--fw-label); color: var(--ink-muted); white-space: normal; }
+.ANSICHT .kom-dash td { padding: var(--space-1) var(--space-2); border-bottom: 1px solid var(--line);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.ANSICHT .kom-dash tbody tr:last-child td { border-bottom: none; }
+.ANSICHT .kom-dash .kom-zahl { text-align: right; font-variant-numeric: tabular-nums; }
+.ANSICHT .kom-dash .kom-mitte { text-align: center; }
+.ANSICHT .kom-kopfzeile { margin: 0; }
+
+.ANSICHT .kom-c-klapp { width: 40px; }
+.ANSICHT .kom-c-ab { width: 150px; }
+.ANSICHT .kom-c-bg { width: 220px; }
+.ANSICHT .kom-c-teil { width: 300px; }
+.ANSICHT .kom-c-kunde { width: 110px; }
+.ANSICHT .kom-c-lager { width: 80px; }
+.ANSICHT .kom-c-status { width: 108px; }
+.ANSICHT .kom-c-proz { width: 90px; }
+.ANSICHT .kom-c-balken { width: 90px; }
+.ANSICHT .kom-c-stand { width: 120px; }
+
+/* AB-Zeile in Statusfarbe, Baugruppen und Teile weiß mit farbigem Status (wie Excel) */
+.ANSICHT .kom-dab td { font-weight: var(--fw-label); }
+.ANSICHT .kom-dab.kom-komplett td { background: var(--status-komplett-bg); }
+.ANSICHT .kom-dab.kom-teilweise td { background: var(--status-teilweise-bg); }
+.ANSICHT .kom-dab.kom-offen td { background: var(--status-offen-bg); }
+.ANSICHT .kom-dbg td { background: var(--surface-100); }
+.ANSICHT .kom-dohne td { background: color-mix(in srgb, var(--brand-gray) 12%, var(--surface-100)); }
+.ANSICHT .kom-ab-nr { margin-right: var(--space-3); font-weight: var(--fw-label); }
+.ANSICHT .kom-ab-text { color: var(--ink-muted); font-weight: normal; }
+
+.ANSICHT .kom-klapp, .ANSICHT .kom-name { padding: 0; border: none; background: none; color: inherit;
+  font: inherit; cursor: pointer; text-align: left; }
+.ANSICHT .kom-klapp { width: 28px; min-height: 28px; font-size: var(--fs-body); }
+.ANSICHT .kom-name { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: var(--fw-label); }
+.ANSICHT .kom-klapp:focus-visible, .ANSICHT .kom-name:focus-visible { outline: 2px solid var(--focus); outline-offset: 1px; }
+
+.ANSICHT .kom-statusmarke { display: inline-block; padding: 0 var(--space-2); border: 1px solid var(--line-strong);
+  border-radius: var(--radius-sm); background: var(--surface-100); color: var(--ink); font-weight: var(--fw-label); }
+.ANSICHT .kom-statusmarke.kom-komplett { border-color: var(--status-komplett); }
+.ANSICHT .kom-statusmarke.kom-teilweise { border-color: var(--status-teilweise); }
+
+.ANSICHT .kom-balken { height: 8px; border-radius: 4px; background: var(--line); overflow: hidden; }
+.ANSICHT .kom-balken span { display: block; height: 100%; background: var(--brand-gray); }
+
+.ANSICHT .kom-kachel, .ANSICHT .kom-eingabe, .ANSICHT .kom-karte, .ANSICHT .kom-dash,
+.ANSICHT .kom-balken, .ANSICHT .kom-statusmarke { box-sizing: border-box; }

@@ -31,6 +31,7 @@ FERTIG = SYMOLO / "fertig"
 # klasse: Wrapper-Klasse (jede CSS-Regel beginnt damit), praefix: für IDs, css_id: für injector.css/rmcss.
 ANSICHTEN = [
     {"name": "bestandsliste", "titel": "Bestandsliste", "klasse": "kom-bl", "praefix": "komBl", "css_id": "KOMBLCSS"},
+    {"name": "dashboard", "titel": "Dashboard", "klasse": "kom-db", "praefix": "komDb", "css_id": "KOMDBCSS"},
     {"name": "regal", "titel": "Regal", "klasse": "kom-rg", "praefix": "komRg", "css_id": "KOMRGCSS"},
     {"name": "verbindungstest", "titel": "Verbindungstest", "klasse": "kom-vt", "praefix": "komVt", "css_id": "KOMVTCSS"},
 ]  # fmt: skip
