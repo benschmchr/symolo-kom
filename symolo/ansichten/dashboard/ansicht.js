@@ -6,7 +6,7 @@
    Kachel Forecast. Sortierung, Filter und Klappen rechnet 4A_dashboard.js,
    gezeichnet wird die Liste in 4J_liste.js.
 
-   Noch nicht dabei: die Zeilen "Befinden sich im Schweißen" (Phase 6).
+   Zeilen "Befinden sich im Schweißen": Baugruppen, die einzeln im Schweißen liegen (Phase 6).
 
    Die Kachel Forecast zählt die roten und gelben offenen ABs (auch die ganz
    im Schweißen, W11). Fehlt der Forecast oder lässt er sich nicht laden,
@@ -59,6 +59,7 @@ laden: async function () {
     const sw = await this.sicher(() => this.swLesen());
     this.swAbsListe = sw === null ? [] : this.swForecastAbs(this.swBloecke(sw));
 
+    this.imSwJeAb = sw === null ? {} : this.swImSchweissen(sw);
     this.alleAbs = this.fcMitSchweissen(this.abs, this.swAbsListe);
 
     if (abs !== null && marken !== null && this.fcDaten !== null && sw !== null) {

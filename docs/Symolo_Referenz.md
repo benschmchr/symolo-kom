@@ -191,7 +191,12 @@ Tabelle `fwm.stamm_prozesse` (BEKANNT), Ergebnis von `select * from fwm.stamm_pr
 | `symolo/quelle/4H_planung.js` | Planung: Häkchen setzen und entfernen, Liste, Station und Lagerort |
 | `symolo/quelle/4I_statistik.js` | Statistik: Liefertreue, Durchlaufzeit, überfällige ABs, Verspätung |
 | `symolo/quelle/4J_liste.js` | Karten-Liste von Dashboard, Forecast und Planung (Spalten je Ansicht wählbar) |
+| `symolo/quelle/4K_sw_eingaben.js` | Schweißen eintragen: Mitarbeiter, Arbeitsplatz, Termine mit Vererbung an BGs und Teile |
+| `symolo/quelle/4L_sw_vorgaenge.js` | Entnehmen aus der Bestandsliste, Archivieren, Zurückholen, Rückfragen |
+| `symolo/quelle/4M_hallenplan.js` | Arbeitsplätze: Einträge der Magnettafel, Plätze, aufsplitten, zusammenführen |
+| `symolo/quelle/4N_sw_liste.js` | Schweißen ansehen: Suche, Filter, Sortierung, Sammlungen, Zähler |
 | `symolo/quelle/liste.css` | gemeinsame Stile der Karten-Liste (eingebunden über `"css": ["liste"]` im Bauschritt) |
+| `symolo/quelle/bestand.css` | gemeinsame Stile von Bestandsliste und Schweißen (Spalten, Knöpfe, Links) |
 | `symolo/quelle/50_benutzer.js` | Platzhalter für Benutzer und Rollen (vorerst ohne) |
 | `symolo/ansichten/<bereich>/` | eine Ansicht je Bereich |
 | `symolo/fertig/<bereich>.js` | fertiges Hook-Objekt zum Einfügen in Symolo (gebaut mit `tools/symolo_bauen.py`) |
@@ -226,6 +231,10 @@ Im Code steht **OFFEN (Symolo)** an jeder ungeklärten Stelle und **VERMUTET** a
 | Datumsformat beim Schreiben | wie beim Lesen: `2026-10-16T00:00:00.0000000Z` |
 | Sammel-Update (z. B. Lagerort für alle Teile eines AB) | einzeln, je 8 gleichzeitig |
 | Gleichzeitiges Ändern | `udate` vor dem Speichern vergleichen |
+| Bereiche wechseln (Bereichsleiste oben im Fenster) | `window.KOM_BEREICH_WECHSELN(name, optionen)` setzt nur `test.html`; in Symolo meldet die Leiste „noch nicht angebunden“. **OFFEN:** Wie ein Hook-Objekt ein anderes Formular öffnet |
+| Schweißen: Felder `auftrag.bereich`, `baugruppe.archiviert`, `teil.archiviert`, `schweisszeile.zurueckgeholt`; Tabellen `arbeitsplatz`, `mitarbeiter` | Vorschlag; entnommene Originale werden ausgeblendet, nie gelöscht |
+| Entnehmen ohne Transaktion und ohne Anlegen mehrerer Zeilen auf einmal | neue Zeilen zuerst, Originale zuletzt ausblenden; bei Abbruch steht höchstens etwas doppelt |
+| Ausgeblendete Originale (entnommen, zurückgeholt) | bleiben in der Datenbank; endgültig löschen macht die IT |
 | Benutzer, Rollen, Rechte | vorerst keine |
 | Schrift, Farben, Fenstergröße, Handy | FWM-Variablen innerhalb der Ansicht, Thema light |
 | Gemeinsame Skripte je Formular, Excel-Bibliothek und deren Adresse | in Klärung (Ben testet); bis dahin jede Ansicht in sich geschlossen |

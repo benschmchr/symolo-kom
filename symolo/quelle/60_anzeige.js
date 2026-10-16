@@ -44,6 +44,7 @@ geruestBauen: function (parent) {
     const kopf = this.el(view, "div", "kom-kopf");
     this.el(kopf, "h2", "kom-titel", this.ansicht.titel);
     this.infoZeile = this.el(kopf, "div", "kom-info");
+    this.bereichsleisteBauen(view);
 
     this.koerper = this.el(view, "div", "kom-koerper");
 
@@ -55,6 +56,48 @@ geruestBauen: function (parent) {
     });
 
     return view;
+},
+
+/* Bereichsleiste wie das Hauptmenü der bisherigen App: ein Knopf je Bereich, der aktuelle ist hervorgehoben.
+   Der Verbindungstest hat keine. */
+bereichsleisteBauen: function (view) {
+
+    if (!this.einstellungen.bereichsleiste || this.ansicht.name === "verbindungstest") return;
+
+    const menue = this.el(view, "nav", "kom-menue");
+    menue.setAttribute("aria-label", "Bereiche");
+
+    this.einstellungen.bereiche.forEach(([name, titel]) => {
+        const b = this.el(menue, "button", "kom-menuepunkt" + (name === this.ansicht.name ? " kom-aktiv" : ""), titel);
+        b.type = "button";
+        if (name === this.ansicht.name) b.setAttribute("aria-current", "page");
+        b.onclick = () => this.bereichOeffnen(name);
+    });
+},
+
+/* In einen anderen Bereich wechseln. optionen.suche: dort gleich nach diesem Text suchen (z. B. die AB-Nummer).
+   Den Wechsel selbst macht window.KOM_BEREICH_WECHSELN (setzt die Testseite). OFFEN (Symolo): Wie öffnet Symolo
+   ein anderes Formular aus einem Hook heraus? Bis das geklärt ist, steht in Symolo nur ein Hinweis. */
+bereichOeffnen: function (name, optionen) {
+
+    if (name === this.ansicht.name && !(optionen && optionen.suche)) return;
+
+    const wechsler = window.KOM_BEREICH_WECHSELN;
+    if (typeof wechsler === "function") {
+        wechsler(name, optionen || {});
+        return;
+    }
+
+    const b = this.einstellungen.bereiche.find(x => x[0] === name);
+    this.statusZeigen("Der Wechsel nach „" + (b ? b[1] : name) + "“ ist in Symolo noch nicht angebunden.", "fehler");
+},
+
+/* Beim Wechsel mitgegebene Angaben (einmal lesen): { suche }. */
+startOptionen: function () {
+
+    const o = window.KOM_START_OPTIONEN || {};
+    window.KOM_START_OPTIONEN = null;
+    return o;
 },
 
 /* Zeigt, woher die Daten kommen und ob gespeichert werden darf. */
@@ -136,6 +179,30 @@ tabelleBauen: function (parent, spalten, zeilen, leerText, aktionen) {
     });
 
     return tab;
+},
+
+/* Klapp-Knopf (▾/▸) und Name als Knopf: Einfachklick klappt. */
+klappZellen: function (tr, name, offen, klappen, doppel) {
+
+    const td1 = this.el(tr, "td");
+    const td2 = this.el(tr, "td");
+    td2.title = this.text(name);
+
+    if (!klappen) {
+        td2.textContent = this.text(name);
+        return;
+    }
+
+    const pfeil = this.el(td1, "button", "kom-klapp", offen ? "▾" : "▸");
+    pfeil.type = "button";
+    pfeil.title = "Auf- oder zuklappen";
+    pfeil.setAttribute("aria-label", this.text(name) + " auf- oder zuklappen");
+    pfeil.onclick = klappen;
+
+    const nameKnopf = this.el(td2, "button", "kom-name", name);
+    nameKnopf.type = "button";
+    nameKnopf.onclick = klappen;
+    if (doppel) nameKnopf.ondblclick = doppel;
 },
 
 /* Fenster in der Mitte (Dialog), liegt in der Ansicht, damit das CSS greift.

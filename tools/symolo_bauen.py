@@ -30,13 +30,15 @@ FERTIG = SYMOLO / "fertig"
 # Je Bereich eine Ansicht (Ben, 16.10.2026: „mach wie es übersichtlicher ist“).
 # klasse: Wrapper-Klasse (jede CSS-Regel beginnt damit), praefix: für IDs, css_id: für injector.css/rmcss.
 ANSICHTEN = [
-    {"name": "bestandsliste", "titel": "Bestandsliste", "klasse": "kom-bl", "praefix": "komBl", "css_id": "KOMBLCSS"},
+    {"name": "bestandsliste", "titel": "Bestandsliste", "klasse": "kom-bl", "praefix": "komBl", "css_id": "KOMBLCSS", "css": ["bestand"]},
     {"name": "dashboard", "titel": "Dashboard", "klasse": "kom-db", "praefix": "komDb", "css_id": "KOMDBCSS", "css": ["liste"]},
     {"name": "forecast", "titel": "Forecast", "klasse": "kom-fc", "praefix": "komFc", "css_id": "KOMFCCSS", "css": ["liste"]},
     {"name": "planung", "titel": "Planung", "klasse": "kom-pl", "praefix": "komPl", "css_id": "KOMPLCSS", "css": ["liste"]},
     {"name": "statistik", "titel": "Statistik", "klasse": "kom-st", "praefix": "komSt", "css_id": "KOMSTCSS"},
     {"name": "archiv", "titel": "Archiv", "klasse": "kom-ar", "praefix": "komAr", "css_id": "KOMARCSS"},
     {"name": "protokoll", "titel": "Änderungsprotokoll", "klasse": "kom-pr", "praefix": "komPr", "css_id": "KOMPRCSS"},
+    {"name": "schweissen", "titel": "Schweißen", "klasse": "kom-sw", "praefix": "komSw", "css_id": "KOMSWCSS", "css": ["bestand"]},
+    {"name": "arbeitsplaetze", "titel": "Arbeitsplätze", "klasse": "kom-ap", "praefix": "komAp", "css_id": "KOMAPCSS"},
     {"name": "regal", "titel": "Regal", "klasse": "kom-rg", "praefix": "komRg", "css_id": "KOMRGCSS"},
     {"name": "verbindungstest", "titel": "Verbindungstest", "klasse": "kom-vt", "praefix": "komVt", "css_id": "KOMVTCSS"},
 ]  # fmt: skip

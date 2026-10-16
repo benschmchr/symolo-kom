@@ -344,11 +344,14 @@ test("R_X3 Platz in der Reihenfolge belegt: dann ans Ende", async () => {
     assert.equal(u.v.mengeMilli(nachher.o.reihenfolge), Math.max(...frei, u.v.mengeMilli(vorher.o.reihenfolge)) + 1000);
 });
 
-test("R_X3 ein AB aus dem Schweißen wird hier nicht zurückgeholt (Phase 6)", async () => {
+test("R_X3 ein AB aus dem Schweißen kommt ins Schweißen zurück (Phase 6)", async () => {
     const u = await geladen();
     const kopf = (await u.koepfe()).find(k => u.v.archivAusSchweissen(k));
-    await assert.rejects(u.v.archivWiederherstellen(kopf), /Schweißen/);
-    assert.ok(await u.kopf(kopf.ab_anzeige), "bleibt im Archiv");
+    const wohin = await u.v.archivWiederherstellen(kopf);
+    assert.equal(wohin, "schweissen");
+    assert.ok(!(await u.kopf(kopf.ab_anzeige)), "nicht mehr im Archiv");
+    const live = await u.v.swLesen();
+    assert.ok(live.some(z => u.v.text(z.ab_schluessel) === u.v.text(kopf.ab_schluessel)), "wieder im Schweißen");
 });
 
 test("Schreibsperre: in Symolo wird nichts archiviert, solange sie an ist", async () => {

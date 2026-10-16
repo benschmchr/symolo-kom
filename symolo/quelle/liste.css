@@ -117,3 +117,9 @@
 .ANSICHT .kom-kachel-rot .kom-label, .ANSICHT .kom-kachel-gelb .kom-label, .ANSICHT .kom-kachel-alt .kom-label { color: var(--on-status); }
 .ANSICHT .kom-leise-kachel .kom-klein { color: var(--ink-muted); }
 .ANSICHT .kom-erklaerung { margin: 0 0 var(--space-3); }
+
+/* Baugruppen, die einzeln im Schweißen liegen (Phase 6): rote Zeile mit Marke "Schweißen" */
+.ANSICHT .kom-dsw td { background: color-mix(in srgb, var(--brand-red) 16%, var(--surface-100)); }
+.ANSICHT .kom-statusmarke.kom-schweissen { border-color: var(--brand-red); color: var(--brand-red); }
+.ANSICHT .kom-statusknopf { cursor: pointer; font: inherit; font-weight: var(--fw-label); }
+.ANSICHT .kom-statusknopf:focus-visible { outline: 2px solid var(--focus); outline-offset: 1px; }

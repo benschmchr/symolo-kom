@@ -4,9 +4,9 @@
    Die Liste zeigt je AB eine Zeile; ein Klick öffnet seine Zeilen (die 28
    Spalten wie das Excel-Blatt). Logik und Daten: 4D_archiv.js.
 
-   Archivieren selbst geschieht in der Bestandsliste (Rechtsklick auf den AB).
-   Ein AB aus dem Schweißen lässt sich hier ansehen; zurückholen kann ihn die
-   Ansicht Schweißen (Phase 6).
+   Archivieren selbst geschieht in der Bestandsliste (Rechtsklick auf den AB)
+   bzw. im Schweißen. Wiederherstellen bringt einen AB dorthin zurück, woher
+   er kam: in die Bestandsliste oder ins Schweißen (Phase 6).
    =========================================================================== */
 
 koepfe: [],
@@ -205,12 +205,9 @@ detailZeichnen: async function (kopf) {
     if (this.text(kopf.kunde)) this.pille(this.zaehlerEl, "Kunde:", this.text(kopf.kunde));
     this.pille(this.zaehlerEl, "Zeilen:", String(zeilen.length));
 
-    const schweissen = this.archivAusSchweissen(kopf);
-    const knopf = this.knopf(kopfzeile, "Wiederherstellen …", () => this.wiederherstellenFragen(kopf, zeilen.length), "haupt");
-    if (schweissen) {
-        knopf.disabled = true;
-        knopf.title = "Dorthin holt ihn die Ansicht Schweißen zurück (kommt noch).";
-        this.el(platz, "p", "kom-leise", "Dieser AB wurde im Schweißen archiviert. Zurückholen kann ihn die Ansicht Schweißen (kommt noch).");
+    this.knopf(kopfzeile, "Wiederherstellen …", () => this.wiederherstellenFragen(kopf, zeilen.length), "haupt");
+    if (this.archivAusSchweissen(kopf)) {
+        this.el(platz, "p", "kom-leise", "Dieser AB wurde im Schweißen archiviert. Wiederherstellen bringt ihn dorthin zurück.");
     }
 
     if (this.suche) this.el(platz, "p", "kom-leise", "Zeilen mit „" + this.suche + "“ sind hervorgehoben.");
@@ -238,21 +235,23 @@ detailZeichnen: async function (kopf) {
 wiederherstellenFragen: function (kopf, n) {
 
     const name = this.text(kopf.ab_anzeige);
+    const ziel = this.archivAusSchweissen(kopf) ? "ins Schweißen" : "in die Bestandsliste";
 
     this.dialogZeigen("Wiederherstellen", (inhalt, knoepfe) => {
         const p = this.el(inhalt, "p");
         this.el(p, "b", "", name);
-        this.el(p, "span", "", " mit " + n + " Zeilen wieder in die Bestandsliste holen?");
-        this.el(inhalt, "p", "kom-leise", "Mengen, Lagerort und Daten kommen so zurück, wie sie beim Archivieren waren. " +
-            "Der Eintrag verschwindet danach aus dem Archiv.");
+        this.el(p, "span", "", " mit " + n + " Zeilen wieder " + ziel + " holen?");
+        this.el(inhalt, "p", "kom-leise", "Mengen, Lagerort und Daten kommen so zurück, wie sie beim Archivieren waren" +
+            (ziel === "ins Schweißen" ? " (auch Mitarbeiter, Arbeitsplatz und Termine)" : "") +
+            ". Der Eintrag verschwindet danach aus dem Archiv.");
 
         this.knopf(knoepfe, "Ja, wiederherstellen", async () => {
             this.dialogSchliessen();
-            const fertig = await this.sicher(async () => { await this.archivWiederherstellen(kopf); return true; });
-            if (!fertig) return;
+            const wohin = await this.sicher(() => this.archivWiederherstellen(kopf));
+            if (!wohin) return;
             this.offen = null;
             await this.laden();
-            this.statusZeigen(name + " ist wieder in der Bestandsliste.");
+            this.statusZeigen(name + (wohin === "schweissen" ? " ist wieder im Schweißen." : " ist wieder in der Bestandsliste."));
         }, "haupt");
         this.knopf(knoepfe, "Abbrechen", () => this.dialogSchliessen(), "rot");
     });

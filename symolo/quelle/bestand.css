@@ -30,15 +30,15 @@
 
 /* Breite Liste scrollt waagerecht; die Kopfzeile scrollt mit. */
 .ANSICHT .kom-liste { overflow-x: auto; }
-.ANSICHT .kom-karte { min-width: 1400px; margin-bottom: var(--space-4); background: var(--surface-100);
+.ANSICHT .kom-karte { min-width: 1510px; margin-bottom: var(--space-4); background: var(--surface-100);
   border: 1px solid var(--line); border-radius: var(--radius-lg); overflow: hidden; }
-.ANSICHT .kom-mehr-an .kom-karte { min-width: 2410px; }
+.ANSICHT .kom-mehr-an .kom-karte { min-width: 2520px; }
 /* Karten außerhalb des sichtbaren Bereichs rechnet der Browser erst beim Hinscrollen (schnell bei vielen ABs). */
 .ANSICHT .kom-karte { content-visibility: auto; contain-intrinsic-size: auto 120px; }
 
-.ANSICHT .kom-bestand { width: 100%; min-width: 1400px; table-layout: fixed; border-collapse: collapse;
+.ANSICHT .kom-bestand { width: 100%; min-width: 1510px; table-layout: fixed; border-collapse: collapse;
   font-size: var(--fs-small); line-height: var(--lh-small); }
-.ANSICHT .kom-mehr-an .kom-bestand { min-width: 2410px; }
+.ANSICHT .kom-mehr-an .kom-bestand { min-width: 2520px; }
 .ANSICHT .kom-bestand th { padding: var(--space-1) var(--space-2); text-align: left; font-weight: var(--fw-label);
   color: var(--ink-muted); white-space: normal; }
 .ANSICHT .kom-bestand td { padding: var(--space-1) var(--space-2); border-bottom: 1px solid var(--line);
@@ -63,6 +63,7 @@
 .ANSICHT .kom-c-mbg { width: 72px; }
 .ANSICHT .kom-c-idx { width: 88px; }
 .ANSICHT .kom-c-text { width: 150px; }
+.ANSICHT .kom-c-aktion { width: 110px; }
 .ANSICHT .kom-mehr { display: none; }
 .ANSICHT .kom-mehr-an td.kom-mehr, .ANSICHT .kom-mehr-an th.kom-mehr { display: table-cell; }
 .ANSICHT .kom-mehr-an col.kom-mehr { display: table-column; }
@@ -114,3 +115,13 @@
 /* Fenster "AB archivieren" */
 .ANSICHT .kom-dialog .kom-leise { margin: 0 0 var(--space-3); color: var(--ink-muted); font-size: var(--fs-small); }
 .ANSICHT .kom-dialog .kom-breit { width: 100%; text-align: left; box-sizing: border-box; }
+
+/* Entnehmen (Phase 6) und "Befinden sich im Schweißen": rote Zeile am AB */
+.ANSICHT .kom-bestand td.kom-aktion { text-align: right; overflow: visible; }
+.ANSICHT .kom-knopf-klein, .ANSICHT .kom-knopf-rot-klein { min-height: 28px; padding: 0 var(--space-2); font-size: var(--fs-label); }
+.ANSICHT .kom-knopf-rot-klein { background: var(--brand-red); border-color: var(--brand-red); color: var(--on-brand); }
+.ANSICHT .kom-knopf-rot-klein:hover { background: var(--red-grad-end); color: var(--on-brand); }
+.ANSICHT .kom-imsw td { background: color-mix(in srgb, var(--brand-red) 16%, var(--surface-100)); }
+.ANSICHT .kom-imsw td.kom-imsw-hinweis { color: var(--brand-red); font-weight: var(--fw-label); }
+.ANSICHT .kom-link { padding: 0; border: none; background: none; color: inherit; font: inherit; font-weight: inherit; cursor: pointer; text-decoration: underline; }
+.ANSICHT .kom-link:focus-visible { outline: 2px solid var(--focus); outline-offset: 1px; }

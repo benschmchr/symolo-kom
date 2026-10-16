@@ -13,6 +13,15 @@
 .ANSICHT .kom-titel { margin: 0; font-size: var(--fs-h3); line-height: var(--lh-h3); font-weight: var(--fw-h3); }
 .ANSICHT .kom-info { font-size: var(--fs-small); line-height: var(--lh-small); color: var(--ink-muted); }
 
+.ANSICHT .kom-menue { flex: 0 0 auto; display: flex; flex-wrap: wrap; gap: var(--space-1);
+  padding: var(--space-2) var(--space-4); background: var(--surface-100); border-bottom: 1px solid var(--line); }
+.ANSICHT .kom-menuepunkt { min-height: 32px; padding: 0 var(--space-3); border: 1px solid transparent;
+  border-radius: var(--radius-pill); background: none; color: var(--ink); cursor: pointer;
+  font-family: inherit; font-size: var(--fs-small); font-weight: var(--fw-label); }
+.ANSICHT .kom-menuepunkt:hover { border-color: var(--glow-red); color: var(--glow-red); }
+.ANSICHT .kom-menuepunkt.kom-aktiv { background: var(--brand-gray); border-color: var(--brand-gray); color: var(--on-brand); }
+.ANSICHT .kom-menuepunkt:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+
 .ANSICHT .kom-koerper { flex: 1 1 auto; min-height: 0; overflow: auto; padding: var(--space-4); }
 
 .ANSICHT .kom-fuss { flex: 0 0 auto; display: flex; align-items: center; gap: var(--space-2);
@@ -64,5 +73,5 @@
 .ANSICHT .kom-dialog-knoepfe .kom-knopf { min-height: 44px; }
 
 /* box-sizing an einer Stelle (Skill, Falle 5). Jede neue Box kommt hierher. */
-.ANSICHT .kom-kopf, .ANSICHT .kom-koerper, .ANSICHT .kom-fuss, .ANSICHT .kom-knopf,
+.ANSICHT .kom-menue, .ANSICHT .kom-menuepunkt, .ANSICHT .kom-kopf, .ANSICHT .kom-koerper, .ANSICHT .kom-fuss, .ANSICHT .kom-knopf,
 .ANSICHT .kom-tabelle, .ANSICHT .kom-status, .ANSICHT .kom-dialog { box-sizing: border-box; }

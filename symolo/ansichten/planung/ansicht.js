@@ -58,6 +58,7 @@ laden: async function () {
 
     const bloecke = sw === null ? [] : this.swBloecke(sw);
     this.einzelnePlaetze = this.swEinzelnePlaetze(bloecke);
+    this.imSwJeAb = sw === null ? {} : this.swImSchweissen(sw);
     this.alleAbs = this.fcMitSchweissen(this.abs, this.swForecastAbs(bloecke));
 
     if (abs !== null && sw !== null && marken !== null && fc !== null) this.statusZeigen("Geladen.");

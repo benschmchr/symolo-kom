@@ -6,8 +6,10 @@
    Eintragen (Phase 2): Vorhanden (Doppelklick = Soll, nochmal 0), Status
    antippen, alles ✓ an AB/BG, Lagerort an AB/BG, Rechtsklick auf einen AB:
    AB bearbeiten (Soll), AB archivieren. Geänderte Mengen, Plätze und das
-   Archivieren kommen ins Änderungsprotokoll. Entnehmen und "Befinden sich im
-   Schweißen" kommen in Phase 6.
+   Archivieren kommen ins Änderungsprotokoll. Entnehmen (Phase 6): bei AB und
+   Baugruppen mit Status Komplett, mit Rückfrage; die Zeilen stehen dann im
+   Schweißen. Baugruppen, die einzeln im Schweißen liegen, stehen am AB als
+   rote Zeile "Befinden sich im Schweißen".
 
    Schnell auch bei vielen ABs: Zeilen unter einem AB werden erst gebaut,
    wenn der AB aufgeklappt ist.
@@ -28,6 +30,7 @@ statusWahlEl: null,
 sortEl: null,
 anzeigeKnoepfe: {},
 kartenJeAb: {},
+imSw: {},
 
 before_set_values: async function (form, { data }) {
 
@@ -36,6 +39,8 @@ before_set_values: async function (form, { data }) {
     /* Erst das Gerüst, dann die Daten (Skill, Vertrag). */
     this.geruestBauen(parent);
     this.leisteBauen();
+    const start = this.startOptionen();
+    if (start.suche) this.suche = this.sucheEl.value = this.text(start.suche);   /* Sprung aus einem anderen Bereich */
     this.knopf(this.fuss, "Neu laden", () => this.laden());
     this.knopf(this.fuss, "AB archivieren …", () => this.abEingabeDialog());
 
@@ -48,6 +53,7 @@ laden: async function () {
     this.statusZeigen("Lade …");
 
     const abs = await this.sicher(() => this.bestandLaden());
+    await this.imSchweissenLaden();
 
     if (abs !== null) {
         this.abs = abs;
@@ -55,6 +61,13 @@ laden: async function () {
     }
 
     this.zeichnen();
+},
+
+/* Je AB die Baugruppen, die einzeln im Schweißen liegen (rote Zeilen). Ein Lesefehler lässt sie weg. */
+imSchweissenLaden: async function () {
+
+    const zeilen = await this.sicher(() => this.swLesen());
+    this.imSw = zeilen === null ? {} : this.swImSchweissen(zeilen);
 },
 
 /* ---------------------------------------------------------------------------
@@ -258,7 +271,7 @@ bestandSpalten: [
     ["vh", "Vorhanden"], ["lager", "Lagerort"], ["status", "Status"], ["fort", "Fortschritt"], ["balken", ""],
     ["datum", "Eingelagert"], ["datum", "Komplett"],
     ["mbg", "Menge / BG", true], ["idx", "Index", true], ["text", "Arbeitsgang", true], ["text", "Material", true],
-    ["text", "Profil", true], ["text", "Abmaße", true], ["text", "Bemerkung", true]
+    ["text", "Profil", true], ["text", "Abmaße", true], ["text", "Bemerkung", true], ["aktion", ""]
 ],
 
 tabelleNeu: function (parent, klasse) {
@@ -361,29 +374,6 @@ balkenZelle: function (tr, w) {
     balken.title = Math.round(w.prozent * 100) + " %";
 },
 
-/* Klapp-Knopf (▾/▸) und Name als Knopf: Einfachklick klappt. */
-klappZellen: function (tr, name, offen, klappen, doppel) {
-
-    const td1 = this.el(tr, "td");
-    const td2 = this.el(tr, "td");
-    td2.title = this.text(name);
-
-    if (!klappen) {
-        td2.textContent = this.text(name);
-        return;
-    }
-
-    const pfeil = this.el(td1, "button", "kom-klapp", offen ? "▾" : "▸");
-    pfeil.type = "button";
-    pfeil.title = "Auf- oder zuklappen";
-    pfeil.onclick = klappen;
-
-    const nameKnopf = this.el(td2, "button", "kom-name", name);
-    nameKnopf.type = "button";
-    nameKnopf.onclick = klappen;
-    if (doppel) nameKnopf.ondblclick = doppel;
-},
-
 mehrZellen: function (tr, o) {
 
     this.zelle(tr, o.menge_bg, "kom-zahl kom-mehr");
@@ -398,7 +388,8 @@ karteZeichnen: function (karte, a) {
 
     const tab = this.tabelleNeu(karte);
     const kopf = this.el(tab, "tbody");
-    const hatUnter = this.bestandZeilen(a).some(z => z !== a && z.zeigen);
+    const imSw = this.imSw[this.text(a.o.ab_schluessel)] || [];
+    const hatUnter = this.bestandZeilen(a).some(z => z !== a && z.zeigen) || imSw.length > 0;
 
     /* AB-Zeile */
     const tr = this.el(kopf, "tr", "kom-ab " + this.statusKlasse(a.w));
@@ -429,6 +420,7 @@ karteZeichnen: function (karte, a) {
     this.zelle(tr, this.text(a.o.ersteller) ? "Ersteller: " + this.text(a.o.ersteller) : "", "kom-mehr");
     this.zelle(tr, this.text(a.o.datum_liste) ? "Datum: " + this.text(a.o.datum_liste) : "", "kom-mehr");
     this.zelle(tr, this.text(a.o.dispoliste) ? "Dispoliste: " + this.text(a.o.dispoliste) : "", "kom-mehr", a.o.dispoliste);
+    this.entnehmenZelle(tr, a, null);
 
     if (!a.offen) return;
 
@@ -452,8 +444,64 @@ karteZeichnen: function (karte, a) {
         this.zelle(btr, this.datumText(b.w.eingelagert));
         this.zelle(btr, this.datumText(b.w.komplett));
         this.mehrZellen(btr, b.o);
+        this.entnehmenZelle(btr, a, b);
 
         if (b.offen) b.teile.forEach(t => { if (t.zeigen) this.teilZeile(block, t, a); });
+    });
+
+    /* Baugruppen, die einzeln im Schweißen liegen (rot) */
+    imSw.forEach(z => {
+        const block = this.el(tab, "tbody", "kom-bg-block");
+        const btr = this.el(block, "tr", "kom-bg kom-imsw");
+        this.zelle(btr, "");
+        this.zelle(btr, z.baugruppe, "", z.baugruppe, 2);
+        this.zelle(btr, "", "", undefined, 5);
+        const hinweis = this.zelle(btr, "", "kom-imsw-hinweis", undefined, 4);
+        const sprung = this.el(hinweis, "button", "kom-link", "▶ Befinden sich im Schweißen");
+        sprung.type = "button";
+        sprung.title = "Im Schweißen ansehen";
+        sprung.onclick = () => this.bereichOeffnen("schweissen", { suche: this.text(z.ab_nr) });
+        for (let i = 0; i < 7; i++) this.zelle(btr, "", "kom-mehr");
+        this.zelle(btr, "");
+    });
+},
+
+/* R-W1: "Entnehmen" bei AB und Baugruppen mit Status Komplett, nie bei Teilen. bg = null: der ganze AB. */
+entnehmenZelle: function (tr, a, bg) {
+
+    const td = this.el(tr, "td", "kom-aktion");
+    const knoten = bg || a;
+    if (!this.entnehmenMoeglich(knoten.w)) return;
+
+    const name = bg ? this.text(bg.o.name) : this.text(a.o.ab_anzeige);
+    const b = this.knopf(td, "Entnehmen", () => this.entnehmenFragen(a, bg), "rot-klein");
+    b.title = "Ins Schweißen verschieben (mit Rückfrage)";
+    b.setAttribute("aria-label", "Entnehmen " + name);
+},
+
+/* Rückfrage wie in Excel, dann ins Schweißen verschieben. Gelöscht wird nichts: die Zeilen werden
+   in der Bestandsliste ausgeblendet. */
+entnehmenFragen: async function (a, bg) {
+
+    const bgId = bg ? bg.o._id : null;
+    const p = await this.sicher(() => this.swEntnehmenPruefen(a.o._id, bgId));
+    if (p === null) return;
+
+    this.dialogZeigen("Entnehmen", (inhalt, knoepfe) => {
+        this.el(inhalt, "p", "", this.swPlanFrage(p));
+        this.el(inhalt, "p", "kom-leise", "Die Zeilen verschwinden aus der Bestandsliste und stehen dann im Schweißen. " +
+            "Dort geht es mit „Zurück“ wieder zurück.");
+
+        this.knopf(knoepfe, "Ja, entnehmen", async () => {
+            this.dialogSchliessen();
+            const fertig = await this.sicher(() => this.swEntnehmen(a.o._id, bgId));
+            if (fertig === null) return;
+            await this.imSchweissenLaden();
+            await this.abNeuLaden(a);
+            this.statusZeigen(this.swPlanName(p) + " ist jetzt im Schweißen.");
+        }, "haupt");
+        const nein = this.knopf(knoepfe, "Abbrechen", () => this.dialogSchliessen(), "rot");
+        this.dialogFokus = nein;   /* Sicherheitsfrage: ein versehentliches Enter entnimmt nichts */
     });
 },
 
@@ -478,6 +526,7 @@ teilZeile: function (parent, t, a) {
     this.zelle(tr, this.datumText(t.w.eingelagert));
     this.zelle(tr, this.datumText(t.w.komplett));
     this.mehrZellen(tr, o);
+    this.zelle(tr, "");
 },
 
 /* Vorhanden eintragen (R-M1): gespeichert wird beim Verlassen oder mit Enter.
