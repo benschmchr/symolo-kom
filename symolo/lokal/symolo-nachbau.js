@@ -40,9 +40,40 @@
     function laden() {
         try {
             const t = window.localStorage && window.localStorage.getItem(SPEICHER);
-            if (t) { db = JSON.parse(t); return; }
+            if (t) { db = JSON.parse(t); neueSpaltenErgaenzen(); return; }
         } catch (e) { /* ohne Speicher geht es auch */ }
         db = kopie(window.KOM_BEISPIELDATEN || {});
+    }
+
+    /* Ein im Browser gespeicherter Stand kann älter sein als die Beispieldaten
+       (neue Tabellen, neue Spalten). Fehlendes wird ergänzt, vorhandene
+       Eingaben bleiben. Neue Spalten sind leer, Ja/Nein-Spalten "nein".
+       Ohne das würden Felder wie "archiviert" beim Speichern verschluckt. */
+    function neueSpaltenErgaenzen() {
+        const bsp = window.KOM_BEISPIELDATEN || {};
+        let geaendert = false;
+
+        Object.keys(bsp).forEach(name => {
+            const neu = bsp[name];
+            const alt = db[name];
+
+            if (!alt) {
+                db[name] = kopie(neu);
+                geaendert = true;
+                return;
+            }
+
+            neu.felder.forEach(f => {
+                if (alt.felder.indexOf(f) >= 0) return;
+                const probe = neu.zeilen.find(z => z[f] !== null && z[f] !== undefined);
+                const vorgabe = probe && typeof probe[f] === "boolean" ? false : null;
+                alt.felder.push(f);
+                alt.zeilen.forEach(z => { z[f] = vorgabe; });
+                geaendert = true;
+            });
+        });
+
+        if (geaendert) sichern();
     }
 
     function sichern() {
