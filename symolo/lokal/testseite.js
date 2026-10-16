@@ -75,6 +75,19 @@
         l.appendChild(document.createTextNode(text));
         leiste.appendChild(l);
     }
+    /* Rechte: lokal gilt alles als erlaubt; "Rechte fehlen" setzt ein leeres Rechte-Objekt wie in Symolo ohne Eintrag. */
+    const rechte = element("label");
+    const rechteBox = element("input");
+    rechteBox.type = "checkbox";
+    rechteBox.onchange = () => {
+        if (rechteBox.checked) window.currentRights = {};
+        else delete window.currentRights;
+        oeffnen(aktivName);
+    };
+    rechte.appendChild(rechteBox);
+    rechte.appendChild(document.createTextNode("Rechte fehlen (Import gesperrt)"));
+    leiste.appendChild(rechte);
+
     schalter("Spaltennamen anders schreiben", "schreibweise");
     schalter("Verbindung tot (Meldung nach 15 Sekunden)", "tot");
 

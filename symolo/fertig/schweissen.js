@@ -303,8 +303,12 @@ tabellen: {
             datei: "datei",
             blatt: "blatt",
             stand: "stand",
-            kopf: "kopf"
-        }
+            kopf: "kopf",
+            /* Ein neuer Import ersetzt den ganzen Forecast: der bisherige wird archiviert
+               (Phase 7). OFFEN (Symolo): Archiv-Feld oder Status, siehe Anbindung. */
+            archiviert: "archiviert"
+        },
+        archiv: "archiviert"
     },
 
     forecast_zeile: {
@@ -5185,27 +5189,1329 @@ swZaehler: function (bloecke) {
 
 
 /* ===========================================================================
-   BENUTZER UND ROLLEN
-   Vorerst OHNE Anmeldung und Rechte (Ben, 16.10.2026): Alle sehen und
-   dürfen alles. Diese Stelle ist nur vorbereitet, damit Rollen später
-   ohne Umbau dazukommen.
+   EXCEL EINLESEN (nur lesen, Makros werden nie ausgeführt)
+   Ein kleiner eigener Leser für .xlsx und .xlsm: entpackt die Datei, liest
+   Blätter, Zellwerte (zuletzt in Excel gespeicherter Wert, Formeln werden
+   nicht berechnet) und von jeder Zelle Füllfarbe und Schrift (die
+   Kommissionierliste erkennt Baugruppen an der Farbe).
 
-   OFFEN (Symolo), für später: Woher bekommt die Ansicht Name und Gruppen
-   der angemeldeten Person (Sitzungsdaten, Formulardaten, ein Befehl)?
-   Geplante Rollen: Gast (nur ansehen), Kommissionierung, Stahlbau, Admin.
-   Wichtig: Die Ansicht blendet nur Knöpfe aus. Geschützt ist erst, wenn
-   Symolo die Schreibrechte je Tabelle prüft.
+   DIE EINZIGE STELLE FÜR EXCEL (Entwickler, 16.10.2026): Symolo bringt selbst
+   etwas zum Einlesen mit; das wurde noch nicht durchgesprochen. Bis dahin
+   liest dieser Leser. Zieht der Entwickler später um, ersetzt er nur
+   excelLesen und liefert dasselbe zurück:
+
+     excelLesen(bytes) -> { blaetter: [{ name, laden: async () => Blatt }] }
+     Blatt: { name, zeilenMax, spaltenMax, wert(zeile, spalte), stil(zeile, spalte) }
+
+   wert(): null (leer oder Fehlerwert wie #NV), Text, Zahl, true/false oder,
+   bei einem Datum, { datum: { j, m, t, h, mi, s } } (Jahr, Monat, Tag, Uhrzeit).
+   stil(): { fuellung: { typ, rgb, theme } | null, fett, schrift: { typ, rgb, theme } | null }
+   Zeilen und Spalten zählen ab 1 wie in Excel.
+
+   Gebraucht: DecompressionStream (jeder aktuelle Browser, auch Node ab 18),
+   TextDecoder, Blob, Response. Kein fetch, keine Verbindung nach außen.
    =========================================================================== */
 
-benutzer: function () {
+/* Größtes Stück, das beim Entpacken entstehen darf (Schutz vor Zip-Bomben). */
+excelGroesstes: 200 * 1024 * 1024,
 
-    return { name: "", rollen: ["Kommissionierung", "Stahlbau", "Admin"] };
+excelFehlerKeinExcel: "Die Datei ist keine gültige Excel-Datei.",
+excelFehlerNichtLesbar: "Die Datei kann nicht gelesen werden (beschädigt oder kein Excel-Format).",
+
+/* ---------------------------------------------------------------------------
+   Zip
+   --------------------------------------------------------------------------- */
+
+/* Inhaltsverzeichnis der Zip-Datei: { name: { methode, kompr, gross, offset } } */
+excelZipVerzeichnis: function (b) {
+
+    const dv = new DataView(b.buffer, b.byteOffset, b.byteLength);
+    let ende = -1;
+
+    for (let i = b.length - 22; i >= Math.max(0, b.length - 22 - 65535); i--) {
+        if (dv.getUint32(i, true) === 0x06054b50) { ende = i; break; }
+    }
+    if (ende < 0) throw new Error(this.excelFehlerKeinExcel);
+
+    const anzahl = dv.getUint16(ende + 10, true);
+    let p = dv.getUint32(ende + 16, true);
+    const eintraege = {};
+
+    for (let k = 0; k < anzahl; k++) {
+        if (p + 46 > b.length || dv.getUint32(p, true) !== 0x02014b50) throw new Error(this.excelFehlerKeinExcel);
+
+        const nl = dv.getUint16(p + 28, true), el = dv.getUint16(p + 30, true), cl = dv.getUint16(p + 32, true);
+        const name = new TextDecoder("utf-8").decode(b.subarray(p + 46, p + 46 + nl));
+
+        eintraege[name] = {
+            methode: dv.getUint16(p + 10, true),
+            kompr: dv.getUint32(p + 20, true),
+            gross: dv.getUint32(p + 24, true),
+            offset: dv.getUint32(p + 42, true)
+        };
+        p += 46 + nl + el + cl;
+    }
+
+    return eintraege;
 },
 
-/* Darf die Person das? Vorerst immer ja. */
-darf: function (rolle) {
+/* Entpackt einen Eintrag (gespeichert oder deflate). */
+excelZipLesen: async function (b, e) {
 
-    return this.benutzer().rollen.indexOf(rolle) >= 0 || this.benutzer().rollen.indexOf("Admin") >= 0;
+    if (e.gross > this.excelGroesstes) throw new Error("Die Datei ist zu groß zum Einlesen.");
+
+    const dv = new DataView(b.buffer, b.byteOffset, b.byteLength);
+    if (e.offset + 30 > b.length || dv.getUint32(e.offset, true) !== 0x04034b50) throw new Error(this.excelFehlerKeinExcel);
+
+    const start = e.offset + 30 + dv.getUint16(e.offset + 26, true) + dv.getUint16(e.offset + 28, true);
+    const roh = b.subarray(start, start + e.kompr);
+
+    if (e.methode === 0) return new Uint8Array(roh);
+    if (e.methode !== 8) throw new Error(this.excelFehlerKeinExcel);
+
+    const strom = new Blob([roh]).stream().pipeThrough(new DecompressionStream("deflate-raw"));
+    const aus = new Uint8Array(await new Response(strom).arrayBuffer());
+
+    if (aus.length > this.excelGroesstes) throw new Error("Die Datei ist zu groß zum Einlesen.");
+    return aus;
+},
+
+excelTextLesen: async function (b, verzeichnis, name) {
+
+    const e = verzeichnis[name];
+    if (!e) return null;
+    return new TextDecoder("utf-8").decode(await this.excelZipLesen(b, e));
+},
+
+/* ---------------------------------------------------------------------------
+   XML (nur das, was in Excel-Dateien vorkommt)
+   --------------------------------------------------------------------------- */
+
+excelEntitaeten: function (t) {
+
+    if (t.indexOf("&") < 0) return t;
+
+    return t.replace(/&(#x[0-9a-fA-F]+|#\d+|amp|lt|gt|quot|apos);/g, (alle, k) => {
+        if (k === "amp") return "&";
+        if (k === "lt") return "<";
+        if (k === "gt") return ">";
+        if (k === "quot") return "\"";
+        if (k === "apos") return "'";
+        return String.fromCodePoint(k.charAt(1) === "x" ? parseInt(k.slice(2), 16) : parseInt(k.slice(1), 10));
+    });
+},
+
+excelAttribute: function (s) {
+
+    const a = {};
+    const re = /([\w:.-]+)\s*=\s*(?:"([^"]*)"|'([^']*)')/g;
+    let m;
+
+    while ((m = re.exec(s)) !== null) a[m[1]] = this.excelEntitaeten(m[2] !== undefined ? m[2] : m[3]);
+    return a;
+},
+
+/* Texte in <t>…</t> hintereinander (ohne Lautschrift <rPh>). */
+excelTextTeile: function (xml) {
+
+    const ohne = xml.replace(/<rPh\b[\s\S]*?<\/rPh>/g, "");
+    const re = /<t\b[^>]*?(?:\/>|>([\s\S]*?)<\/t>)/g;
+    let text = "", m;
+
+    while ((m = re.exec(ohne)) !== null) text += m[1] === undefined ? "" : this.excelEntitaeten(m[1]);
+    return text;
+},
+
+excelGemeinsameTexte: function (xml) {
+
+    const liste = [];
+    if (!xml) return liste;
+
+    const re = /<si\b[^>]*?(?:\/>|>([\s\S]*?)<\/si>)/g;
+    let m;
+
+    while ((m = re.exec(xml)) !== null) liste.push(m[1] === undefined ? "" : this.excelTextTeile(m[1]));
+    return liste;
+},
+
+/* ---------------------------------------------------------------------------
+   Formate: Füllung, Schrift, Datumsformate
+   --------------------------------------------------------------------------- */
+
+excelFarbe: function (xml) {
+
+    const m = /<(?:fgColor|color)\b([^>]*?)\/?>/.exec(xml || "");
+    if (!m) return null;
+
+    const a = this.excelAttribute(m[1]);
+    if (a.rgb !== undefined) return { typ: "rgb", rgb: a.rgb, theme: null };
+    if (a.theme !== undefined) return { typ: "theme", rgb: null, theme: Number(a.theme) };
+    if (a.indexed !== undefined) return { typ: "indexed", rgb: null, theme: null };
+    return { typ: "rgb", rgb: "00000000", theme: null };
+},
+
+/* Erkennt ein Datumsformat wie Excel (und wie die bisherige App, openpyxl). */
+excelIstDatumFormat: function (id, code) {
+
+    if ((id >= 14 && id <= 22) || (id >= 45 && id <= 47)) return true;
+    if (code === null || code === undefined) return false;
+
+    const fmt = code.split(";")[0].replace(/"[^"]*"|\[[^\]]*\]|\\.|_.|\*./g, "");
+    return /[^\\][dmhysDMHYS]/.test(fmt);
+},
+
+/* styles.xml: je Zellformat { datum, fuellung, fett, schrift } */
+excelFormate: function (xml) {
+
+    const formate = [];
+    if (!xml) return formate;
+
+    const abschnitt = (name) => {
+        const m = new RegExp("<" + name + "\\b[^>]*>([\\s\\S]*?)</" + name + ">").exec(xml);
+        return m ? m[1] : "";
+    };
+
+    const codes = {};
+    const reCode = /<numFmt\b([^>]*?)\/?>/g;
+    let m;
+    while ((m = reCode.exec(abschnitt("numFmts"))) !== null) {
+        const a = this.excelAttribute(m[1]);
+        codes[Number(a.numFmtId)] = a.formatCode;
+    }
+
+    const fuellungen = [];
+    const reFill = /<fill\b[^>]*>([\s\S]*?)<\/fill>/g;
+    const fills = abschnitt("fills");
+    while ((m = reFill.exec(fills)) !== null) {
+        const typ = /<patternFill\b([^>]*?)\/?>/.exec(m[1]);
+        const art = typ ? (this.excelAttribute(typ[1]).patternType || "") : "";
+        fuellungen.push(art === "" || art === "none" ? null : this.excelFarbe(m[1]) || { typ: "rgb", rgb: "00000000", theme: null });
+    }
+
+    const schriften = [];
+    const reFont = /<font\b[^>]*?(?:\/>|>([\s\S]*?)<\/font>)/g;
+    const fonts = abschnitt("fonts");
+    while ((m = reFont.exec(fonts)) !== null) {
+        const inhalt = m[1] || "";
+        const b = /<b\b([^>]*?)\/?>/.exec(inhalt);
+        const val = b ? this.excelAttribute(b[1]).val : undefined;
+        schriften.push({ fett: Boolean(b) && val !== "0" && val !== "false", schrift: this.excelFarbe(inhalt.replace(/<fgColor\b[^>]*>/g, "")) });
+    }
+
+    const reXf = /<xf\b([^>]*)>/g;
+    while ((m = reXf.exec(abschnitt("cellXfs"))) !== null) {
+        const a = this.excelAttribute(m[1]);
+        const fmt = Number(a.numFmtId || 0);
+        const f = schriften[Number(a.fontId || 0)] || { fett: false, schrift: null };
+
+        formate.push({
+            datum: this.excelIstDatumFormat(fmt, codes[fmt]),
+            fuellung: fuellungen[Number(a.fillId || 0)] || null,
+            fett: f.fett,
+            schrift: f.schrift
+        });
+    }
+
+    return formate;
+},
+
+/* ---------------------------------------------------------------------------
+   Datum
+   --------------------------------------------------------------------------- */
+
+/* Excel-Seriennummer -> { j, m, t, h, mi, s } (1900er Zählung; unter 60 zählt der erfundene 29.2.1900 mit). */
+excelDatum: function (seriennummer, ab1904) {
+
+    const tage = Math.floor(seriennummer);
+    let epoche = ab1904 ? Date.UTC(1904, 0, 1) : Date.UTC(1899, 11, 30);
+    if (!ab1904 && tage < 60) epoche = Date.UTC(1899, 11, 31);
+
+    const d = new Date(epoche + Math.round(seriennummer * 86400000));
+    return { j: d.getUTCFullYear(), m: d.getUTCMonth() + 1, t: d.getUTCDate(), h: d.getUTCHours(), mi: d.getUTCMinutes(), s: d.getUTCSeconds() };
+},
+
+/* ---------------------------------------------------------------------------
+   Arbeitsmappe und Blätter
+   --------------------------------------------------------------------------- */
+
+excelSpalteNr: function (buchstaben) {
+
+    let n = 0;
+    for (let i = 0; i < buchstaben.length; i++) n = n * 26 + buchstaben.charCodeAt(i) - 64;
+    return n;
+},
+
+/* Ein Blatt aus seinem XML. */
+excelBlattBauen: function (name, xml, texte, formate, ab1904) {
+
+    const zeilen = [];
+    let zeilenMax = 0, spaltenMax = 0;
+    const re = /<c\b([^>]*?)(?:\/>|>([\s\S]*?)<\/c>)/g;
+    let m;
+
+    while ((m = re.exec(xml)) !== null) {
+        const a = this.excelAttribute(m[1]);
+        const ort = /^([A-Za-z]+)(\d+)$/.exec(a.r || "");
+        if (!ort) continue;
+
+        const spalte = this.excelSpalteNr(ort[1].toUpperCase()), zeile = Number(ort[2]);
+        const stilNr = a.s === undefined ? 0 : Number(a.s);
+        const innen = m[2] || "";
+
+        let wert = null;
+        const v = /<v\b[^>]*?(?:\/>|>([\s\S]*?)<\/v>)/.exec(innen);
+        const roh = v && v[1] !== undefined ? v[1] : null;
+
+        if (a.t === "inlineStr") {
+            const is = /<is\b[^>]*>([\s\S]*?)<\/is>/.exec(innen);
+            wert = is ? this.excelTextTeile(is[1]) : "";
+        } else if (roh !== null) {
+            if (a.t === "s") wert = texte[Number(roh)] === undefined ? null : texte[Number(roh)];
+            else if (a.t === "str") wert = this.excelEntitaeten(roh);
+            else if (a.t === "b") wert = roh === "1";
+            else if (a.t === "e") wert = null;
+            else if (a.t === "d") wert = this.excelEntitaeten(roh);
+            else {
+                const zahl = Number(roh);
+                wert = roh.trim() === "" || !Number.isFinite(zahl) ? null : zahl;
+                if (wert !== null && formate[stilNr] && formate[stilNr].datum) wert = { datum: this.excelDatum(zahl, ab1904) };
+            }
+        }
+
+        (zeilen[zeile] = zeilen[zeile] || [])[spalte] = { w: wert, s: stilNr };
+        if (zeile > zeilenMax) zeilenMax = zeile;
+        if (spalte > spaltenMax) spaltenMax = spalte;
+    }
+
+    const zelle = (z, s) => (zeilen[z] && zeilen[z][s]) || null;
+
+    return {
+        name: name,
+        zeilenMax: zeilenMax,
+        spaltenMax: spaltenMax,
+        wert: (z, s) => { const x = zelle(z, s); return x ? x.w : null; },
+        stil: (z, s) => {
+            const x = zelle(z, s);
+            const f = x ? formate[x.s] : null;
+            return f ? { fuellung: f.fuellung, fett: f.fett, schrift: f.schrift } : { fuellung: null, fett: false, schrift: null };
+        }
+    };
+},
+
+/* Datei öffnen. bytes: Uint8Array oder ArrayBuffer. Die Blätter werden erst beim Aufruf von laden() gelesen. */
+excelLesen: async function (bytes) {
+
+    const b = new Uint8Array(bytes);
+    const verzeichnis = this.excelZipVerzeichnis(b);
+
+    try {
+        const mappe = await this.excelTextLesen(b, verzeichnis, "xl/workbook.xml");
+        if (mappe === null) throw new Error(this.excelFehlerNichtLesbar);
+
+        const rels = await this.excelTextLesen(b, verzeichnis, "xl/_rels/workbook.xml.rels") || "";
+        const ziele = {};
+        const reRel = /<Relationship\b([^>]*?)\/?>/g;
+        let m;
+
+        while ((m = reRel.exec(rels)) !== null) {
+            const a = this.excelAttribute(m[1]);
+            if (a.Id && a.Target) ziele[a.Id] = a.Target.charAt(0) === "/" ? a.Target.slice(1) : "xl/" + a.Target;
+        }
+
+        const ab1904 = /<workbookPr\b[^>]*date1904\s*=\s*"(?:1|true)"/.test(mappe);
+        let texte = null, formate = null;
+
+        const vorbereiten = async () => {
+            if (texte === null) {
+                texte = this.excelGemeinsameTexte(await this.excelTextLesen(b, verzeichnis, "xl/sharedStrings.xml"));
+                formate = this.excelFormate(await this.excelTextLesen(b, verzeichnis, "xl/styles.xml"));
+            }
+        };
+
+        const blaetter = [];
+        const reBlatt = /<sheet\b([^>]*?)\/?>/g;
+
+        while ((m = reBlatt.exec(mappe)) !== null) {
+            const a = this.excelAttribute(m[1]);
+            const ziel = ziele[a["r:id"]];
+            if (!ziel || ziel.indexOf("worksheets/") < 0 || !verzeichnis[ziel]) continue;
+
+            blaetter.push({
+                name: a.name,
+                laden: async () => {
+                    await vorbereiten();
+                    return this.excelBlattBauen(a.name, await this.excelTextLesen(b, verzeichnis, ziel), texte, formate, ab1904);
+                }
+            });
+        }
+
+        return { blaetter: blaetter };
+    } catch (fehler) {
+        throw new Error(this.excelFehlerNichtLesbar);
+    }
+},
+
+
+/* ===========================================================================
+   KOMMISSIONIERLISTE LESEN (R-I1 bis R-I7, R-D1 bis R-D5)
+   Nachbau von bestand/importer.py (lesen): Kopfzeile suchen, Spalten per
+   Name, Kopfwerte, Baugruppen an der Farbe (oder an der LK-Nummer),
+   Haupt-Baugruppe über der Kopfzeile. Kein Zugriff auf die Datenbank.
+
+   Ergebnis (Gelesen): { datei, kopf: { fertigungs_ab, … }, zeilen: [{ ebene: "BG"|"Teil",
+   bg: Name, werte: { feld: Text, menge_gesamt/vorhanden: Zahl oder null } }], hinweise: [Text] }
+   Fehler werfen einen Error mit Text für den Benutzer.
+   Zeilen und Spalten zählen ab 1 wie in Excel.
+   =========================================================================== */
+
+impMaxGroesse: 10 * 1024 * 1024,
+impEndungen: [".xlsx", ".xlsm"],
+impMaxMenge: 999999999,
+impBgFarbe: "1F497D",
+impOhneBg: "(ohne BG)",
+
+/* R-D1: die 12 Spalten der Vorlage -> unser Feld */
+impSpalten: [
+    ["Zeichnungsnummer", "zeichnungsnummer"],
+    ["Benennung", "benennung"],
+    ["Menge / BG", "menge_bg"],
+    ["Menge Gesamt", "menge_gesamt"],
+    ["Index", "index"],
+    ["LK Nummer", "lk_nummer"],
+    ["Arbeitsgang", "arbeitsgang"],
+    ["Material", "material"],
+    ["Profil", "profil"],
+    ["Abmaße", "abmasse"],
+    ["Vorhanden", "vorhanden"],
+    ["Bemerkung", "bemerkung"]
+],
+
+/* R-D2 / R-I4: Beschriftungen im Kopf der Liste */
+impKopf: [
+    ["Fertigungs AB", "fertigungs_ab"],
+    ["Haupt AB", "haupt_ab"],
+    ["Dispoliste", "dispoliste"],
+    ["Ersteller", "ersteller"],
+    ["Datum", "datum"],
+    ["Verkaufsartikel", "verkaufsartikel"],
+    ["Kunde", "kunde"]
+],
+
+/* ---------------------------------------------------------------------------
+   Zellwerte
+   --------------------------------------------------------------------------- */
+
+impTag2: function (n) {
+
+    return String(n).padStart(2, "0");
+},
+
+/* Datum wie "03.07.2026". d = { j, m, t, … } aus dem Excel-Leser. */
+impDatumText: function (d) {
+
+    return this.impTag2(d.t) + "." + this.impTag2(d.m) + "." + String(d.j).padStart(4, "0");
+},
+
+/* Zahl als Text ohne Exponent: 21 -> "21", 0.5 -> "0,5" (wie Excel, deutsch). */
+impZahlText: function (z) {
+
+    if (Number.isInteger(z)) return Math.abs(z) < 1e21 ? String(z) : BigInt(z).toString();
+
+    let t = String(z);
+    if (/e/i.test(t)) t = z.toFixed(20).replace(/0+$/, "").replace(/\.$/, "");
+    return t.replace(".", ",");
+},
+
+/* VBA Txt(): leer -> "", sonst Text ohne Leerzeichen am Rand; Zahlen ohne ",0" (Text bleibt Text, R-I7). */
+impTxt: function (v) {
+
+    if (v === null || v === undefined) return "";
+    if (typeof v === "boolean") return v ? "True" : "False";
+    if (typeof v === "number") return this.impZahlText(v);
+    if (typeof v === "object" && v.datum) return this.impDatumText(v.datum);
+    return String(v).trim();
+},
+
+/* Zahl oder als Text geschriebene Zahl ("21", "0,5") -> Zahl; sonst null. */
+impZahl: function (v) {
+
+    if (v === null || v === undefined || typeof v === "boolean") return null;
+    if (typeof v === "number") return Number.isFinite(v) ? v : null;
+    if (typeof v !== "string") return null;
+
+    const t = v.trim().replace(",", ".");
+    if (!/^[+-]?(\d+\.?\d*|\.\d+)([eE][+-]?\d+)?$/.test(t)) return null;
+
+    const z = Number(t);
+    return Number.isFinite(z) ? z : null;
+},
+
+/* R-I6, Regel 1: Füllung 1F497D, oder irgendeine Füllung mit fetter weißer Schrift. */
+impIstBgZelle: function (blatt, r, c) {
+
+    const s = blatt.stil(r, c);
+    const f = s.fuellung;
+    if (!f) return false;
+
+    if (f.typ === "rgb" && String(f.rgb).toUpperCase().endsWith(this.impBgFarbe)) return true;
+
+    const k = s.schrift;
+    if (s.fett && k) {
+        return (k.typ === "rgb" && String(k.rgb).toUpperCase().endsWith("FFFFFF")) || (k.typ === "theme" && k.theme === 0);
+    }
+    return false;
+},
+
+/* ---------------------------------------------------------------------------
+   Kopfzeile, Spalten, Kopfwerte
+   --------------------------------------------------------------------------- */
+
+/* R-I2: erste Zeile 1 bis 60, in deren Spalten A bis E eine Zelle genau "Zeichnungsnummer" enthält. */
+impKopfzeile: function (blatt) {
+
+    for (let r = 1; r <= 60; r++) {
+        for (let c = 1; c <= 5; c++) {
+            if (this.impTxt(blatt.wert(r, c)).toLowerCase() === "zeichnungsnummer") return r;
+        }
+    }
+    return 0;
+},
+
+impNorm: function (t) {
+
+    return t.toLowerCase().replace(/[ \n\r]/g, "");
+},
+
+/* R-I3: Spalten per Name in der Kopfzeile (Spalten 1 bis 40). */
+impSpaltenFinden: function (blatt, kz) {
+
+    const gefunden = {};
+    const namen = {};
+    this.impSpalten.forEach(([name, feld]) => { namen[this.impNorm(name)] = feld; });
+
+    for (let c = 1; c <= 40; c++) {
+        const t = this.impNorm(this.impTxt(blatt.wert(kz, c)));
+        if (Object.prototype.hasOwnProperty.call(namen, t) && !(namen[t] in gefunden)) gefunden[namen[t]] = c;
+    }
+    return gefunden;
+},
+
+/* R-I4: Beschriftung oberhalb der Kopfzeile (Spalten 1 bis 15), Wert in einer der 3 Zellen rechts daneben. */
+impKopfwert: function (blatt, kz, etikett) {
+
+    for (let r = 1; r < kz; r++) {
+        for (let c = 1; c <= 15; c++) {
+            const t = this.impTxt(blatt.wert(r, c));
+            if (t && t.replace(/:/g, "").trim().toLowerCase() === etikett.toLowerCase()) {
+                for (let k = c + 1; k <= c + 3; k++) {
+                    const v = blatt.wert(r, k);
+                    if (v && typeof v === "object" && v.datum) return this.impDatumText(v.datum);
+                    if (this.impTxt(v)) return this.impTxt(v);
+                }
+            }
+        }
+    }
+    return "";
+},
+
+/* R-I8: Schlüssel je Teil = BG-Name | Zeichnungsnummer | LK-Nummer (ohne Groß-/Kleinschreibung). */
+impTeilSchluessel: function (bg, w) {
+
+    return (bg + "|" + w.zeichnungsnummer + "|" + w.lk_nummer).toLowerCase();
+},
+
+/* ---------------------------------------------------------------------------
+   Datei lesen
+   --------------------------------------------------------------------------- */
+
+/* Prüft Name und Größe (R-I1), gemeinsam für beide Excel-Importe.
+   speichernAls: wie die Datei neu zu speichern ist (Hinweis bei .xls). */
+excelDateiPruefen: function (name, groesse, groessteMb, endungen, speichernAls) {
+
+    const n = this.text(name).toLowerCase();
+
+    if (n.endsWith(".xls")) throw new Error("Alte .xls-Dateien werden nicht gelesen. Bitte in Excel als " + speichernAls + " speichern.");
+    if (!endungen.some(e => n.endsWith(e))) throw new Error("Nur Excel-Dateien (.xlsx oder .xlsm).");
+    if (groesse > groessteMb * 1024 * 1024) throw new Error("Die Datei ist größer als " + groessteMb + " MB.");
+},
+
+/* Eine Kommissionierliste prüfen und lesen. bytes: Uint8Array oder ArrayBuffer. */
+impLesen: async function (bytes, dateiname) {
+
+    this.excelDateiPruefen(dateiname, bytes.byteLength, this.impMaxGroesse / (1024 * 1024), this.impEndungen, ".xlsx");
+
+    const mappe = await this.excelLesen(bytes);
+    let blatt = null, kz = 0;
+
+    try {
+        for (const b of mappe.blaetter) {
+            const kandidat = await b.laden();
+            kz = this.impKopfzeile(kandidat);
+            if (kz) { blatt = kandidat; break; }
+        }
+    } catch (fehler) {
+        throw new Error(this.excelFehlerNichtLesbar);
+    }
+    if (blatt === null) throw new Error("Keine Kopfzeile mit „Zeichnungsnummer“ gefunden.");
+
+    const sp = this.impSpaltenFinden(blatt, kz);
+    if (!("zeichnungsnummer" in sp) || !("menge_gesamt" in sp)) {
+        throw new Error("Spalte „Zeichnungsnummer“ oder „Menge Gesamt“ fehlt (Blatt „" + blatt.name + "“).");
+    }
+
+    const kopf = {};
+    this.impKopf.forEach(([etikett, feld]) => { kopf[feld] = this.impKopfwert(blatt, kz, etikett); });
+    kopf.haupt_ab = kopf.haupt_ab ? this.abForm(kopf.haupt_ab) : "";
+
+    const g = { datei: dateiname, kopf: kopf, zeilen: [], hinweise: [] };
+
+    /* R-I5: Datenzeilen = Zeichnungsnummer oder Benennung gefüllt */
+    let roh = [];
+    for (let r = kz + 1; r <= blatt.zeilenMax; r++) {
+        const zn = blatt.wert(r, sp.zeichnungsnummer);
+        const bn = "benennung" in sp ? this.impTxt(blatt.wert(r, sp.benennung)) : "";
+        if (this.impTxt(zn) || bn) roh.push([r, this.impIstBgZelle(blatt, r, sp.zeichnungsnummer)]);
+    }
+    if (!roh.length) throw new Error("Keine Daten unter der Kopfzeile gefunden.");
+
+    /* R-I6, Regel 2 (nur wenn keine BG über die Farbe): LK-Nummer ganzzahlig > 0 und durch 100 teilbar */
+    if (!roh.some(x => x[1]) && "lk_nummer" in sp) {
+        roh = roh.map(([r]) => {
+            const lk = this.impZahl(blatt.wert(r, sp.lk_nummer));
+            return [r, lk !== null && lk > 0 && Number.isInteger(lk) && lk % 100 === 0];
+        });
+    }
+
+    /* Festlegung Ben 14.10.2026 (weicht von Excel ab): ohne BG unter der Kopfzeile wird die Haupt-Baugruppe
+       direkt über der Kopfzeile gelesen, wenn dort Zeichnungsnummer und eine Zahl bei "Menge Gesamt" stehen */
+    const haupt = kz - 1;
+    if (!roh.some(x => x[1]) && haupt >= 1 && this.impTxt(blatt.wert(haupt, sp.zeichnungsnummer)) &&
+        this.impZahl(blatt.wert(haupt, sp.menge_gesamt)) !== null) {
+        roh.unshift([haupt, true]);
+        g.hinweise.push("Haupt-Baugruppe aus Zeile " + haupt + " (über der Kopfzeile) übernommen.");
+    }
+
+    let bgName = this.impOhneBg;
+    const zuGross = [];
+
+    roh.forEach(([r, istBg]) => {
+        const w = {};
+
+        this.impSpalten.forEach(([, feld]) => {
+            const v = feld in sp ? blatt.wert(r, sp[feld]) : null;
+
+            if (feld === "menge_gesamt" || feld === "vorhanden") {
+                let z = this.impZahl(v);
+                if (z !== null && Math.abs(z) > this.impMaxMenge) {   /* R-M4: nicht übernehmen, in der Vorschau melden */
+                    z = null;
+                    zuGross.push(r);
+                }
+                w[feld] = z;
+                if (feld === "menge_gesamt" && z === null && this.impTxt(v)) {
+                    w.menge_gesamt_text = this.impTxt(v);   /* Text-Menge: zählt als 0, wird aber angezeigt */
+                }
+            } else {
+                w[feld] = this.impTxt(v);
+            }
+        });
+
+        if (istBg) {
+            bgName = (w.lk_nummer + " " + w.benennung).trim() || "BG Zeile " + r;   /* R-D4 */
+            w.vorhanden = null;   /* R-D3, R-I7 */
+            g.zeilen.push({ ebene: "BG", bg: bgName, werte: w });
+        } else {
+            g.zeilen.push({ ebene: "Teil", bg: bgName, werte: w });
+        }
+    });
+
+    if (zuGross.length) {
+        const nummern = Array.from(new Set(zuGross)).sort((a, b) => a - b).slice(0, 10).join(", ");
+        g.hinweise.push("Zu große Zahl (über 999.999.999) in Zeile " + nummern + ": nicht übernommen. " +
+            "Bei „Menge Gesamt“ steht sie als Text und zählt als 0, bei „Vorhanden“ bleibt das Feld leer. " +
+            "Bitte die Spalten in der Datei prüfen.");
+    }
+
+    const anzBg = g.zeilen.filter(z => z.ebene === "BG").length;
+    const anzTeile = g.zeilen.length - anzBg;
+    if (!anzBg) g.hinweise.push("Keine Baugruppe erkannt: alle " + anzTeile + " Teile stehen direkt unter dem AB.");
+
+    const schluessel = g.zeilen.filter(z => z.ebene === "Teil").map(z => this.impTeilSchluessel(z.bg, z.werte));
+    const doppelt = Array.from(new Set(schluessel.filter(s => schluessel.indexOf(s) !== schluessel.lastIndexOf(s)))).sort();
+    if (doppelt.length) {
+        g.hinweise.push("Doppelte Teile (gleiche BG, Zeichnungsnummer und LK): " + doppelt.map(s => s.replace(/\|/g, " · ")).join("; ") +
+            ". Beim Ersetzen bekommen beide die Menge der ersten Zeile (wie Excel).");
+    }
+
+    return g;
+},
+
+/* Der AB der gelesenen Liste in Anzeigeform ("" = fehlt). */
+impAb: function (g) {
+
+    return this.abForm(g.kopf.fertigungs_ab || "");
+},
+
+impAnzBg: function (g) {
+
+    return g.zeilen.filter(z => z.ebene === "BG").length;
+},
+
+impAnzTeile: function (g) {
+
+    return g.zeilen.filter(z => z.ebene === "Teil").length;
+},
+
+
+/* ===========================================================================
+   FORECAST-LISTE LESEN (R-F2 bis R-F4)
+   Nachbau von bestand/forecast.py (lesen): Blatt „Auftragsübersicht“ zuerst,
+   Kopfzeile mit „Auftrag.-Nr“ und „Liefertermin“, je Zeile AB-Schlüssel ohne
+   Los und Termin. Kein Zugriff auf die Datenbank.
+
+   Ergebnis (Gelesen): { datei, blatt, stand, kopf: [Spaltennamen],
+   zeilen: [{ schluessel, termin: { j, m, t } oder null, werte: [Text je Spalte] }] }
+   Fehler werfen einen Error mit Text für den Benutzer.
+   =========================================================================== */
+
+fcMaxGroesse: 20 * 1024 * 1024,
+fcEndungen: [".xlsx", ".xlsm"],
+fcBlattZuerst: "Auftragsübersicht",
+fcGeliefert: "bereits geliefert",
+
+fcFehlerwerte: ["#N/A", "#NV", "#DIV/0!", "#VALUE!", "#WERT!", "#REF!", "#BEZUG!", "#NAME?", "#NUM!", "#ZAHL!",
+    "#NULL!", "#GETTING_DATA", "#SPILL!", "#CALC!"],
+
+/* Fehlerwerte (#NV usw.) gelten als leer. */
+fcWert: function (v) {
+
+    if (typeof v === "string" && this.fcFehlerwerte.indexOf(v.trim().toUpperCase()) >= 0) return null;
+    return v;
+},
+
+/* VBA Txt(): leer -> "", sonst Text ohne Leerzeichen vorn und hinten; Datum mit Uhrzeit nur, wenn sie nicht 0:00 ist. */
+fcTxt: function (v) {
+
+    v = this.fcWert(v);
+    if (v === null || v === undefined) return "";
+    if (typeof v === "boolean") return v ? "WAHR" : "FALSCH";
+    if (typeof v === "number") return this.impZahlText(v);
+
+    if (typeof v === "object" && v.datum) {
+        const d = v.datum;
+        const tag = this.impDatumText(d);
+        return d.h === 0 && d.mi === 0 && d.s === 0 ? tag : tag + " " + this.impTag2(d.h) + ":" + this.impTag2(d.mi);
+    }
+
+    return String(v).trim();
+},
+
+/* R-F2 Normierung: klein, ohne Leerzeichen, ".", "-", "_" und Zeilenumbruch. */
+fcKopfNorm: function (x) {
+
+    return this.fcTxt(x).toLowerCase().replace(/[ .\-_\n\r]/g, "");
+},
+
+fcDatumGueltig: function (j, m, t) {
+
+    const d = new Date(Date.UTC(j, m - 1, t));
+    return d.getUTCFullYear() === j && d.getUTCMonth() === m - 1 && d.getUTCDate() === t ? { j: j, m: m, t: t } : null;
+},
+
+/* R-F3 Datum erkennen: echtes Datum, Zahl zwischen 20000 und 80000 (Excel-Seriennummer) oder Datumstext
+   ("13.10.2026", "13.10.26", "2026-10-13", auch mit Uhrzeit); die Uhrzeit wird abgeschnitten.
+   Ergebnis { j, m, t } oder null. */
+fcDatum: function (x) {
+
+    x = this.fcWert(x);
+    if (x === null || x === undefined || typeof x === "boolean") return null;
+    if (typeof x === "object" && x.datum) return { j: x.datum.j, m: x.datum.m, t: x.datum.t };
+
+    if (typeof x === "number") {
+        if (x > 20000 && x < 80000) {
+            const d = new Date(Date.UTC(1899, 11, 30) + Math.trunc(x) * 86400000);
+            return { j: d.getUTCFullYear(), m: d.getUTCMonth() + 1, t: d.getUTCDate() };
+        }
+        return null;
+    }
+
+    const t = String(x).trim();
+    const zeit = "(?:[ T]+\\d{1,2}:\\d{2}(?::\\d{2})?)?";
+    let m;
+
+    if ((m = new RegExp("^(\\d{1,2})\\.(\\d{1,2})\\.(\\d{4}|\\d{2})" + zeit + "$").exec(t))) {
+        let jahr = Number(m[3]);
+        if (m[3].length === 2) jahr += jahr < 30 ? 2000 : 1900;   /* wie Excel: 00-29 -> 20xx, 30-99 -> 19xx */
+        return this.fcDatumGueltig(jahr, Number(m[2]), Number(m[1]));
+    }
+    if ((m = new RegExp("^(\\d{4})-(\\d{1,2})-(\\d{1,2})" + zeit + "$").exec(t))) {
+        return this.fcDatumGueltig(Number(m[1]), Number(m[2]), Number(m[3]));
+    }
+    if ((m = /^(\d{1,2})\/(\d{1,2})\/(\d{4})$/.exec(t))) {
+        return this.fcDatumGueltig(Number(m[3]), Number(m[2]), Number(m[1]));
+    }
+
+    return null;
+},
+
+/* R-F2: in den Zeilen 1 bis 40, Spalten 1 bis 80 die erste Zeile mit "Auftrag.-Nr" (auftragnr/auftragsnr) und
+   "Liefertermin"; "Ampel" ist freiwillig. Ergebnis { zeile, ab, termin, ampel } (Spalten ab 1) oder null. */
+fcKopfzeile: function (blatt) {
+
+    for (let r = 1; r <= 40; r++) {
+        let ab = 0, termin = 0, ampel = 0;
+
+        for (let c = 1; c <= 80; c++) {
+            const t = this.fcKopfNorm(blatt.wert(r, c));
+            if (t === "auftragnr" || t === "auftragsnr") ab = ab || c;
+            else if (t === "liefertermin") termin = termin || c;
+            else if (t === "ampel") ampel = ampel || c;
+        }
+        if (ab && termin) return { zeile: r, ab: ab, termin: termin, ampel: ampel };
+    }
+    return null;
+},
+
+fcAuswerten: function (blatt, treffer, dateiname) {
+
+    const kz = treffer.zeile;
+    let letzte = 0;
+
+    /* wie End(xlToLeft): die letzte belegte Spalte der Kopfzeile, auch hinter Spalte 80 */
+    for (let c = 1; c <= blatt.spaltenMax; c++) if (this.fcTxt(blatt.wert(kz, c))) letzte = c;
+
+    /* R-F4 Stand: Zelle oberhalb der Kopfzeile, die mit "Stand:" beginnt */
+    let stand = "";
+    for (let r = 1; r < kz && !stand; r++) {
+        for (let c = 1; c <= letzte; c++) {
+            const t = this.fcTxt(blatt.wert(r, c));
+            if (t.slice(0, 6).toLowerCase() === "stand:") { stand = t; break; }
+        }
+    }
+
+    const kopf = [];
+    for (let c = 1; c <= letzte; c++) kopf.push(this.fcTxt(blatt.wert(kz, c)) || "Spalte " + c);
+
+    const g = { datei: dateiname, blatt: blatt.name, stand: stand, kopf: kopf, zeilen: [] };
+
+    for (let r = kz + 1; r <= blatt.zeilenMax; r++) {
+        const k = this.abForecastSchluessel(this.fcTxt(blatt.wert(r, treffer.ab)));   /* R-F3: nur Zeilen mit Schlüssel (R-AB5) */
+        if (!k) continue;
+
+        const termin = treffer.ampel && this.fcTxt(blatt.wert(r, treffer.ampel)).toLowerCase() === this.fcGeliefert
+            ? null   /* bereits geliefert: kein Termin */
+            : this.fcDatum(blatt.wert(r, treffer.termin));
+
+        const werte = [];
+        for (let c = 1; c <= letzte; c++) werte.push(this.fcTxt(blatt.wert(r, c)));
+        g.zeilen.push({ schluessel: k, termin: termin, werte: werte });
+    }
+
+    if (!g.zeilen.length) throw new Error("Die Forecast-Liste enthält keine Auftragsnummern.");
+    return g;
+},
+
+/* Eine Forecast-Liste prüfen und lesen. bytes: Uint8Array oder ArrayBuffer. */
+fcLesen: async function (bytes, dateiname) {
+
+    this.excelDateiPruefen(dateiname, bytes.byteLength, this.fcMaxGroesse / (1024 * 1024), this.fcEndungen, ".xlsx oder .xlsm");
+
+    const mappe = await this.excelLesen(bytes);
+    const alle = mappe.blaetter;
+    const reihenfolge = alle.filter(b => b.name === this.fcBlattZuerst).concat(alle.filter(b => b.name !== this.fcBlattZuerst));
+
+    try {
+        for (const b of reihenfolge) {
+            const blatt = await b.laden();
+            const treffer = this.fcKopfzeile(blatt);
+            if (treffer) return this.fcAuswerten(blatt, treffer, dateiname);
+        }
+    } catch (fehler) {
+        if (fehler && fehler.message === "Die Forecast-Liste enthält keine Auftragsnummern.") throw fehler;
+        throw new Error(this.excelFehlerNichtLesbar);
+    }
+
+    throw new Error("In „" + dateiname + "“ wurde keine Kopfzeile mit „Auftrag.-Nr“ und „Liefertermin“ gefunden. " +
+        "Gesucht wird zuerst im Blatt „" + this.fcBlattZuerst + "“.");
+},
+
+
+/* ===========================================================================
+   KOMMISSIONIERLISTEN IMPORTIEREN: VORSCHAU UND SPEICHERN (R-I8 bis R-I10)
+   Nachbau von bestand/importer.py (speichern) und der Rückfrage in
+   bestand/views.py (import_pruefen). Gelesen wird in 4Q_import_lesen.js.
+
+   Ersetzen ohne Löschen (Symolo kennt kein Löschen, Entwickler 16.10.2026):
+     1. der AB-Kopf wird an seinem Platz in der Liste aktualisiert,
+     2. Baugruppen und Teile aus der Datei werden NEU angelegt,
+     3. die bisherigen Baugruppen und Teile werden zuletzt archiviert (ausgeblendet).
+   Bricht der Import mittendrin ab, steht höchstens etwas doppelt da, nichts fehlt.
+   OFFEN (Symolo): Es gibt keine Transaktion und kein Anlegen mehrerer Zeilen auf
+   einmal. Die archivierten alten Zeilen bleiben in der Datenbank (die IT kann sie
+   später endgültig löschen). Bei jedem Anlegen holt die Datenschicht erst ein leeres
+   Objekt; ein Sammel-Anlegen würde einen Import deutlich beschleunigen.
+   =========================================================================== */
+
+/* Die ABs in der Bestandsliste mit diesem Schlüssel (R-AB3, auch andere Los-Schreibweise); null = keiner. */
+impVorhanden: async function (ab) {
+
+    if (this.text(ab) === "") return null;
+
+    const liste = await this.datenLesen("auftrag", {
+        wo: { ab_schluessel: this.abSchluessel(ab), bereich: "bestand" }, aufloesen: false
+    });
+    return liste.length ? liste[0] : null;
+},
+
+/* Vorschau: je gelesene Datei { nr, g, alt, doppelt, imSchweissen }. Dieselbe AB-Nummer in mehreren Dateien:
+   die letzte Datei gilt. */
+impVorschau: async function (gelesene) {
+
+    const letzte = {};
+    gelesene.forEach((g, i) => { if (this.impAb(g)) letzte[this.abSchluessel(this.impAb(g))] = i; });
+
+    const zeilen = [];
+
+    for (let i = 0; i < gelesene.length; i++) {
+        const g = gelesene[i];
+        const ab = this.impAb(g);
+        const doppelt = ab !== "" && letzte[this.abSchluessel(ab)] !== i;
+        const alt = ab ? await this.impVorhanden(ab) : null;
+        const imSchweissen = ab !== "" && !doppelt && await this.swHatAb(ab);   /* R-I10 */
+
+        zeilen.push({ nr: i, g: g, alt: alt, doppelt: doppelt, imSchweissen: imSchweissen });
+    }
+
+    return zeilen;
+},
+
+/* Viele Zeilen anlegen, je 8 gleichzeitig; Ergebnis in der Reihenfolge der Liste. */
+impAnlegenViele: async function (name, liste) {
+
+    const ergebnis = new Array(liste.length);
+    await this.jeAcht(liste.map((werte, i) => [werte, i]), async ([werte, i]) => { ergebnis[i] = await this.datenAnlegen(name, werte); });
+    return ergebnis;
+},
+
+/* Je Teil der bisherigen Zeilen die erfassten Werte (R-I8): Vorhanden, Lagerort, Eingelagert, Komplett.
+   Schlüssel = BG-Name | Zeichnungsnummer | LK-Nummer; bei doppelten Teilen gewinnt die erste Zeile (wie Excel). */
+impMerken: async function (alt) {
+
+    const merk = { v: {}, l: {}, e: {}, f: {} };
+    const bgs = await this.datenLesenIn("baugruppe", "auftrag", [alt._id], { aufloesen: false });
+    const teile = await this.datenLesenIn("teil", "auftrag", [alt._id], { aufloesen: false, sortierung: ["zeile"] });
+    const name = {};
+    bgs.forEach(b => { name[String(b._id)] = this.text(b.name); });
+
+    teile.slice().sort((a, b) => (this.mengeMilli(a.zeile) - this.mengeMilli(b.zeile)) || this.idVergleich(a._id, b._id)).forEach(t => {
+        const bg = t._baugruppe_id === null || t._baugruppe_id === undefined || t._baugruppe_id === ""
+            ? this.impOhneBg : (name[String(t._baugruppe_id)] || this.impOhneBg);
+        const s = this.impTeilSchluessel(bg, { zeichnungsnummer: this.text(t.zeichnungsnummer), lk_nummer: this.text(t.lk_nummer) });
+
+        [["v", t.vorhanden], ["l", t.lagerort], ["e", t.datum_eingelagert], ["f", t.datum_komplett]].forEach(([k, wert]) => {
+            if (wert !== null && wert !== undefined && wert !== "" && !(s in merk[k])) merk[k][s] = wert;
+        });
+    });
+
+    return { merk: merk, bgs: bgs, teile: teile };
+},
+
+/* Einen gelesenen AB anlegen oder ersetzen (R-I8, R-I9). heute: Datum als Text (Standard: heute).
+   melden(text): Fortschritt für die Ansicht. Gibt { auftrag, ersetzt } zurück. */
+impSpeichern: async function (g, abEingabe, heute, melden) {
+
+    const ab0 = this.abForm(abEingabe || this.impAb(g));
+    if (!ab0) throw new Error("Fertigungs-AB-Nummer fehlt.");
+
+    const tag = heute || this.heuteText();
+    const sage = text => { if (melden) melden(text); };
+    const alt = await this.impVorhanden(ab0);
+
+    let ab = ab0;
+    let altes = { merk: { v: {}, l: {}, e: {}, f: {} }, bgs: [], teile: [] };
+
+    if (alt) {
+        if (this.abForm(alt.ab_anzeige) === this.text(alt.ab_anzeige)) ab = this.text(alt.ab_anzeige);   /* bisherige Schreibweise ist korrekt: bleibt */
+        altes = await this.impMerken(alt);
+    }
+
+    const k = g.kopf;
+    const kopf = {
+        ab_anzeige: ab, ab_schluessel: this.abSchluessel(ab), forecast_schluessel: this.abForecastSchluessel(ab),
+        haupt_ab: k.haupt_ab, kunde: k.kunde, verkaufsartikel: k.verkaufsartikel,
+        ersteller: k.ersteller, datum_liste: k.datum, dispoliste: k.dispoliste,
+        lagerort: "",   /* W6 = wie Excel: der Lagerort am AB geht verloren */
+        quelldatei: this.text(g.datei).slice(0, 255)
+    };
+
+    sage("Schreibe den Kopf von " + ab + " …");
+    let auftrag;
+
+    if (alt) {
+        auftrag = await this.datenAendern("auftrag", alt, kopf);
+    } else {
+        const alle = await this.datenLesen("auftrag", { wo: { bereich: "bestand" }, aufloesen: false, felder: ["reihenfolge"] });
+        const hoechste = alle.reduce((m, a) => Math.max(m, this.mengeMilli(a.reihenfolge)), 0) / 1000;
+        auftrag = await this.datenAnlegen("auftrag", Object.assign(kopf, {
+            reihenfolge: hoechste + 1, bereich: "bestand", archiviert: false
+        }));
+    }
+
+    /* Baugruppen zuerst (die Teile verweisen auf sie), dann die Teile. */
+    const bgListe = [], teilListe = [];
+    g.zeilen.forEach((z, i) => { (z.ebene === "BG" ? bgListe : teilListe).push([z, i + 1]); });
+
+    const gemeinsam = (w) => ({
+        zeichnungsnummer: w.zeichnungsnummer, benennung: w.benennung, menge_bg: w.menge_bg, index: w.index,
+        lk_nummer: w.lk_nummer, arbeitsgang: w.arbeitsgang, material: w.material, profil: w.profil,
+        abmasse: w.abmasse, bemerkung: w.bemerkung, menge_gesamt_text: w.menge_gesamt_text || "",
+        menge_gesamt: w.menge_gesamt === null || w.menge_gesamt === undefined ? null : this.mengeWert(this.mengeMilli(w.menge_gesamt))
+    });
+
+    sage("Lege " + bgListe.length + " Baugruppen an …");
+    const neueBgs = await this.impAnlegenViele("baugruppe", bgListe.map(([z, nr]) => Object.assign(gemeinsam(z.werte), {
+        auftrag: auftrag._id, zeile: nr, name: z.bg, kurz: z.bg.split(" ")[0], lagerort: "", archiviert: false
+    })));
+
+    /* Zu jeder Teilzeile die zuletzt gelesene Baugruppe (R-D4). */
+    const bgId = {};
+    let letzteBg = null, nr = 0;
+    g.zeilen.forEach((z, i) => {
+        if (z.ebene === "BG") letzteBg = neueBgs[nr++]._id;
+        else bgId[i + 1] = z.bg === this.impOhneBg ? null : letzteBg;
+    });
+
+    const m = altes.merk;
+    sage("Lege " + teilListe.length + " Teile an …");
+
+    await this.impAnlegenViele("teil", teilListe.map(([z, nr]) => {
+        const w = z.werte;
+        const s = this.impTeilSchluessel(z.bg, w);
+        const soll = w.menge_gesamt === null || w.menge_gesamt === undefined ? null : this.mengeWert(this.mengeMilli(w.menge_gesamt));
+        const vorhanden = w.vorhanden !== null && w.vorhanden !== undefined ? this.mengeWert(this.mengeMilli(w.vorhanden)) : (s in m.v ? m.v[s] : null);
+        const [ein, fertig] = this.datenStempeln(vorhanden, soll, m.e[s], m.f[s], tag);   /* R-T1 / R-I9 */
+
+        return Object.assign(gemeinsam(w), {
+            auftrag: auftrag._id, baugruppe: bgId[nr], zeile: nr,
+            lagerort: s in m.l ? m.l[s] : "", vorhanden: vorhanden, datum_eingelagert: ein, datum_komplett: fertig, archiviert: false
+        });
+    }));
+
+    /* Zuletzt die bisherigen Zeilen ausblenden. */
+    if (alt) {
+        sage("Blende die bisherigen Zeilen aus …");
+        await this.jeAcht(altes.teile.concat(altes.bgs).map(x => [x, altes.teile.indexOf(x) >= 0 ? "teil" : "baugruppe"]),
+            ([zeile, tabelle]) => this.datenArchivieren(tabelle, zeile));
+    }
+
+    await this.protokollSchreiben(alt ? "ersetzt" : "import", ab, "", "", g.datei);
+    return { auftrag: auftrag, ersetzt: Boolean(alt) };
+},
+
+/* R-I9: Meldung nach dem Import. */
+impMeldung: function (neu, ersetzt) {
+
+    const n = neu + ersetzt;
+    if (!n) return "Es wurde nichts importiert.";
+
+    let text = n === 1 ? "1 Arbeitsauftrag importiert." : n + " Arbeitsaufträge importiert.";
+    if (ersetzt) text += " Davon ersetzt: " + ersetzt + ".";
+    return text;
+},
+
+/* Die Entscheidungen der Vorschau ausführen. zeilen: aus impVorschau; wahl: je Zeile
+   { ab: eingetragene AB-Nummer (wenn sie in der Datei fehlte), ersetzen: true/false, schweissen: true/false }.
+   Dieselbe Regel wie bestand/views.py: Nein heißt überspringen. Gibt { neu, ersetzt, zuletzt, meldung } zurück. */
+impAusfuehren: async function (zeilen, wahl, heute, melden) {
+
+    let neu = 0, ersetzt = 0, zuletzt = null;
+
+    for (const z of zeilen) {
+        if (z.doppelt) continue;
+
+        const w = (wahl && wahl[z.nr]) || {};
+        const gelesenAb = this.impAb(z.g);
+        const ab = gelesenAb || this.abForm(w.ab || "");   /* R-I4: fehlt er in der Datei, hat ihn die Person eingetragen */
+        if (!ab) continue;
+
+        const imSw = z.imSchweissen || (!gelesenAb && await this.swHatAb(ab));
+        if (imSw && w.schweissen !== true) continue;                    /* R-I10: Nein = überspringen */
+
+        const da = gelesenAb ? z.alt : await this.impVorhanden(ab);
+        if (da && w.ersetzen !== true) continue;                        /* R-I8: Nein = überspringen */
+
+        const erg = await this.impSpeichern(z.g, ab, heute, melden);
+        if (erg.ersetzt) ersetzt++; else neu++;
+        zuletzt = erg.auftrag;
+    }
+
+    return { neu: neu, ersetzt: ersetzt, zuletzt: zuletzt, meldung: this.impMeldung(neu, ersetzt) };
+},
+
+
+/* ===========================================================================
+   FORECAST IMPORTIEREN UND ANSEHEN (R-F1, R-F4, R-F5, R-F11)
+   Nachbau von bestand/forecast.py (speichern) und views_forecast.py. Gelesen
+   wird in 4R_forecast_lesen.js, angezeigt in 4G_forecast.js.
+
+   Der Import ersetzt den ganzen Forecast, aber ohne zu löschen: Der neue
+   Forecast wird versteckt angelegt (archiviert), samt allen Zeilen. Erst wenn
+   alles da ist, wird er sichtbar und der bisherige archiviert. Bricht der
+   Import ab, bleibt der bisherige Forecast gültig.
+   OFFEN (Symolo): keine Transaktion, kein Anlegen mehrerer Zeilen auf einmal
+   (die Vorlage hat rund 800 Zeilen mit je bis zu 80 Spalten). Die archivierten
+   alten Forecasts bleiben mit ihren Zeilen in der Datenbank (IT räumt auf).
+   =========================================================================== */
+
+fcDatenJeSeite: 250,
+
+/* R-F1: SharePoint-Link aus der Adresszeile in den Pfad der Datei umbauen (wie QuelleBereinigen):
+   Anführungszeichen außen weg; bei http... alles ab "?" weg und "/:x:/r/" -> "/". */
+fcQuelleBereinigen: function (q) {
+
+    let t = this.text(q).trim();
+    if (t.length > 1 && t.charAt(0) === "\"" && t.charAt(t.length - 1) === "\"") t = t.slice(1, -1);
+
+    if (t.slice(0, 4).toLowerCase() === "http") {
+        t = t.split("?")[0].replace(/\/:x:\/r\//gi, "/");
+    }
+    return t;
+},
+
+/* Als Link zum Öffnen gilt nur http und https (nie javascript: o. ä.). */
+fcQuelleLink: function (q) {
+
+    return /^https?:\/\//i.test(this.text(q)) ? this.text(q) : "";
+},
+
+fcQuelleLesen: async function () {
+
+    const z = (await this.datenLesen("einstellung", { wo: { name: "forecast_link" }, aufloesen: false }))[0];
+    return z ? this.text(z.wert) : "";
+},
+
+/* R-F1: Link hinterlegen (bereinigt, höchstens 1000 Zeichen). Gibt den gespeicherten Link zurück. */
+fcQuelleSpeichern: async function (eingabe) {
+
+    const wert = this.fcQuelleBereinigen(eingabe).slice(0, 1000);
+    const z = (await this.datenLesen("einstellung", { wo: { name: "forecast_link" }, aufloesen: false }))[0];
+
+    if (z) await this.datenAendern("einstellung", z, { wert: wert });
+    else await this.datenAnlegen("einstellung", { name: "forecast_link", wert: wert });
+
+    return wert;
+},
+
+/* Datum { j, m, t } als Text, wie Symolo es liefert ("2026-12-02T00:00:00.0000000Z"). */
+fcTerminText: function (t) {
+
+    if (!t) return null;
+    return String(t.j).padStart(4, "0") + "-" + this.impTag2(t.m) + "-" + this.impTag2(t.t) + "T00:00:00.0000000Z";
+},
+
+/* R-F4: ersetzt den ganzen Forecast. melden(text): Fortschritt. Gibt die Zahlen für die Meldung (R-F5) zurück. */
+fcSpeichern: async function (g, melden) {
+
+    const sage = text => { if (melden) melden(text); };
+    const bisher = await this.datenLesen("forecast", { aufloesen: false });
+
+    sage("Lege den Forecast an …");
+    const f = await this.datenAnlegen("forecast", {
+        zeit: this.zeitJetzt(), datei: this.text(g.datei).slice(0, 255), blatt: this.text(g.blatt).slice(0, 120),
+        stand: this.text(g.stand).slice(0, 200), kopf: JSON.stringify(g.kopf), archiviert: true
+    });
+
+    for (let i = 0; i < g.zeilen.length; i += 100) {
+        sage("Lege die Zeilen an (" + Math.min(i + 100, g.zeilen.length) + " von " + g.zeilen.length + ") …");
+
+        await this.jeAcht(g.zeilen.slice(i, i + 100).map((z, k) => [z, i + k + 1]), ([z, nr]) => this.datenAnlegen("forecast_zeile", {
+            forecast: f._id, nr: nr, schluessel: z.schluessel, termin: this.fcTerminText(z.termin), werte: JSON.stringify(z.werte)
+        }));
+    }
+
+    sage("Schalte den neuen Forecast frei …");
+    await this.datenAendern("forecast", f, { archiviert: false });
+    await this.jeAcht(bisher, alt => this.datenArchivieren("forecast", alt));
+
+    const mit = {};
+    g.zeilen.forEach(z => { if (z.termin) mit[z.schluessel] = true; });
+
+    const abs = await this.datenLesen("auftrag", { wo: { bereich: "bestand" }, aufloesen: false, felder: ["ab_anzeige", "forecast_schluessel"] });
+    const treffer = abs.filter(a => (this.text(a.forecast_schluessel) || this.abForecastSchluessel(a.ab_anzeige)) in mit).length;
+
+    await this.protokollSchreiben("forecast", "", g.datei, "", g.zeilen.length + " Zeilen");
+
+    return { zeilen: g.zeilen.length, absMitTermin: Object.keys(mit).length, treffer: treffer, absBestand: abs.length };
+},
+
+/* R-F5 */
+fcMeldung: function (e) {
+
+    return "Forecast importiert: " + e.zeilen + " Zeilen, " + e.absMitTermin + " ABs mit offenem Liefertermin; " +
+        e.treffer + " von " + e.absBestand + " ABs der Bestandsliste haben einen Liefertermin.";
+},
+
+/* R-F11: alle Zeilen des aktuellen Forecasts mit allen Spalten. f = Forecast aus fcLaden (oder null).
+   Ergebnis: { kopf: [Spaltennamen], zeilen: [{ schluessel, termin, werte: [Text] }] } nach Zeilennummer. */
+fcDatenLaden: async function (f) {
+
+    if (!f) return { kopf: [], zeilen: [] };
+
+    let kopf = [];
+    try { kopf = JSON.parse(this.text(f.kopf) || "[]"); } catch (fehler) { kopf = []; }
+
+    const zeilen = await this.datenLesenIn("forecast_zeile", "forecast", [f._id], { aufloesen: false });
+    zeilen.sort((a, b) => (this.mengeMilli(a.nr) - this.mengeMilli(b.nr)) || this.idVergleich(a._id, b._id));
+
+    return {
+        kopf: kopf,
+        zeilen: zeilen.map(z => {
+            let werte = [];
+            try { werte = JSON.parse(this.text(z.werte) || "[]"); } catch (fehler) { werte = []; }
+            return { schluessel: this.text(z.schluessel), termin: this.text(z.termin), werte: werte };
+        })
+    };
+},
+
+/* R-F11: Suche in AB-Schlüssel und allen Spalten (ohne Groß-/Kleinschreibung). */
+fcDatenFiltern: function (zeilen, suche) {
+
+    const q = this.text(suche).trim().toLowerCase();
+    if (!q) return zeilen;
+
+    return zeilen.filter(z => z.schluessel.toLowerCase().indexOf(q) > -1 || z.werte.some(w => this.text(w).toLowerCase().indexOf(q) > -1));
+},
+
+
+/* ===========================================================================
+   ANZEIGE FÜR DIE IMPORTE: Ablage für Dateien, Auswahlfragen, Größe
+   Gemeinsam für "Kommissionierlisten importieren" und "Forecast importieren".
+   Die Datei selbst liest die Ansicht mit file.arrayBuffer() (kein fetch).
+   =========================================================================== */
+
+impMaxDateien: 30,
+
+/* 1,5 MB, 230 KB */
+groesseText: function (bytes) {
+
+    if (bytes >= 1024 * 1024) return (bytes / (1024 * 1024)).toFixed(1).replace(".", ",") + " MB";
+    return Math.max(1, Math.round(bytes / 1024)) + " KB";
+},
+
+/* Ablage zum Hineinziehen oder Auswählen. aenderung(liste) kommt bei jeder neuen Auswahl.
+   Ohne mehrere gilt nur die erste Datei. Gibt { ablage, leeren } zurück. */
+ablageBauen: function (parent, mehrere, titel, hinweis, aenderung) {
+
+    const ablage = this.el(parent, "div", "kom-ablage");
+    this.el(ablage, "strong", "", titel);
+    this.el(ablage, "span", "kom-leise kom-klein", hinweis);
+
+    const eingabe = this.el(ablage, "input", "kom-datei");
+    eingabe.type = "file";
+    eingabe.multiple = mehrere;
+    eingabe.accept = ".xlsx,.xlsm";
+    eingabe.setAttribute("aria-label", titel);
+
+    const liste = this.el(ablage, "ul", "kom-dateiliste");
+
+    const setzen = dateien => {
+        let gewaehlt = Array.from(dateien || []);
+        if (!mehrere) gewaehlt = gewaehlt.slice(0, 1);
+
+        liste.replaceChildren();
+        gewaehlt.forEach(f => this.el(liste, "li", "", f.name + " (" + this.groesseText(f.size) + ")"));
+        aenderung(gewaehlt);
+    };
+
+    eingabe.onchange = () => setzen(eingabe.files);
+    ablage.ondragover = e => { e.preventDefault(); ablage.classList.add("kom-ueber"); };
+    ablage.ondragleave = () => { ablage.classList.remove("kom-ueber"); };
+    ablage.ondrop = e => {
+        e.preventDefault();
+        ablage.classList.remove("kom-ueber");
+        setzen(e.dataTransfer ? e.dataTransfer.files : []);
+    };
+
+    return { ablage: ablage, leeren: () => { eingabe.value = ""; setzen([]); } };
+},
+
+/* Auswahlfrage mit Knöpfen zum Ankreuzen. eintraege: [[wert, text, angekreuzt]]; wechsel(wert) bei Änderung. */
+wahlBauen: function (parent, name, eintraege, wechsel) {
+
+    const box = this.el(parent, "div", "kom-frage");
+
+    eintraege.forEach(([wert, text, an]) => {
+        const l = this.el(box, "label", "kom-wahl");
+        const r = this.el(l, "input");
+        r.type = "radio";
+        r.name = name;
+        r.checked = Boolean(an);
+        r.onchange = () => { if (r.checked) wechsel(wert); };
+        this.el(l, "span", "", text);
+    });
+
+    return box;
+},
+
+/* Datei als Bytes lesen; ist sie zu groß, wird sie gar nicht erst geladen (R-I1). */
+dateiBytes: async function (datei, groesstMb) {
+
+    if (datei.size > groesstMb * 1024 * 1024) throw new Error("Die Datei ist größer als " + groesstMb + " MB.");
+    return new Uint8Array(await datei.arrayBuffer());
+},
+
+
+/* ===========================================================================
+   RECHTE
+   Keine Anmeldung und keine Rollen (Ben und Entwickler, 16.10.2026). Symolo
+   stellt ein einfaches Objekt bereit, das der Entwickler im Framework füllt:
+
+       const currentRights = { "kom.edit.canimportkomlisten": true, ... }
+
+   Format <modul>.<gruppe>.<recht>. Wir brauchen nur wenige Rechte (unten).
+   Ein Recht fehlt oder ist nicht true: Die Ansicht blendet den Knopf aus und
+   zeigt einen Hinweis.
+   Im lokalen Nachbau (test.html) gilt alles als erlaubt; im Symolo-Fenster
+   ohne das Objekt gilt nichts als erlaubt.
+   Wichtig: Die Ansicht blendet nur Knöpfe aus. Geschützt ist erst, wenn Symolo
+   die Schreibrechte je Tabelle prüft.
+   OFFEN (Symolo): Der Entwickler legt die Rechte im Framework an und trägt
+   sie ein; heißen sie anders, ändert sich nur die Liste hier.
+   =========================================================================== */
+
+rechte: {
+    importKomlisten: "kom.edit.canimportkomlisten",
+    importForecast: "kom.edit.canimportforecast"
+},
+
+/* Das Rechte-Objekt aus Symolo oder null. Es ist ein Wert im Framework (const), kein Eintrag in window. */
+rechteObjekt: function () {
+
+    /* eslint-disable-next-line no-undef */
+    if (typeof currentRights !== "undefined" && currentRights && typeof currentRights === "object") return currentRights;
+
+    const w = typeof window !== "undefined" ? window : null;
+    return w && w.currentRights && typeof w.currentRights === "object" ? w.currentRights : null;
+},
+
+/* Darf die Person das? recht = Schlüssel aus this.rechte. */
+darf: function (recht) {
+
+    const objekt = this.rechteObjekt();
+    if (objekt) return objekt[recht] === true;
+
+    return this.datenQuelle() === "lokal";
+},
+
+/* Name für das Protokoll. OFFEN (Symolo): Woher kommt der Name der Person? Bis dahin leer. */
+benutzer: function () {
+
+    return { name: "" };
+},
+
+/* Hinweis, wenn ein Recht fehlt (für die Ansichten). */
+rechtFehlt: function () {
+
+    return "Dafür fehlt dir das Recht. Bitte wende dich an Planung oder Stahlbau.";
 },
 
 
@@ -6359,6 +7665,24 @@ form_on_load: function (FORM) {
 /* box-sizing an einer Stelle (Skill, Falle 5). Jede neue Box kommt hierher. */
 .kom-sw .kom-menue, .kom-sw .kom-menuepunkt, .kom-sw .kom-kopf, .kom-sw .kom-koerper, .kom-sw .kom-fuss, .kom-sw .kom-knopf,
 .kom-sw .kom-tabelle, .kom-sw .kom-status, .kom-sw .kom-dialog { box-sizing: border-box; }
+
+/* Importe: Ablage für Dateien, Fragen in der Vorschau */
+.kom-sw .kom-ablage { display: flex; flex-direction: column; gap: var(--space-1); padding: var(--space-4);
+  border: 2px dashed var(--line-strong); border-radius: var(--radius-lg); background: var(--surface-100); }
+.kom-sw .kom-ablage.kom-ueber { border-color: var(--glow-red); background: var(--surface-0); }
+.kom-sw .kom-datei { margin-top: var(--space-2); font: inherit; color: var(--ink); }
+.kom-sw .kom-dateiliste { margin: var(--space-2) 0 0; padding-left: var(--space-4); font-size: var(--fs-small); }
+.kom-sw .kom-dateiliste:empty { display: none; }
+.kom-sw .kom-knopfzeile { display: flex; flex-wrap: wrap; gap: var(--space-2); margin-top: var(--space-4); }
+.kom-sw .kom-frage { display: flex; flex-direction: column; gap: var(--space-1); margin: var(--space-2) 0; }
+.kom-sw .kom-wahl { display: flex; align-items: flex-start; gap: var(--space-2); cursor: pointer; }
+.kom-sw .kom-rahmen { max-width: 100%; overflow: auto; border: 1px solid var(--line); border-radius: var(--radius-lg); background: var(--surface-100); }
+.kom-sw .kom-rahmen .kom-tabelle { white-space: nowrap; }
+.kom-sw .kom-import-tabelle td { vertical-align: top; white-space: normal; }
+.kom-sw .kom-feldblock { display: flex; flex-direction: column; gap: var(--space-1); max-width: 640px; margin: var(--space-3) 0; }
+.kom-sw .kom-abgleich { background: color-mix(in srgb, var(--brand-gray) 18%, var(--surface-100)); }
+.kom-sw .kom-seiten { display: flex; align-items: center; gap: var(--space-3); margin: var(--space-3) 0; }
+.kom-sw .kom-zusammen { display: flex; flex-direction: column; gap: var(--space-3); max-width: 900px; }
 
 
 /* Bestandsliste (Entwurf D): eine Karte je AB, Tabelle wie Excel.

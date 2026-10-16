@@ -40,6 +40,9 @@ ANSICHTEN = [
     {"name": "schweissen", "titel": "Schweißen", "klasse": "kom-sw", "praefix": "komSw", "css_id": "KOMSWCSS", "css": ["bestand"]},
     {"name": "arbeitsplaetze", "titel": "Arbeitsplätze", "klasse": "kom-ap", "praefix": "komAp", "css_id": "KOMAPCSS"},
     {"name": "regal", "titel": "Regal", "klasse": "kom-rg", "praefix": "komRg", "css_id": "KOMRGCSS"},
+    {"name": "import", "titel": "Kommissionierlisten importieren", "klasse": "kom-im", "praefix": "komIm", "css_id": "KOMIMCSS", "css": ["bestand"]},
+    {"name": "forecast_import", "titel": "Forecast importieren", "klasse": "kom-fi", "praefix": "komFi", "css_id": "KOMFICSS", "css": ["bestand"]},
+    {"name": "forecast_daten", "titel": "Forecast-Daten", "klasse": "kom-fd", "praefix": "komFd", "css_id": "KOMFDCSS", "css": ["bestand"]},
     {"name": "verbindungstest", "titel": "Verbindungstest", "klasse": "kom-vt", "praefix": "komVt", "css_id": "KOMVTCSS"},
 ]  # fmt: skip
 

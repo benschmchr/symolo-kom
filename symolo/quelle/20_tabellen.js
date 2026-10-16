@@ -236,8 +236,12 @@ tabellen: {
             datei: "datei",
             blatt: "blatt",
             stand: "stand",
-            kopf: "kopf"
-        }
+            kopf: "kopf",
+            /* Ein neuer Import ersetzt den ganzen Forecast: der bisherige wird archiviert
+               (Phase 7). OFFEN (Symolo): Archiv-Feld oder Status, siehe Anbindung. */
+            archiviert: "archiviert"
+        },
+        archiv: "archiviert"
     },
 
     forecast_zeile: {

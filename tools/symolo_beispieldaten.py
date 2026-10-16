@@ -200,7 +200,7 @@ def exportieren():
     forecasts = []
     for f in m.ForecastImport.objects.order_by("id"):
         z = standard(f.id, f.zeit)
-        z.update(zeit=zeit(f.zeit), datei=f.datei, blatt=f.blatt, stand=f.stand, kopf=wert(f.kopf))
+        z.update(zeit=zeit(f.zeit), datei=f.datei, blatt=f.blatt, stand=f.stand, kopf=wert(f.kopf), archiviert=False)
         forecasts.append(z)
 
     return {
@@ -241,7 +241,7 @@ def exportieren():
         ),
         "fwm.kom_arbeitsplatz": tabelle(ap_felder, aus_modell(m.Arbeitsplatz.objects.order_by("id"), ap_felder)),
         "fwm.kom_planungsmarke": tabelle(["ab_schluessel", "archiviert"], planung),
-        "fwm.kom_forecast": tabelle(["zeit", "datei", "blatt", "stand", "kopf"], forecasts),
+        "fwm.kom_forecast": tabelle(["zeit", "datei", "blatt", "stand", "kopf", "archiviert"], forecasts),
         "fwm.kom_forecast_zeile": tabelle(
             ["forecast_id_forecast", "nr", "schluessel", "termin", "werte"],
             aus_modell(

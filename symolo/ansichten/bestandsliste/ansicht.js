@@ -43,6 +43,7 @@ before_set_values: async function (form, { data }) {
     if (start.suche) this.suche = this.sucheEl.value = this.text(start.suche);   /* Sprung aus einem anderen Bereich */
     this.knopf(this.fuss, "Neu laden", () => this.laden());
     this.knopf(this.fuss, "AB archivieren …", () => this.abEingabeDialog());
+    if (this.darf(this.rechte.importKomlisten)) this.knopf(this.fuss, "Kommissionierliste importieren", () => this.bereichOeffnen("import"));
 
     await this.laden();
 },

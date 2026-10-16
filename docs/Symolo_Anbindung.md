@@ -76,8 +76,8 @@ Jede Ansicht hat eine eigene Wrapper-Klasse (`kom-bl`, `kom-db`, `kom-rg`, `kom-
 
 ## 4. Regeln, an die sich die App hält
 
-1. IDs werden nie angezeigt. Sie stehen nur in Feldern mit `_` vorne (`_id`, `_gruppe_id`), und die Anzeige verweigert solche Felder.
-2. Beim Anlegen wird nie eine ID gesetzt.
+1. IDs werden nie angezeigt. Sie stehen nur in Feldern mit `_` vorne (`_id`, `_gruppe_id`), und die Anzeige verweigert solche Felder. Intern dürfen sie weitergegeben werden (Verknüpfungen).
+2. Beim Anlegen wird nie die ID des neuen Eintrags gesetzt (die Verknüpfung zu einem anderen Eintrag ist keine solche ID).
 3. Beim Ändern wird das Objekt direkt vorher frisch geholt, ein Feld geändert und das **komplette** Objekt zurückgeschickt. Hat sich `udate` seit dem Lesen geändert, bricht die App mit einem Hinweis ab.
 4. Es gibt **einen** Schreibpfad (`schreiben` in `40_daten.js`). Gelöscht wird nie, nur archiviert.
 5. Jede Anfrage hat ein Zeitlimit.
@@ -98,7 +98,7 @@ Jede Ansicht hat eine eigene Wrapper-Klasse (`kom-bl`, `kom-db`, `kom-rg`, `kom-
 | SQL-Sprache, Zeilengrenze | `sqlBauen` | einfache Abfragen; einige tausend Zeilen |
 | Spaltenliste statt `*` | `sqlBauen` in `40_daten.js` (Option `felder`) | wird verstanden; wenn nicht, die Option weglassen (dann kommen alle Spalten) |
 | Tabellen `forecast`, `forecast_zeile`, `planungsmarke`, `schweisszeile` | `20_tabellen.js` | `fwm.kom_…`; `planungsmarke` mit Archiv-Feld `archiviert` (Häkchen entfernen = archivieren) |
-| Forecast: der neueste gilt | `fcLaden` in `4G_forecast.js` | die Ansicht nimmt den Forecast mit der neuesten Zeit; der Import (Phase 7) blendet den alten aus |
+| Forecast: der neueste gilt | `fcLaden` in `4G_forecast.js` | die Ansicht nimmt den nicht archivierten Forecast mit der neuesten Zeit; `forecast` hat jetzt das Archiv-Feld `archiviert` |
 | Felder für das Schweißen: `auftrag.bereich` (`bestand`, `schweissen`, `archiv`), `baugruppe.archiviert`, `teil.archiviert`, `schweisszeile.archiviert`, `schweisszeile.zurueckgeholt`; Tabellen `arbeitsplatz`, `mitarbeiter` | `20_tabellen.js` | Vorschlag; entnommene oder zurückgeholte Originale werden nur ausgeblendet, nie gelöscht. Ausgeblendete Zeilen bleiben in der Datenbank (IT räumt ggf. auf) |
 | Bereichsleiste (Wechsel zwischen den Fenstern) | `bereichOeffnen` in `60_anzeige.js`; Einstellungen `bereichsleiste`, `bereiche` | In Symolo ist der Wechsel **nicht angebunden**: Es fehlt, wie ein Hook-Objekt ein anderes Formular öffnet. Der Entwickler trägt es in `window.KOM_BEREICH_WECHSELN(name, optionen)` ein (`optionen.suche` füllt das Suchfeld vor). Bis dahin zeigt die Leiste eine Meldung; mit `bereichsleiste: false` verschwindet sie |
 | Länge einer Abfrage | `datenLesenIn` in `40_daten.js` | `in (…)` in Stücken zu 500 IDs |
@@ -112,7 +112,11 @@ Jede Ansicht hat eine eigene Wrapper-Klasse (`kom-bl`, `kom-db`, `kom-rg`, `kom-
 | Rückgabe von `UpdateObjectJson` | `schreiben` in `40_daten.js` | kein Objekt: das gesendete gilt |
 | Sammel-Update | `datenAendernViele` in `40_daten.js` | einzeln, je 8 gleichzeitig |
 | Endpunkt im Fenster | `10_einstellungen.js` | setzt `internal.connection` selbst |
-| Benutzer, Rollen, Rechte | `50_benutzer.js`, Rechte in Symolo | vorerst keine |
+| Rechte | `currentRights` im Framework, `rechte` in `50_benutzer.js` | Das Objekt füllen **Sie** (Format `<modul>.<gruppe>.<recht>`). Die App fragt zwei Rechte ab: `kom.edit.canimportkomlisten` und `kom.edit.canimportforecast` (nur diese Stelle ändern, wenn sie anders heißen). Fehlt das Objekt oder das Recht, sind die Importe gesperrt (Hinweis statt Knopf). Lokal gilt alles als erlaubt; auf `test.html` schaltet „Rechte fehlen“ das Verhalten um |
+| Archiv-Feld oder Status | `archiv:` je Tabelle in `20_tabellen.js`; `datenArchivieren`, Archiv-Filter in `40_daten.js` | `archiviert` (ja/nein). Haben die Objekte bei Ihnen einen Status, ändert sich nur diese Stelle |
+| Excel-Bibliothek | `symolo/quelle/4P_excel.js` (`excelLesen(bytes)`) | eigener Leser für .xlsx (Zip, Zahlen, Datum, Füllfarben, ohne Makros). Eine Symolo-Bibliothek ersetzt nur diese Datei (gleiche Rückgabe: Blätter mit `wert(zeile, spalte)` und `stil(zeile, spalte)`). Dateien kommen als `File` aus dem Browser und werden mit `arrayBuffer()` gelesen, ohne `fetch` |
+| Import ersetzt ohne Löschen | `4S_import_speichern.js`, `4T_forecast_import.js` | keine Transaktion, kein Sammel-Anlegen: neue Zeilen zuerst anlegen, bisherige zuletzt archivieren (`auftrag`-Kopf wird an seinem Platz geändert). Der neue Forecast entsteht versteckt (`forecast.archiviert`) und wird erst am Ende sichtbar. Archivierte Zeilen bleiben in der Datenbank (IT räumt ggf. auf) |
+| Link zur Forecast-Datei | Tabelle `einstellung`, Eintrag `forecast_link` | Text bis 1000 Zeichen |
 | Schrift und Farben im Fenster | `symolo/quelle/gemeinsam.css` | FWM-Variablen an der Ansicht, Thema light |
 | Gemeinsame Skripte, Excel-Bibliothek | Aufbau der Ansichten | jede Ansicht in sich geschlossen; Excel-Bibliothek erlaubt, Adresse offen |
 
@@ -123,10 +127,11 @@ Jede Ansicht hat eine eigene Wrapper-Klasse (`kom-bl`, `kom-db`, `kom-rg`, `kom-
 3. Mit einer Testtabelle `schreibenErlaubtInSymolo` einschalten und anlegen und ändern prüfen. Die ID darf beim Anlegen nicht gesetzt werden, und beim Ändern muss das Komplettobjekt ankommen. Danach in der Bestandsliste eintragen (Vorhanden, Lagerort, Soll) und das **Regal** (`fertig/regal.js`) prüfen. Ein Lagerort am AB ändert alle Baugruppen und Teile darunter, also viele Einträge auf einmal.
 4. **Dashboard** (`fertig/dashboard.js`, nur lesen): liest wie die Bestandsliste und braucht keine weitere Tabelle.
 5. **Archiv** (`fertig/archiv.js`) und **Änderungsprotokoll** (`fertig/protokoll.js`): lesen `auftrag` (archivierte), `baugruppe`, `teil`, `schweisszeile`, `aenderung` und `einstellung`. Archivieren und Wiederherstellen schreiben nur Markierungen am AB (`archiviert`, `archiviert_am`, `archiv_herkunft`, `archiv_status`); das Protokoll schreibt eine Zeile je Änderung in `aenderung`. Es wird nichts gelöscht.
-6. **Forecast** (`fertig/forecast.js`), **Planung** (`fertig/planung.js`) und **Statistik** (`fertig/statistik.js`): lesen `auftrag`, `baugruppe`, `teil`, `schweisszeile`, `forecast`, `forecast_zeile` und `planungsmarke`. Das **Dashboard** liest jetzt ebenfalls `planungsmarke`, `forecast`, `forecast_zeile` und `schweisszeile` (Spalte Planung, Kachel Forecast). Geschrieben wird nur das Häkchen „Planung“ in `planungsmarke`; ein entferntes Häkchen wird ausgeblendet (`archiviert`) und beim nächsten Setzen wieder eingeblendet. Das Einlesen der Forecast-Datei kommt mit dem Import (Phase 7).
+6. **Forecast** (`fertig/forecast.js`), **Planung** (`fertig/planung.js`) und **Statistik** (`fertig/statistik.js`): lesen `auftrag`, `baugruppe`, `teil`, `schweisszeile`, `forecast`, `forecast_zeile` und `planungsmarke`. Das **Dashboard** liest jetzt ebenfalls `planungsmarke`, `forecast`, `forecast_zeile` und `schweisszeile` (Spalte Planung, Kachel Forecast). Geschrieben wird nur das Häkchen „Planung“ in `planungsmarke`; ein entferntes Häkchen wird ausgeblendet (`archiviert`) und beim nächsten Setzen wieder eingeblendet. Das Einlesen der Forecast-Datei steht in Schritt 8.
 7. **Schweißen** (`fertig/schweissen.js`) und **Arbeitsplätze** (`fertig/arbeitsplaetze.js`): lesen `auftrag`, `baugruppe`, `teil`, `schweisszeile`, `arbeitsplatz` und `mitarbeiter`. Die **Bestandsliste** schreibt jetzt auch: „Entnehmen“ legt Zeilen in `schweisszeile` an und blendet die Originale aus (`auftrag.bereich`, `baugruppe.archiviert`, `teil.archiviert`). Das geht nur mit Anlegen von mehreren Zeilen nacheinander; eine Transaktion gibt es nicht. Zuerst Entnehmen mit einem kleinen Test-AB prüfen, dann Archivieren und Zurückholen im Schweißen.
-8. Die weiteren Bereiche der Reihe nach, sobald sie gebaut sind.
-8. Tests: `python -m pytest tests/test_symolo.py`. Das umfasst die Skill-Prüfungen und die Datenschicht gegen den Nachbau.
+8. **Importe** (`fertig/import.js`, `fertig/forecast_import.js`, `fertig/forecast_daten.js`): brauchen `currentRights` (zwei Rechte, siehe Abschnitt 5) und schreiben. Erst mit einer Test-Kommissionierliste einen **neuen** AB importieren (legt `auftrag`, `baugruppe`, `teil` an), dann dieselbe Datei noch einmal mit „Ersetzen“ (der Kopf wird geändert, neue Zeilen kommen, die bisherigen werden archiviert). Dann den Forecast importieren (legt `forecast` versteckt an, dann die Zeilen in `forecast_zeile`, zuletzt wird er sichtbar und der alte archiviert) und `einstellung` mit `forecast_link` prüfen. Die Bereichsleiste (Abschnitt 5) gilt auch hier.
+9. Die weiteren Bereiche der Reihe nach, sobald sie gebaut sind.
+10. Tests: `python -m pytest tests/test_symolo.py`. Das umfasst die Skill-Prüfungen und die Datenschicht gegen den Nachbau.
 
 ## 7. Lokal testen (ohne Symolo)
 

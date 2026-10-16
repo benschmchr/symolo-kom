@@ -225,3 +225,31 @@ def test_symolo_statistik_wie_die_bisherige_app(tmp_path):
     for name in py:
         assert json.loads(json.dumps(py[name])) == js[name], name
     assert py["ueberfaellig"] and any(x[1] is not None for x in py["monat_ab"] + py["ia_ab"])
+
+
+@pytest.mark.skipif(NODE is None, reason="Node fehlt")
+def test_symolo_excel_einlesen_wie_die_bisherige_app(tmp_path):
+    """R-I1 bis R-I7, R-D1 bis R-D5, R-F2 bis R-F4: Der Excel-Leser in JavaScript liest über 50 Dateien (die
+    Beispiellisten und selbst gebaute Fälle) genauso wie bestand/importer.py und bestand/forecast.py."""
+    from tests import symolo_korpus
+
+    korpus = tmp_path / "korpus.json"
+    korpus.write_text(json.dumps(symolo_korpus.korpus()), encoding="utf-8")
+    datei = BASIS / "tests" / "symolo" / "excel_lesen.test.js"
+    env = {**os.environ, "KOM_EXCEL_KORPUS": str(korpus)}
+    erg = subprocess.run([NODE, "--test", str(datei)], capture_output=True, text=True, env=env)
+    assert erg.returncode == 0, erg.stdout[-6000:]
+
+
+@pytest.mark.skipif(NODE is None, reason="Node fehlt")
+def test_symolo_importieren_ersetzt_ohne_zu_loeschen(tmp_path):
+    """R-I8 bis R-I10, R-AB6, R-F1, R-F4, R-F5, R-F11: Kommissionierlisten und Forecast importieren und ersetzen
+    gegen den Nachbau (4S_import_speichern.js, 4T_forecast_import.js), mit denselben Dateien wie die bisherige App."""
+    from tests import symolo_korpus
+
+    korpus = tmp_path / "korpus.json"
+    korpus.write_text(json.dumps(symolo_korpus.korpus()), encoding="utf-8")
+    datei = BASIS / "tests" / "symolo" / "import.test.js"
+    env = {**os.environ, "KOM_EXCEL_KORPUS": str(korpus)}
+    erg = subprocess.run([NODE, "--test", str(datei)], capture_output=True, text=True, env=env)
+    assert erg.returncode == 0, erg.stdout[-6000:]

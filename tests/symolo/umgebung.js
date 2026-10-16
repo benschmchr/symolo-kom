@@ -11,7 +11,9 @@ const SYMOLO = path.join(__dirname, "..", "..", "symolo");
 /* zusatz(ctx, v) darf die Umgebung vor dem Test anpassen; name wählt die Ansicht. */
 /* vorher(ctx) läuft vor dem Laden der Skripte (z. B. ein gespeicherter Browser-Stand). */
 function umgebung(zusatz, name, vorher) {
-    const ctx = { console: { warn() {}, log: console.log }, setTimeout, clearTimeout, Promise, JSON };
+    /* Browser-Dinge, die der Excel-Leser braucht (im Fenster sind sie da). */
+    const browser = { TextDecoder, DecompressionStream, Blob, Response };
+    const ctx = { console: { warn() {}, log: console.log }, setTimeout, clearTimeout, Promise, JSON, ...browser };
     ctx.window = ctx;
     vm.createContext(ctx);
     if (vorher) vorher(ctx);
