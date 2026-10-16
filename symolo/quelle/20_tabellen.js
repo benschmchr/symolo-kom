@@ -203,11 +203,15 @@ tabellen: {
         }
     },
 
+    /* Häkchen "Planung" an einem AB. Entfernen heißt archivieren (nie löschen);
+       setzt jemand das Häkchen wieder, wird der Eintrag wieder eingeblendet. */
     planungsmarke: {
         tabelle: "fwm.kom_planungsmarke",
         felder: {
-            ab_schluessel: "ab_schluessel"
-        }
+            ab_schluessel: "ab_schluessel",
+            archiviert: "archiviert"
+        },
+        archiv: "archiviert"
     },
 
     /* ---- Forecast (VERMUTET, Vorschlag) ---- */

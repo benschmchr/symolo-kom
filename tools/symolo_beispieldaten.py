@@ -194,6 +194,7 @@ def exportieren():
     for p in m.Planungsmarke.objects.order_by("id"):
         z = standard(p.id, p.gesetzt_am)
         z["ab_schluessel"] = p.ab_schluessel
+        z["archiviert"] = False
         planung.append(z)
 
     forecasts = []
@@ -232,7 +233,7 @@ def exportieren():
             aus_modell(m.Mitarbeiter.objects.order_by("id"), ["name"], extra=lambda o: {"aktiv": True}),
         ),
         "fwm.kom_arbeitsplatz": tabelle(ap_felder, aus_modell(m.Arbeitsplatz.objects.order_by("id"), ap_felder)),
-        "fwm.kom_planungsmarke": tabelle(["ab_schluessel"], planung),
+        "fwm.kom_planungsmarke": tabelle(["ab_schluessel", "archiviert"], planung),
         "fwm.kom_forecast": tabelle(["zeit", "datei", "blatt", "stand", "kopf"], forecasts),
         "fwm.kom_forecast_zeile": tabelle(
             ["forecast_id_forecast", "nr", "schluessel", "termin", "werte"],

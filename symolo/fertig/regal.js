@@ -259,11 +259,15 @@ tabellen: {
         }
     },
 
+    /* Häkchen "Planung" an einem AB. Entfernen heißt archivieren (nie löschen);
+       setzt jemand das Häkchen wieder, wird der Eintrag wieder eingeblendet. */
     planungsmarke: {
         tabelle: "fwm.kom_planungsmarke",
         felder: {
-            ab_schluessel: "ab_schluessel"
-        }
+            ab_schluessel: "ab_schluessel",
+            archiviert: "archiviert"
+        },
+        archiv: "archiviert"
     },
 
     /* ---- Forecast (VERMUTET, Vorschlag) ---- */
@@ -546,9 +550,14 @@ sqlWert: function (v) {
 
 /* optionen.wo:         { feld: wert | [werte] | null }  (alles mit "und")
    optionen.sortierung: ["feld", "-feld"]  (- = absteigend)
+   optionen.felder:     ["feld", …]  nur diese Spalten holen (plus ID, Änderungszeit
+                        und Archiv-Feld). Für große Tabellen, bei denen man nur
+                        wenige Spalten braucht (z. B. die Zeilen des Forecast).
+                        Die anderen Felder der Zeile sind dann leer (null).
    OFFEN (Symolo): Welche SQL-Sprache (das Datumsformat …0000000Z spricht
-   für SQL Server)? Wir benutzen nur: select * from … where … = / in /
-   is null … order by …  — kein limit/top, keine Verknüpfungen (join). */
+   für SQL Server)? Wir benutzen nur: select * / select spalte, spalte from … where … = / in /
+   is null … order by …  — kein limit/top, keine Verknüpfungen (join).
+   VERMUTET: Symolo versteht eine Spaltenliste statt "*". */
 sqlBauen: function (name, optionen) {
 
     const t = this.tabelleInfo(name);
@@ -556,7 +565,16 @@ sqlBauen: function (name, optionen) {
     const wo = [];
     const bedingungen = o.wo || {};
 
-    let sql = "select * from " + this.sqlName(t.tabelle);
+    let spalten = "*";
+    if (o.felder && o.felder.length) {
+        const st = this.tabellen._standard;
+        const namen = [st.id, st.geaendert_am];
+        if (t.archiv) namen.push(this.spalte(name, t.archiv));
+        o.felder.forEach(f => namen.push(this.spalte(name, f)));
+        spalten = namen.filter((n, i) => namen.indexOf(n) === i).map(n => this.sqlName(n)).join(", ");
+    }
+
+    let sql = "select " + spalten + " from " + this.sqlName(t.tabelle);
 
     for (const feld in bedingungen) {
         const sp = this.sqlName(this.spalte(name, feld));
@@ -2396,6 +2414,1392 @@ archivWert: function (zeile, feld) {
     if (feld === "geloescht_am") return this.zeitOrtText(w);
     if (this.archivDatumFelder.indexOf(feld) > -1) return this.datumText(w);
     return this.text(w);
+},
+
+
+/* ===========================================================================
+   TERMINE: Datum als Tageszahl, Kalenderwochen, Monate
+   Forecast, Planung und Statistik rechnen mit Tagen. Ein Datum aus Symolo
+   ("2026-10-16T00:00:00.0000000Z") wird zur ganzen Zahl "Tage seit
+   01.01.1970" (nur das Datum, keine Uhrzeit, keine Zeitzone). Damit sind
+   Unterschiede in Tagen einfache Subtraktion.
+   =========================================================================== */
+
+monatsNamen: ["Jan", "Feb", "Mär", "Apr", "Mai", "Jun", "Jul", "Aug", "Sep", "Okt", "Nov", "Dez"],
+tagesNamen: ["Mo", "Di", "Mi", "Do", "Fr", "Sa", "So"],
+
+/* Datum -> Tageszahl; null, wenn es kein Datum ist (auch "(verschieden)" und leer). */
+tagNr: function (wert) {
+
+    const m = this.text(wert).match(/^(\d{4})-(\d{2})-(\d{2})/);
+    if (!m) return null;
+
+    return Math.floor(Date.UTC(Number(m[1]), Number(m[2]) - 1, Number(m[3])) / 86400000);
+},
+
+/* Heute (Ortszeit) als Tageszahl. */
+tagHeute: function () {
+
+    return this.tagNr(this.heuteText());
+},
+
+/* Zeitpunkt (UTC, mit Uhrzeit) -> Tageszahl des Tages in der Ortszeit des Browsers
+   (Python: timezone.localtime(...).date()). Ohne Uhrzeit zählt das Datum. */
+tagOrt: function (wert) {
+
+    const t = this.text(wert);
+    if (!/^\d{4}-\d{2}-\d{2}[T ]\d{2}:/.test(t)) return this.tagNr(t);
+
+    const ms = this.zeitMs(t);
+    if (ms === null) return null;
+
+    const d = new Date(ms);
+    return Math.floor(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()) / 86400000);
+},
+
+/* [Jahr, Monat 1-12, Tag] */
+tagTeile: function (nr) {
+
+    const d = new Date(nr * 86400000);
+    return [d.getUTCFullYear(), d.getUTCMonth() + 1, d.getUTCDate()];
+},
+
+/* "16.10.2026" */
+tagText: function (nr) {
+
+    if (nr === null || nr === undefined) return "";
+
+    const [j, m, t] = this.tagTeile(nr);
+    return String(t).padStart(2, "0") + "." + String(m).padStart(2, "0") + "." + j;
+},
+
+/* "16.10." */
+tagKurz: function (nr) {
+
+    const [, m, t] = this.tagTeile(nr);
+    return t + "." + m + ".";
+},
+
+/* 0 = Montag bis 6 = Sonntag (der 01.01.1970 war ein Donnerstag). */
+tagWochentag: function (nr) {
+
+    return ((nr + 3) % 7 + 7) % 7;
+},
+
+tagMontag: function (nr) {
+
+    return nr - this.tagWochentag(nr);
+},
+
+/* Kalenderwoche nach ISO 8601: [Jahr, Woche] (Python: date.isocalendar). */
+tagKw: function (nr) {
+
+    const donnerstag = nr - this.tagWochentag(nr) + 3;
+    const jahr = this.tagTeile(donnerstag)[0];
+    const jan1 = Math.floor(Date.UTC(jahr, 0, 1) / 86400000);
+
+    return [jahr, Math.floor((donnerstag - jan1) / 7) + 1];
+},
+
+/* Die letzten n Kalenderwochen bis einschließlich der aktuellen, älteste zuerst. */
+letzteKws: function (heute, n) {
+
+    const montag = this.tagMontag(heute);
+    const liste = [];
+
+    for (let i = n - 1; i >= 0; i--) liste.push(this.tagKw(montag - 7 * i));
+    return liste;
+},
+
+/* Die letzten n Monate bis einschließlich des aktuellen, ältester zuerst: [[Jahr, Monat]] */
+letzteMonate: function (heute, n) {
+
+    let [j, m] = this.tagTeile(heute);
+    const liste = [];
+
+    for (let i = 0; i < n; i++) {
+        liste.push([j, m]);
+        m--;
+        if (m === 0) { j--; m = 12; }
+    }
+
+    return liste.reverse();
+},
+
+/* Zahl mit einer Nachkommastelle und Komma wie Python f"{x:.1f}": bei genau
+   .25 und .75 rundet Python zur geraden Stelle, toFixed nach oben. */
+zahlEins: function (x) {
+
+    let s = x.toFixed(1);
+
+    if (Number.isInteger(x * 4) && !Number.isInteger(x * 2)) {
+        const n = Math.floor(Math.abs(x) * 10);
+        const gerade = n % 2 === 0 ? n : n + 1;
+        s = (x < 0 ? "-" : "") + (gerade / 10).toFixed(1);
+    }
+
+    return s.replace(".", ",");
+},
+
+
+/* ===========================================================================
+   SCHWEISSEN LESEN (R-W5, R-W6, R-W9, W11)
+   Nachbau des Lesens aus bestand/schweissen: abgleich.py (lesen,
+   _ab_ableiten), bloecke.py (bloecke) und forecast_marke.py (forecast_abs).
+   Forecast, Planung und Statistik brauchen die Zeilen im Schweißen. Das
+   Ändern (Entnehmen, Zuweisen, Archivieren, Zurückholen) kommt mit der
+   Ansicht Schweißen in Phase 6 dazu.
+
+   Die Zeilen liegen in der Tabelle schweisszeile (archiviert = nein).
+   Mitarbeiter, Arbeitsplatz und die zwei Termine einer AB-Zeile sind der
+   gemeinsame Wert aller Baugruppen, sonst "(verschieden)". Das wird beim
+   Lesen berechnet und nie gespeichert.
+   =========================================================================== */
+
+swVerschieden: "(verschieden)",
+swOhneBg: "(ohne BG)",
+
+/* R-W6: die vier vererbten Eingaben, Reihenfolge wie in AbgleichKern */
+swFelder: ["mitarbeiter", "arbeitsplatz", "liefertermin_stahlbau", "termin_versand"],
+swDatumsfelder: ["liefertermin_stahlbau", "termin_versand"],
+
+/* Excel Txt(): leer -> "", Datum -> nur das Datum (zum Vergleichen), sonst Text. */
+swT: function (wert) {
+
+    const t = this.text(wert);
+    return /^\d{4}-\d{2}-\d{2}/.test(t) ? t.slice(0, 10) : t;
+},
+
+swGleich: function (a, b) {
+
+    return this.swT(a).toLowerCase() === this.swT(b).toLowerCase();
+},
+
+/* "100 HALTER ..." -> "100" (BgNummer) */
+swBgNummer: function (name) {
+
+    const t = this.text(name);
+    return t.indexOf(" ") > -1 ? t.split(" ")[0] : t;
+},
+
+/* Werte jeder Zeile als [Mitarbeiter, Arbeitsplatz, Liefertermin, Versand];
+   leer ist "" (Termine: null). */
+swWerte: function (zeilen) {
+
+    return zeilen.map(z => this.swFelder.map(f => {
+        const wert = z[f];
+        if (wert === null || wert === undefined || wert === "") return this.swDatumsfelder.indexOf(f) > -1 ? null : "";
+        return wert;
+    }));
+},
+
+/* Schritt 3 von AbgleichKern: AB-Zeile = gemeinsamer Wert aller ihrer BGs,
+   sonst "(verschieden)". Ändert w an Ort und Stelle. */
+swAbAbleiten: function (ebene, ab, w) {
+
+    const n = ebene.length;
+
+    for (let i = 0; i < n; i++) {
+        if (ebene[i] !== "AB") continue;
+
+        for (let k = 0; k < 4; k++) {
+            let anz = 0, versch = false, gem = "", gv = null;
+
+            for (let j = 0; j < n; j++) {
+                if (ebene[j] === "BG" && this.swGleich(ab[j], ab[i])) {
+                    anz++;
+                    if (anz === 1) {
+                        gem = this.swT(w[j][k]);
+                        gv = w[j][k];
+                    } else if (this.swT(w[j][k]) !== gem) {
+                        versch = true;
+                    }
+                }
+            }
+
+            if (anz > 0) w[i][k] = versch ? this.swVerschieden : gv;
+        }
+    }
+},
+
+/* Zeilen aus datenLesen("schweisszeile") in der Reihenfolge nr berechnen.
+   Setzt an jeder Zeile: m (Mitarbeiter), p (Arbeitsplatz), lt (Liefertermin
+   Stahlbau), tv (Termin Versand), kopfObj (Kopfdaten des AB, gelesen aus dem
+   JSON-Text), css (Statusklasse). */
+swBerechnen: function (zeilen) {
+
+    const liste = zeilen.slice().sort((a, b) =>
+        (this.mengeMilli(a.nr) - this.mengeMilli(b.nr)) || this.idVergleich(a._id, b._id));
+
+    const w = this.swWerte(liste);
+    this.swAbAbleiten(liste.map(z => z.ebene), liste.map(z => z.ab_nr), w);
+
+    liste.forEach((z, i) => {
+        [z.m, z.p, z.lt, z.tv] = w[i];
+
+        let kopf = {};
+        try { kopf = JSON.parse(this.text(z.kopf) || "{}") || {}; } catch (fehler) { kopf = {}; }
+        z.kopfObj = kopf;
+
+        z.css = { Komplett: "kom-komplett", Teilweise: "kom-teilweise" }[this.text(z.status)] || "kom-offen";
+    });
+
+    return liste;
+},
+
+/* Alle Zeilen im Schweißen (nicht archiviert), berechnet. */
+swLesen: async function () {
+
+    const zeilen = await this.datenLesen("schweisszeile", { aufloesen: false, sortierung: ["nr"] });
+    return this.swBerechnen(zeilen);
+},
+
+/* Zeilen zu Blöcken: eine AB-Zeile beginnt einen Block; eine BG mit anderer
+   Anzeige (AB…_BGnnn) oder ohne AB-Zeile davor ist ein Einzelblock.
+   Block: { ab, ohne: [Teile], bgs: [{ bg, teile }] } */
+swBloecke: function (zeilen) {
+
+    const ergebnis = [];
+    let akt = null;
+
+    zeilen.forEach(z => {
+        if (z.ebene === "AB") {
+            akt = { ab: z, ohne: [], bgs: [] };
+            ergebnis.push(akt);
+        } else if (z.ebene === "BG") {
+            if (akt !== null && akt.ab !== null && this.text(akt.ab.ab_schluessel) === this.text(z.ab_schluessel) &&
+                this.text(z.anzeige) === this.text(akt.ab.anzeige)) {
+                akt.bgs.push({ bg: z, teile: [] });
+            } else {
+                akt = { ab: null, ohne: [], bgs: [{ bg: z, teile: [] }] };
+                ergebnis.push(akt);
+            }
+        } else if (akt !== null) {
+            if (this.text(z.baugruppe) === this.swOhneBg && akt.ab !== null && akt.bgs.length === 0) akt.ohne.push(z);
+            else if (akt.bgs.length) akt.bgs[akt.bgs.length - 1].teile.push(z);
+            else akt.ohne.push(z);
+        }
+    });
+
+    return ergebnis;
+},
+
+/* Kopfzeile eines Blocks: die AB-Zeile, bei einem Einzelblock die erste BG. */
+swKopf: function (block) {
+
+    return block.ab || block.bgs[0].bg;
+},
+
+/* Alle Zeilen eines Blocks in der Reihenfolge der Anzeige. */
+swBlockZeilen: function (block) {
+
+    const z = [];
+    if (block.ab) z.push(block.ab);
+    z.push(...block.ohne);
+    block.bgs.forEach(g => { z.push(g.bg); z.push(...g.teile); });
+    return z;
+},
+
+/* Je AB-Schlüssel die Arbeitsplätze der Baugruppen, die einzeln im Schweißen
+   liegen (Einzelblöcke, der Rest des AB steht noch in der Bestandsliste). */
+swEinzelnePlaetze: function (bloecke) {
+
+    const je = {};
+
+    bloecke.forEach(b => {
+        if (b.ab !== null) return;
+        const schluessel = this.text(b.bgs[0].bg.ab_schluessel);
+        je[schluessel] = (je[schluessel] || []).concat(b.bgs.map(g => this.text(g.bg.p)));
+    });
+
+    return je;
+},
+
+/* W11: Ganze ABs im Schweißen als Knoten wie in der Bestandsliste (nur zum
+   Anzeigen im Forecast und in der Planung, nichts wird gespeichert). Einzel-
+   blöcke zählen nicht: ihr AB steht ja noch in der Bestandsliste.
+   Knoten wie bestandBaum, dazu schweissen = true. */
+swForecastAbs: function (bloecke) {
+
+    const ergebnis = [];
+
+    bloecke.forEach(b => {
+        if (b.ab === null) return;
+
+        const k = b.ab.kopfObj || {};
+        const ab = {
+            _id: -Number(b.ab._id),
+            ab_anzeige: this.text(b.ab.ab_nr),
+            ab_schluessel: this.text(b.ab.ab_schluessel),
+            forecast_schluessel: this.text(k.forecast_schluessel) || this.abForecastSchluessel(b.ab.ab_nr),
+            kunde: this.text(k.kunde),
+            verkaufsartikel: this.text(k.verkaufsartikel),
+            haupt_ab: this.text(k.haupt_ab),
+            lagerort: this.text(b.ab.lagerort),
+            arbeitsplatz: this.text(b.ab.p),
+            bereich: "schweissen"
+        };
+
+        const teil = z => ({
+            art: "teil",
+            o: {
+                _id: -Number(z._id),
+                zeile: z.nr,
+                zeichnungsnummer: this.text(z.zeichnungsnummer),
+                benennung: this.text(z.benennung),
+                lk_nummer: this.text(z.lk_nummer),
+                lagerort: this.text(z.lagerort),
+                menge_gesamt: z.menge_gesamt,
+                vorhanden: z.vorhanden,
+                datum_eingelagert: z.eingelagert,
+                datum_komplett: z.komplett,
+                arbeitsplatz: this.text(z.p)
+            },
+            w: this.teilWerte(z.vorhanden, z.menge_gesamt, z.eingelagert, z.komplett),
+            zeigen: true
+        });
+
+        const ohne = b.ohne.map(teil);
+        const bgs = b.bgs.map(g => {
+            const teile = g.teile.map(teil);
+            return {
+                art: "bg",
+                o: {
+                    _id: -Number(g.bg._id),
+                    zeile: g.bg.nr,
+                    name: this.text(g.bg.baugruppe),
+                    kurz: this.swBgNummer(g.bg.baugruppe),
+                    lk_nummer: this.text(g.bg.lk_nummer),
+                    lagerort: this.text(g.bg.lagerort),
+                    arbeitsplatz: this.text(g.bg.p)
+                },
+                w: this.sammelWerte(teile.map(t => t.w)),
+                teile: teile,
+                zeigen: true,
+                offen: true
+            };
+        });
+
+        const alle = ohne.concat(...bgs.map(g => g.teile));
+        ergebnis.push({
+            art: "ab", o: ab, w: this.sammelWerte(alle.map(t => t.w)), ohne: ohne, bgs: bgs,
+            zeigen: true, offen: true, schweissen: true
+        });
+    });
+
+    return ergebnis;
+},
+
+
+/* ===========================================================================
+   FORECAST ANSEHEN (R-F6 bis R-F10, W11)
+   Nachbau der Ansicht aus bestand/forecast.py: früheste Termine je AB,
+   Ampel, Liste, Kopf und die Kachel im Dashboard. Das Einlesen der Excel-
+   Datei (R-F1 bis R-F5) kommt mit dem Import in Phase 7.
+
+   Tage werden als Tageszahl gerechnet (4E_termine.js).
+   =========================================================================== */
+
+/* R-F7 Ampel (Kalendertage ab heute) */
+fcRotTage: 14,
+fcGelbTage: 30,
+
+/* R-F8 Filter Liefertermin: [Wert, Beschriftung, Tage oder null = alle] */
+fcZeitraeume: [["14", "Nächste 14 Tage", 14], ["30", "Nächste 30 Tage", 30], ["alle", "Alle", null]],
+fcStandardZeitraum: "30",
+
+/* R-F10: "Forecast vom" wird orange, wenn älter als 8 Tage */
+fcAltTage: 8,
+
+/* Der aktuelle Forecast: die neueste Datei und ihre Termine.
+   Gibt { f, termine } zurück; f = null, wenn noch keiner importiert ist.
+   Von den Zeilen werden nur AB-Schlüssel und Termin geholt (die Datei hat
+   bis zu 80 Spalten je Zeile). OFFEN (Symolo): Beim Import (Phase 7) kommt
+   der alte Forecast ins Archiv statt gelöscht zu werden; bis dahin gilt
+   der mit der neuesten Zeit. */
+fcLaden: async function () {
+
+    const liste = await this.datenLesen("forecast", { aufloesen: false });
+    liste.sort((a, b) => ((this.zeitMs(b.zeit) || 0) - (this.zeitMs(a.zeit) || 0)) || this.idVergleich(b._id, a._id));
+
+    const f = liste.length ? liste[0] : null;
+    if (f === null) return { f: null, termine: {} };
+
+    const zeilen = await this.datenLesenIn("forecast_zeile", "forecast", [f._id], { felder: ["schluessel", "termin"] });
+    return { f: f, termine: this.fcTermine(zeilen) };
+},
+
+/* R-F6: je AB-Schlüssel (ohne Los) der früheste Termin; Zeilen ohne Termin
+   zählen nicht. Ergebnis: { schluessel: Tageszahl } */
+fcTermine: function (zeilen) {
+
+    const je = {};
+
+    zeilen.forEach(z => {
+        const tag = this.tagNr(z.termin);
+        if (tag === null) return;
+
+        const s = this.text(z.schluessel);
+        if (!(s in je) || tag < je[s]) je[s] = tag;
+    });
+
+    return je;
+},
+
+/* Termin eines AB (auch eines Loses: dann der des Haupt-AB, R-AB5); null = kein Termin. */
+fcTerminVon: function (a, termine) {
+
+    const s = this.text(a.o.forecast_schluessel) || this.abForecastSchluessel(a.o.ab_anzeige);
+    return s in termine ? termine[s] : null;
+},
+
+/* R-F7: bis heute + 14 (auch überfällig) rot, bis heute + 30 gelb, sonst oder ohne Termin weiß. */
+fcAmpel: function (termin, heute) {
+
+    if (termin === null || termin === undefined) return "weiss";
+
+    const tage = termin - heute;
+    return tage <= this.fcRotTage ? "rot" : (tage <= this.fcGelbTage ? "gelb" : "weiss");
+},
+
+/* W11: die ABs der Bestandsliste plus die ganzen ABs im Schweißen. Ist ein AB
+   gerade wieder in der Bestandsliste (neu importiert oder zurückgeholt),
+   zählt nur dieser. */
+fcMitSchweissen: function (abs, swAbs) {
+
+    const vorhanden = {};
+    abs.forEach(a => { vorhanden[this.text(a.o.ab_schluessel)] = true; });
+
+    return abs.concat(swAbs.filter(a => !vorhanden[this.text(a.o.ab_schluessel)]));
+},
+
+/* R-F8/R-F9: nur ABs mit Status ungleich Komplett (im Schweißen bleibt er
+   sichtbar), mit allen BGs und Teilen; Filter AB-Suche, Kunde, Liefertermin.
+   Termin aufsteigend (ohne Termin unten), dann Fortschritt aufsteigend, dann
+   AB-Nummer; innerhalb des AB wie im Dashboard (R-DB3).
+   Je Eintrag: termin (Tageszahl oder null) und ampel. */
+fcListe: function (abs, termine, heute, zeitraum, suche, kunde) {
+
+    const eintrag = this.fcZeitraeume.find(z => z[0] === zeitraum);
+    const tage = eintrag ? eintrag[2] : this.fcGelbTage;
+
+    const auswahl = this.dashFiltern(abs, suche, kunde).filter(a => {
+        if (a.w.status === "Komplett" && !a.schweissen) return false;
+
+        const t = this.fcTerminVon(a, termine);
+        /* 14/30: mit Überfälligen, ohne "kein Termin" */
+        return !(tage !== null && (t === null || t - heute > tage));
+    });
+
+    const ergebnis = this.dashSortieren(auswahl, "");
+    ergebnis.forEach(d => {
+        d.termin = this.fcTerminVon(d.a, termine);
+        d.ampel = this.fcAmpel(d.termin, heute);
+    });
+
+    const vergleich = (x, y) => (x < y ? -1 : (x > y ? 1 : 0));
+    ergebnis.sort((p, q) =>
+        vergleich(p.termin === null ? 1 : 0, q.termin === null ? 1 : 0) ||
+        vergleich(p.termin === null ? 0 : p.termin, q.termin === null ? 0 : q.termin) ||
+        vergleich(p.a.w.prozent, q.a.w.prozent) ||
+        vergleich(this.dashText(p.a.o.ab_anzeige), this.dashText(q.a.o.ab_anzeige)));
+
+    return ergebnis;
+},
+
+/* R-F10: Zähler über die angezeigten ABs, "Forecast vom" (orange, wenn älter
+   als 8 Tage) und heute. */
+fcKopf: function (liste, f, heute) {
+
+    const vom = f ? this.tagOrt(f.zeit) : null;
+
+    return {
+        rot: liste.filter(d => d.ampel === "rot").length,
+        gelb: liste.filter(d => d.ampel === "gelb").length,
+        ohne: liste.filter(d => d.termin === null).length,
+        ab: liste.length,
+        vom: vom,
+        alt: vom !== null && heute - vom > this.fcAltTage,
+        heute: heute
+    };
+},
+
+/* Kachel im Dashboard: rote und gelbe ABs (alle offenen, ohne Filter);
+   null = noch kein Forecast. abs enthält schon die ABs im Schweißen. */
+fcKachel: function (abs, f, termine, heute) {
+
+    if (!f) return null;
+
+    const farben = abs.filter(a => a.w.status !== "Komplett" || a.schweissen)
+        .map(a => this.fcAmpel(this.fcTerminVon(a, termine), heute));
+
+    return {
+        rot: farben.filter(x => x === "rot").length,
+        gelb: farben.filter(x => x === "gelb").length,
+        vom: this.tagOrt(f.zeit)
+    };
+},
+
+
+/* ===========================================================================
+   PLANUNG (Häkchen, Station, Lagerort)
+   Nachbau von bestand/planung.py und views_planung.py: Häkchen an ABs im
+   Dashboard und im Forecast (ein gemeinsamer Stand), die Ansicht Planung
+   mit den vorgemerkten ABs und die Spalten Station und Lagerort.
+
+   Das Häkchen hängt am AB-Schlüssel (R-AB3, Beispiel "AB2616200|L1") und
+   gilt für alle. Entfernen archiviert den Eintrag statt ihn zu löschen;
+   setzt jemand das Häkchen wieder, wird er wieder eingeblendet.
+   Rechte fallen vorerst weg (Ben, 16.10.2026): jeder darf haken.
+   =========================================================================== */
+
+plStationBestand: "Kom.",
+plStationSchweissen: "Schw.",
+plStationBeide: "Kom. + Schw.",
+
+plSortierungen: [["termin", "Liefertermin"], ["ab", "Fortschritt absteigend"], ["auf", "Fortschritt aufsteigend"]],
+plStandardSortierung: "termin",
+
+/* Alle Häkchen-Einträge, auch ausgeblendete (zum Wiedereinblenden). */
+plMarkenLaden: async function () {
+
+    return this.datenLesen("planungsmarke", { aufloesen: false, archiv: "alle" });
+},
+
+/* Die gesetzten Häkchen als { AB-Schlüssel: true }. */
+plAktive: function (zeilen) {
+
+    const je = {};
+
+    zeilen.forEach(z => {
+        if (!this.istJa(z.archiviert)) je[this.text(z.ab_schluessel)] = true;
+    });
+
+    return je;
+},
+
+/* Gibt es diesen AB in der Bestandsliste oder (ganz) im Schweißen? */
+plExistiert: function (alleAbs, schluessel) {
+
+    return alleAbs.some(a => this.text(a.o.ab_schluessel) === schluessel);
+},
+
+/* Häkchen setzen oder entfernen. Gibt false zurück, wenn es den AB nicht
+   gibt (beim Entfernen immer erlaubt). Doppelte Einträge (zwei Personen
+   haken gleichzeitig) werden beim Entfernen alle ausgeblendet. */
+plSetzen: async function (zeilen, schluessel, an, alleAbs) {
+
+    const gleiche = zeilen.filter(z => this.text(z.ab_schluessel) === schluessel);
+    const aktive = gleiche.filter(z => !this.istJa(z.archiviert));
+
+    if (!an) {
+        for (const z of aktive) await this.datenArchivieren("planungsmarke", z);
+        return true;
+    }
+
+    if (!this.plExistiert(alleAbs, schluessel)) return false;
+    if (aktive.length) return true;
+
+    if (gleiche.length) await this.datenAendern("planungsmarke", gleiche[0], { archiviert: false });
+    else await this.datenAnlegen("planungsmarke", { ab_schluessel: schluessel, archiviert: false });
+
+    return true;
+},
+
+/* Setzt d.geplant an jedem Eintrag der Liste. */
+plMarkieren: function (liste, aktive) {
+
+    liste.forEach(d => { d.geplant = Boolean(aktive[this.text(d.a.o.ab_schluessel)]); });
+},
+
+/* Nur die ABs mit Häkchen. */
+plGeplante: function (abs, aktive) {
+
+    return abs.filter(a => aktive[this.text(a.o.ab_schluessel)]);
+},
+
+/* Planung: vorgemerkte ABs sortiert nach Liefertermin (früheste oben, ohne
+   Termin unten, dann AB-Nummer) oder nach Fortschritt. */
+plListe: function (abs, termine, suche, kunde, sortierung) {
+
+    const nachProzent = sortierung === "termin" ? "" : sortierung;
+    const liste = this.dashSortieren(this.dashFiltern(abs, suche, kunde), nachProzent);
+    liste.forEach(d => { d.termin = this.fcTerminVon(d.a, termine); });
+
+    if (sortierung === "termin") {
+        const vergleich = (x, y) => (x < y ? -1 : (x > y ? 1 : 0));
+        liste.sort((p, q) =>
+            vergleich(p.termin === null ? 1 : 0, q.termin === null ? 1 : 0) ||
+            vergleich(p.termin === null ? 0 : p.termin, q.termin === null ? 0 : q.termin) ||
+            vergleich(this.dashText(p.a.o.ab_anzeige), this.dashText(q.a.o.ab_anzeige)));
+    }
+
+    return liste;
+},
+
+/* Plätze ohne Doppelte, ohne leere und ohne "(verschieden)", mit Komma. */
+plPlaetze: function (namen) {
+
+    const aus = [];
+
+    namen.forEach(n => {
+        const t = this.text(n);
+        if (t && t !== this.swVerschieden && aus.indexOf(t) < 0) aus.push(t);
+    });
+
+    return aus.join(", ");
+},
+
+/* Setzt an jedem Eintrag und jeder Gruppe station und ort, an jedem Teil ort.
+   Bestandsliste: Lagerort im Regal. Schweißen: Arbeitsplatz. Liegen einzelne
+   BGs eines AB im Schweißen (Einzelblöcke), steht beim AB "Kom. + Schw." und
+   beides unter Lagerort. einzeln: swEinzelnePlaetze(bloecke). */
+plOrteSetzen: function (liste, einzeln) {
+
+    liste.forEach(d => {
+        const a = d.a;
+
+        if (a.schweissen) {
+            d.station = this.plStationSchweissen;
+            d.ort = this.text(a.o.arbeitsplatz);
+
+            d.gruppen.forEach(g => {
+                g.station = this.plStationSchweissen;
+                g.ort = (g.bg ? this.text(g.bg.o.arbeitsplatz) : "") || d.ort;
+                g.teile.forEach(t => { t.ort = this.text(t.o.arbeitsplatz) || g.ort; });
+            });
+            return;
+        }
+
+        const plaetze = einzeln[this.text(a.o.ab_schluessel)];
+        d.station = plaetze ? this.plStationBeide : this.plStationBestand;
+        d.ort = [this.text(a.o.lagerort), this.plPlaetze(plaetze || [])].filter(Boolean).join(" · ");
+
+        d.gruppen.forEach(g => {
+            g.station = this.plStationBestand;
+            g.ort = g.bg ? this.text(g.bg.o.lagerort) : "";
+            g.teile.forEach(t => { t.ort = this.text(t.o.lagerort); });
+        });
+    });
+},
+
+
+/* ===========================================================================
+   STATISTIK: Liefertreue, Durchlaufzeit, überfällige ABs, Verspätung
+   Nachbau von bestand/statistik.py.
+
+   Grundlage sind die Termine aus dem Schweißen und dem Archiv (archivierte
+   ABs aus dem Schweißen zählen mit, sonst gingen frühere Monate verloren):
+     Liefertermin     = "Liefertermin Stahlbau" (liefertermin_stahlbau)
+     Versand          = "Termin Versand" (termin_versand)
+     pünktlich        = Versand am Liefertermin oder davor
+     gezählt          = hat einen Versand, oder der Liefertermin liegt vor heute
+                        (ohne Versand = nicht pünktlich); liegt der Liefertermin
+                        heute oder später und es gibt noch keinen Versand, zählt
+                        der Eintrag noch nicht
+     Liefertreue in % = pünktliche geteilt durch gezählte (ganze Zahl)
+     Durchlaufzeit    = Versand minus Eingelagert in Tagen (Spalte DLZ im
+                        Schweißen), nach dem Versanddatum eingeordnet
+   "AB" ist eine AB-Zeile (oder ein Einzelblock aus einer BG), "Bauteil" jede
+   Teil-Zeile. Sind die Termine der BGs eines AB verschieden, gilt der früheste
+   Liefertermin, und der Versand zählt erst, wenn alle BGs einen haben (dann
+   der späteste).
+
+   Ein Eintrag: { art: "ab" | "teil", anzeige, lt, tv, eingelagert, platz,
+   mitarbeiter, kunde, archiviert } mit Terminen als Tageszahl (4E_termine.js).
+
+   Archivierte ABs aus der Bestandsliste haben keine Termine und zählen nicht.
+   OFFEN (Symolo): Wurde ein AB aus dem Schweißen archiviert, zurückgeholt und
+   wieder archiviert, hat er zwei Gruppen mit demselben AB-Schlüssel. Hier
+   werden sie zusammen gezählt (die Zeilen tragen keine Archiv-Nummer).
+   =========================================================================== */
+
+/* Soll der Liefertreue in % (Linie im Diagramm); ab 70 "leicht darunter" (gelb), darunter rot */
+statSoll: 80,
+statGelbAb: 70,
+statWas: [["abs", "ABs"], ["teile", "Alle Bauteile"]],
+statWasStandard: "abs",
+statZeiten: [["woche", "Woche"], ["monat", "Monat"], ["jahr", "Jahr"]],
+statZeitStandard: "monat",
+
+statDlz: function (e) {
+
+    return e.tv !== null && e.eingelagert !== null ? e.tv - e.eingelagert : null;
+},
+
+/* Liefertermin und Versand eines AB: eigener Wert, sonst aus den BGs (siehe Kopf). */
+statAbTermine: function (lt, tv, bgLt, bgTv) {
+
+    if (lt === null && bgLt.length) lt = Math.min(...bgLt);
+    if (tv === null && bgTv.length && bgTv.every(x => x !== null)) tv = Math.max(...bgTv);
+    return [lt, tv];
+},
+
+/* Einträge aus den berechneten Zeilen im Schweißen (swLesen). */
+statAusSchweissen: function (zeilen) {
+
+    const ergebnis = [];
+
+    this.swBloecke(zeilen).forEach(b => {
+        const kopf = this.swKopf(b);
+        const bgs = b.bgs.map(g => g.bg);
+        let lt, tv;
+
+        if (b.ab !== null) {
+            [lt, tv] = this.statAbTermine(
+                this.tagNr(b.ab.lt), this.tagNr(b.ab.tv),
+                bgs.map(x => this.tagNr(x.lt)).filter(x => x !== null),
+                bgs.map(x => this.tagNr(x.tv)));
+        } else {
+            lt = this.tagNr(kopf.lt);
+            tv = this.tagNr(kopf.tv);
+        }
+
+        ergebnis.push({
+            art: "ab",
+            anzeige: this.text(kopf.anzeige),
+            lt: lt,
+            tv: tv,
+            eingelagert: this.tagNr(kopf.eingelagert),
+            platz: kopf.p === this.swVerschieden ? "" : this.text(kopf.p),
+            mitarbeiter: kopf.m === this.swVerschieden ? "" : this.text(kopf.m),
+            kunde: this.text(kopf.kopfObj.kunde),
+            archiviert: false
+        });
+
+        this.swBlockZeilen(b).forEach(z => {
+            if (z.ebene !== "Teil") return;
+            ergebnis.push({
+                art: "teil", anzeige: this.text(z.anzeige), lt: this.tagNr(z.lt), tv: this.tagNr(z.tv),
+                eingelagert: this.tagNr(z.eingelagert), platz: "", mitarbeiter: "", kunde: "", archiviert: false
+            });
+        });
+    });
+
+    return ergebnis;
+},
+
+/* Einträge aus den archivierten Zeilen (Schweißen, archiviert = ja). Nur
+   Zeilen mit AB-Ebene oder mit einem Termin zählen. */
+statAusArchiv: function (zeilen) {
+
+    const je = {};
+
+    zeilen.forEach(z => {
+        const lt = this.tagNr(z.liefertermin_stahlbau), tv = this.tagNr(z.termin_versand);
+        if (this.text(z.ebene) !== "AB" && lt === null && tv === null) return;
+
+        const s = this.text(z.ab_schluessel);
+        (je[s] = je[s] || []).push({
+            ebene: this.text(z.ebene), ab: this.text(z.ab_nr), lt: lt, tv: tv, eingelagert: this.tagNr(z.eingelagert),
+            nr: this.mengeMilli(z.nr)
+        });
+    });
+
+    const ergebnis = [];
+
+    Object.keys(je).forEach(s => {
+        const rows = je[s].sort((a, b) => a.nr - b.nr);
+        const abZeile = rows.find(r => r.ebene === "AB") || null;
+        const bgs = rows.filter(r => r.ebene === "BG");
+
+        const [lt, tv] = this.statAbTermine(
+            abZeile ? abZeile.lt : null, abZeile ? abZeile.tv : null,
+            bgs.map(r => r.lt).filter(x => x !== null), bgs.map(r => r.tv));
+
+        if (lt !== null || tv !== null) {
+            ergebnis.push({
+                art: "ab", anzeige: (abZeile || rows[0]).ab, lt: lt, tv: tv,
+                eingelagert: abZeile ? abZeile.eingelagert : null, platz: "", mitarbeiter: "", kunde: "", archiviert: true
+            });
+        }
+
+        rows.forEach(r => {
+            if (r.ebene === "Teil" && (r.lt !== null || r.tv !== null)) {
+                ergebnis.push({
+                    art: "teil", anzeige: r.ab, lt: r.lt, tv: r.tv, eingelagert: r.eingelagert, platz: "",
+                    mitarbeiter: "", kunde: "", archiviert: true
+                });
+            }
+        });
+    });
+
+    return ergebnis;
+},
+
+/* Alle Einträge laden: die Zeilen im Schweißen und die archivierten (nur
+   die Spalten, die gebraucht werden). */
+statLaden: async function () {
+
+    const live = await this.swLesen();
+    const archiv = await this.datenLesen("schweisszeile", {
+        aufloesen: false, archiv: "nur",
+        felder: ["nr", "ab_nr", "ab_schluessel", "ebene", "eingelagert", "liefertermin_stahlbau", "termin_versand"]
+    });
+
+    return this.statAusSchweissen(live).concat(this.statAusArchiv(archiv));
+},
+
+/* ---------- Rechnen ---------- */
+
+statBalken: function (label, wert, text, hoehe, farbe, n, titel) {
+
+    return { label: label, wert: wert, text: text, hoehe: hoehe, farbe: farbe, n: n, titel: titel };
+},
+
+/* Je Zeitraum: Anteil pünktlich versandter Einträge, deren Liefertermin in
+   diesem Zeitraum liegt. schluessel() macht aus einem Zeitraum oder aus einer
+   Tageszahl denselben Text, damit man beides vergleichen kann. */
+statLiefertreue: function (eintraege, art, zeitraeume, schluessel, label, heute) {
+
+    const zaehler = {};
+    zeitraeume.forEach(z => { zaehler[schluessel(z)] = [0, 0]; });
+
+    eintraege.forEach(e => {
+        if (e.art !== art || e.lt === null) return;
+
+        const z = schluessel(e.lt);
+        if (!(z in zaehler) || (e.tv === null && e.lt >= heute)) return;
+
+        zaehler[z][0]++;
+        if (e.tv !== null && e.tv <= e.lt) zaehler[z][1]++;
+    });
+
+    return zeitraeume.map(z => {
+        const [n, p] = zaehler[schluessel(z)];
+        const l = label(z);
+
+        if (n === 0) return this.statBalken(l, null, "–", 0, "neutral", 0, l + ": keine Liefertermine");
+
+        const pct = this.rundenGerade(p / n * 100);
+        const farbe = pct >= this.statSoll ? "gruen" : (pct >= this.statGelbAb ? "gelb" : "rot");
+        return this.statBalken(l, pct, pct + " %", pct, farbe, n, l + ": " + p + " von " + n + " pünktlich");
+    });
+},
+
+/* Fünf Balken: die letzten vier Kalenderwochen und die aktuelle. */
+statLiefertreueMonat: function (eintraege, art, heute) {
+
+    /* Zeitraum = [Jahr, Woche]; Tage werden über ihre Woche zugeordnet. */
+    const kws = this.letzteKws(heute, 5);
+    const schl = x => (Array.isArray(x) ? x.join("-") : this.tagKw(x).join("-"));
+    return this.statLiefertreue(eintraege, art, kws, schl, z => "KW " + z[1], heute);
+},
+
+/* Zwölf Balken: die letzten zwölf Monate bis einschließlich des aktuellen. */
+statLiefertreueIa: function (eintraege, art, heute) {
+
+    const monate = this.letzteMonate(heute, 12);
+    const schl = x => (Array.isArray(x) ? x.join("-") : this.tagTeile(x).slice(0, 2).join("-"));
+    return this.statLiefertreue(eintraege, art, monate, schl,
+        z => this.monatsNamen[z[1] - 1] + " " + String(z[0]).slice(2), heute);
+},
+
+/* Mittelwert je Zeitraum; Balkenhöhe relativ zum größten Wert.
+   werte: { Schlüssel: [Zahlen] } */
+statDurchschnitt: function (werte, zeitraeume, schluessel, label, einheit, farbe) {
+
+    const mittel = zeitraeume.map(z => {
+        const w = werte[schluessel(z)] || [];
+        return w.length ? w.reduce((a, b) => a + b, 0) / w.length : null;
+    });
+    const groesst = Math.max(0, ...mittel.filter(m => m !== null && m > 0));
+
+    return zeitraeume.map((z, i) => {
+        const m = mittel[i], n = (werte[schluessel(z)] || []).length, l = label(z);
+
+        if (m === null) return this.statBalken(l, null, "–", 0, "neutral", 0, l + ": keine Daten");
+
+        const h = groesst ? this.rundenGerade(Math.max(m, 0) / groesst * 100) : 0;
+        return this.statBalken(l, m, this.zahlEins(m), Math.max(h, 2), farbe || "neutral", n,
+            l + ": Ø " + this.zahlEins(m) + " " + einheit + " bei " + n + " AB" + (n !== 1 ? "s" : ""));
+    });
+},
+
+/* Ø Durchlaufzeit der ABs (Versand minus Eingelagert), nach Versanddatum:
+   Woche = letzte 7 Tage (je Tag), Monat = letzte 4 Kalenderwochen, Jahr = letzte 12 Monate. */
+statDurchlaufzeit: function (eintraege, zeit, heute) {
+
+    const abs = eintraege.filter(e => e.art === "ab" && this.statDlz(e) !== null);
+    const sammeln = schluessel => {
+        const je = {};
+        abs.forEach(e => { (je[schluessel(e.tv)] = je[schluessel(e.tv)] || []).push(this.statDlz(e)); });
+        return je;
+    };
+
+    if (zeit === "woche") {
+        const tage = [];
+        for (let i = 6; i >= 0; i--) tage.push(heute - i);
+        const schl = x => String(x);
+        return this.statDurchschnitt(sammeln(schl), tage, schl,
+            t => this.tagesNamen[this.tagWochentag(t)] + " " + this.tagKurz(t), "Tage");
+    }
+
+    if (zeit === "jahr") {
+        const schl = x => (Array.isArray(x) ? x.join("-") : this.tagTeile(x).slice(0, 2).join("-"));
+        return this.statDurchschnitt(sammeln(schl), this.letzteMonate(heute, 12), schl,
+            z => this.monatsNamen[z[1] - 1] + " " + String(z[0]).slice(2), "Tage");
+    }
+
+    const schl = x => (Array.isArray(x) ? x.join("-") : this.tagKw(x).join("-"));
+    return this.statDurchschnitt(sammeln(schl), this.letzteKws(heute, 4), schl, z => "KW " + z[1], "Tage");
+},
+
+/* ABs im Schweißen, deren Liefertermin vorbei ist und die noch keinen
+   Versand haben, älteste zuerst. */
+statUeberfaellig: function (eintraege, heute) {
+
+    return eintraege.filter(e => e.art === "ab" && !e.archiviert && e.lt !== null && e.tv === null && e.lt < heute)
+        .sort((a, b) => (a.lt - b.lt) || (this.text(a.anzeige) < this.text(b.anzeige) ? -1 : (this.text(a.anzeige) > this.text(b.anzeige) ? 1 : 0)));
+},
+
+/* Ø Verspätung der zu spät versandten ABs je Monat (Versand nach Liefertermin),
+   letzte 12 Monate, dazu die Summe: { balken, summe: { versandt, spaet, mittel } } */
+statVerspaetung: function (eintraege, heute) {
+
+    const monate = this.letzteMonate(heute, 12);
+    const schl = x => (Array.isArray(x) ? x.join("-") : this.tagTeile(x).slice(0, 2).join("-"));
+    const je = {};
+    monate.forEach(m => { je[schl(m)] = []; });
+    let versandt = 0, spaet = 0;
+
+    eintraege.forEach(e => {
+        if (e.art !== "ab" || e.lt === null || e.tv === null || !(schl(e.tv) in je)) return;
+
+        versandt++;
+        if (e.tv > e.lt) {
+            spaet++;
+            je[schl(e.tv)].push(e.tv - e.lt);
+        }
+    });
+
+    const alle = [].concat(...Object.values(je));
+    const summe = { versandt: versandt, spaet: spaet, mittel: alle.length ? this.zahlEins(alle.reduce((a, b) => a + b, 0) / alle.length) : "–" };
+
+    return {
+        balken: this.statDurchschnitt(je, monate, schl, z => this.monatsNamen[z[1] - 1] + " " + String(z[0]).slice(2), "Tage", "neutral"),
+        summe: summe
+    };
+},
+
+
+/* ===========================================================================
+   LISTE: die Karten-Liste von Dashboard, Forecast und Planung (R-DB1, R-F8)
+   Eine Karte je AB mit Baugruppen und Teilen, gleiche Spalten in Kopfzeile
+   und jeder Karte. Welche Spalten es gibt, legt die Ansicht in
+   listeSpalten fest: [[Art, Titel]]. Arten:
+     klapp, ab, bg, teil, kunde, station, lager, status, termin, proz,
+     balken, stand, planung
+   Die Ansicht rechnet (Sortieren, Filtern in 4A/4G/4H), diese Datei zeichnet.
+
+   Zustand, den die Ansicht führt: abs, suche, kunde, ansichtWahl, sortierung,
+   gemerkt (R-DB4), markenZeilen/marken (Planung), listeHeute (Tageszahl).
+   OFFEN (Symolo): Der Klappzustand wird bisher nur solange gemerkt, wie das
+   Fenster offen ist. Je Benutzer dauerhaft geht erst mit einer Tabelle
+   (Benutzer, Ansicht, Schlüssel) und der Benutzer-Anbindung.
+   =========================================================================== */
+
+suche: "",
+kunde: "Alle",
+ansichtWahl: "bg",
+sortierung: "ab",
+zeitraum: "30",
+gemerkt: {},
+
+abs: [],
+alleAbs: [],
+markenZeilen: [],
+marken: {},
+listeHeute: 0,
+listeSpalten: [],
+listeStation: false,
+
+kopfEl: null,
+meldungEl: null,
+listeEl: null,
+sucheEl: null,
+kundeEl: null,
+sortEl: null,
+terminEl: null,
+ansichtKnoepfe: {},
+
+/* ---------------------------------------------------------------------------
+   Leiste: Suche, Knöpfe, Auswahlfelder
+   felder: Reihenfolge, z. B. ["suche", "termin", "knoepfe", "kunde"]
+   --------------------------------------------------------------------------- */
+
+listeLeisteBauen: function (felder) {
+
+    const leiste = this.el(this.koerper, "div", "kom-leiste");
+
+    felder.forEach(f => {
+        if (f === "suche") this.listeSucheBauen(leiste);
+
+        if (f === "knoepfe") {
+            const knoepfe = this.el(leiste, "div", "kom-knopfgruppe");
+            this.dashAnsichten.forEach(([wert, titel]) => {
+                this.ansichtKnoepfe[wert] = this.knopf(knoepfe, titel, () => {
+                    /* R-DB4: Ansicht umstellen = Startzustand der neuen Ansicht */
+                    this.ansichtWahl = wert;
+                    this.gemerkt = {};
+                    this.zeichnen();
+                });
+            });
+        }
+
+        if (f === "sort") {
+            this.sortEl = this.auswahlBauen(leiste, "Sortieren", this.listeSortierungen, this.sortierung, w => {
+                this.sortierung = w;
+                this.zeichnen();
+            });
+        }
+
+        if (f === "termin") {
+            this.terminEl = this.auswahlBauen(leiste, "Liefertermin",
+                this.fcZeitraeume.map(z => [z[0], z[1]]), this.zeitraum, w => {
+                    this.zeitraum = w;
+                    this.zeichnen();
+                });
+        }
+
+        if (f === "kunde") {
+            this.kundeEl = this.auswahlBauen(leiste, "Kunde", [[this.dashAlleKunden, this.dashAlleKunden]], this.kunde, w => {
+                this.kunde = w;
+                this.zeichnen();
+            });
+        }
+    });
+},
+
+listeSucheBauen: function (leiste) {
+
+    const suchFeld = this.el(leiste, "label", "kom-feld kom-suchfeld");
+    this.el(suchFeld, "span", "kom-feldname", "AB-Suche");
+    const zeile = this.el(suchFeld, "span", "kom-suchzeile");
+    this.sucheEl = this.el(zeile, "input", "kom-eingabe");
+    this.sucheEl.type = "search";
+    this.sucheEl.placeholder = "Teil der AB-Nummer";
+    this.sucheEl.onkeydown = e => { if (e.key === "Enter") this.suchen(); };
+    this.sucheEl.onsearch = () => { if (this.sucheEl.value === "") this.suchen(); };
+    this.knopf(zeile, "Suchen", () => this.suchen(), "haupt");
+},
+
+auswahlBauen: function (parent, titel, werte, wert, wechsel) {
+
+    const feld = this.el(parent, "label", "kom-feld");
+    this.el(feld, "span", "kom-feldname", titel);
+    const sel = this.el(feld, "select", "kom-eingabe");
+    this.auswahlFuellen(sel, werte, wert);
+    sel.onchange = () => wechsel(sel.value);
+    return sel;
+},
+
+auswahlFuellen: function (sel, werte, wert) {
+
+    sel.replaceChildren();
+    werte.forEach(([w, t]) => {
+        const o = this.el(sel, "option", "", t);
+        o.value = w;
+    });
+    sel.value = wert;
+},
+
+suchen: function () {
+
+    this.suche = this.text(this.sucheEl.value);
+    this.zeichnen();
+},
+
+/* Filter zurücksetzen (Knopf "Alle zeigen"). */
+alleZeigen: function () {
+
+    this.suche = this.sucheEl.value = "";
+    this.kunde = this.dashAlleKunden;
+    if (this.terminEl) this.zeitraum = "alle";
+    this.zeichnen();
+},
+
+/* Kunden aus den geladenen ABs; ein unbekannter Kunde zählt als "Alle".
+   Stellt auch die Auswahl der Knöpfe ein. */
+listeFelderEinstellen: function (abs) {
+
+    const kunden = this.dashKunden(abs);
+    const gleich = kunden.find(k => k.toLowerCase() === this.dashText(this.kunde));
+    this.kunde = gleich || this.dashAlleKunden;
+    this.auswahlFuellen(this.kundeEl, kunden.map(k => [k, k]), this.kunde);
+
+    Object.keys(this.ansichtKnoepfe).forEach(w => {
+        this.ansichtKnoepfe[w].classList.toggle("kom-gewaehlt", w === this.ansichtWahl);
+    });
+
+    if (this.terminEl) this.auswahlFuellen(this.terminEl, this.fcZeitraeume.map(z => [z[0], z[1]]), this.zeitraum);
+    if (this.sortEl) this.auswahlFuellen(this.sortEl, this.listeSortierungen, this.sortierung);
+},
+
+/* ---------------------------------------------------------------------------
+   Liste zeichnen: aus dem Zustand, nie aus den Rohdaten (Skill, Ablauf 6)
+   --------------------------------------------------------------------------- */
+
+/* leerText: Satz, wenn es gar nichts gibt. gefiltert: Filter sind gesetzt. */
+listeZeichnen: function (liste, leerText, gefiltert) {
+
+    this.meldungEl.replaceChildren();
+    this.listeEl.replaceChildren();
+
+    if (liste.length === 0) {
+        if (gefiltert) {
+            this.meldungEl.textContent = "Keine Einträge" + (this.suche ? " für „" + this.suche + "“" : "") + ". ";
+            this.knopf(this.meldungEl, "Alle zeigen", () => this.alleZeigen());
+        } else {
+            this.el(this.listeEl, "div", "kom-leer", leerText);
+        }
+        return;
+    }
+
+    /* Erst ohne Eltern bauen, dann auf einmal einhängen (schnell bei vielen Zeilen). */
+    const inhalt = this.el(null, "div", "kom-liste-inhalt");
+    this.kopfzeileBauen(inhalt);
+    liste.forEach(d => {
+        const karte = this.el(inhalt, "section", "kom-karte");
+        this.karteZeichnen(karte, d);
+    });
+    this.listeEl.replaceChildren(inhalt);
+},
+
+/* ---------------------------------------------------------------------------
+   Tabelle: gleiche Spalten in Kopfzeile und jeder Karte (R-DB1)
+   --------------------------------------------------------------------------- */
+
+tabelleNeu: function (parent, klasse) {
+
+    const tab = this.el(parent, "table", "kom-dash " + (klasse || ""));
+    const gruppe = this.el(tab, "colgroup");
+    this.listeSpalten.forEach(([art]) => this.el(gruppe, "col", "kom-c-" + art));
+    return tab;
+},
+
+kopfzeileBauen: function (parent) {
+
+    const tab = this.tabelleNeu(parent, "kom-kopfzeile");
+    const tr = this.el(this.el(tab, "thead"), "tr");
+    this.listeSpalten.forEach(([art, titel]) => {
+        this.el(tr, "th", art === "proz" ? "kom-zahl" : (art === "lager" || art === "planung" ? "kom-mitte" : ""), titel);
+    });
+},
+
+zelle: function (tr, wert, klasse, titel, spannt) {
+
+    const td = this.el(tr, "td", klasse || "", wert);
+    if (titel) td.title = this.text(titel);
+    if (spannt) td.colSpan = spannt;
+    return td;
+},
+
+statusZelle: function (tr, w) {
+
+    const td = this.el(tr, "td");
+    this.el(td, "span", "kom-statusmarke " + this.statusKlasse(w), w.status);
+},
+
+balkenZelle: function (tr, w) {
+
+    const td = this.el(tr, "td");
+    const balken = this.el(td, "div", "kom-balken");
+    this.el(balken, "span").style.width = Math.round(w.prozent * 100) + "%";
+    balken.title = this.prozentText(w.prozent);
+},
+
+/* R-F6: Liefertermin eines AB: Datum (überfällig als Hinweis) oder "kein Termin". */
+terminZelle: function (tr, d) {
+
+    const td = this.el(tr, "td");
+
+    if (d.termin === null || d.termin === undefined) {
+        this.el(td, "span", "kom-leise", "kein Termin");
+        return;
+    }
+
+    this.el(td, "b", "", this.tagText(d.termin));
+    if (d.termin < this.listeHeute) this.el(td, "span", "kom-klein", " überfällig");
+},
+
+/* Häkchen "Planung" (gemeinsam für Dashboard, Forecast, Planung). */
+planungZelle: function (tr, d) {
+
+    const td = this.el(tr, "td", "kom-mitte");
+    const label = this.el(td, "label", "kom-haken");
+    const box = this.el(label, "input");
+    box.type = "checkbox";
+    box.checked = Boolean(d.geplant);
+    box.disabled = !this.schreibenErlaubt();
+    box.title = box.disabled ? "Speichern noch gesperrt" : "Zur Planung vormerken";
+    box.setAttribute("aria-label", this.text(d.a.o.ab_anzeige) + " zur Planung vormerken");
+    box.onchange = () => { this.planungHaken(d, box); };
+},
+
+/* Häkchen setzen oder entfernen und neu zeichnen. */
+planungHaken: async function (d, box) {
+
+    const an = box.checked;
+    box.disabled = true;
+
+    const ok = await this.sicher(() => this.plSetzen(this.markenZeilen, this.text(d.a.o.ab_schluessel), an, this.alleAbs));
+    if (ok === false) this.statusZeigen("Diesen Arbeitsauftrag gibt es nicht (mehr).", "fehler");
+
+    if (ok !== null) {
+        const zeilen = await this.sicher(() => this.plMarkenLaden());
+        if (zeilen !== null) {
+            this.markenZeilen = zeilen;
+            this.marken = this.plAktive(zeilen);
+        }
+    }
+
+    this.zeichnen();
+},
+
+/* Klappen merken (R-DB4) und diese Karte neu zeichnen. */
+klappKnopf: function (td, offen, name, umschalten) {
+
+    const b = this.el(td, "button", "kom-klapp", offen ? "▾" : "▸");
+    b.type = "button";
+    b.title = "Auf- oder zuklappen";
+    b.setAttribute("aria-label", this.text(name) + " auf- oder zuklappen");
+    b.onclick = umschalten;
+},
+
+nameKnopf: function (td, name, umschalten) {
+
+    const b = this.el(td, "button", "kom-name", name);
+    b.type = "button";
+    b.onclick = umschalten;
+},
+
+/* Eine Zeile der Karte. art: "ab", "bg", "ohne" (Teile ohne Baugruppe), "teil".
+   k: { knoten (mit o und w), d, g, klapp: { zeigen, offen, name, umschalten },
+   name: Text oder null, namensZelle: Funktion(td) }. Die Zellen folgen
+   listeSpalten; Namen und Klappknopf stehen über mehrere Spalten. */
+zeileBauen: function (tr, art, k) {
+
+    const s = this.listeSpalten.map(x => x[0]);
+    const leer = (klasse, spannt) => this.zelle(tr, "", klasse, undefined, spannt);
+    let i = 0;
+
+    while (i < s.length) {
+        const spalte = s[i];
+
+        if (spalte === "klapp") {
+            if (art === "teil") { leer("", 3); i += 3; continue; }
+            const td = this.el(tr, "td");
+            if (k.klapp) this.klappKnopf(td, k.klapp.offen, k.klapp.name, k.klapp.umschalten);
+        } else if (spalte === "ab") {
+            if (art === "ab") {
+                const td = this.zelle(tr, "", "", this.text(k.knoten.o.ab_anzeige) + "   " + this.text(k.knoten.o.verkaufsartikel), 3);
+                if (k.klapp) this.nameKnopf(td, k.knoten.o.ab_anzeige, k.klapp.umschalten);
+                else this.el(td, "span", "kom-ab-nr", k.knoten.o.ab_anzeige);
+                this.el(td, "span", "kom-ab-text", k.knoten.o.verkaufsartikel);
+                i += 3;
+                continue;
+            }
+            leer();
+        } else if (spalte === "bg") {
+            if (art === "bg" || art === "ohne") {
+                const td = this.zelle(tr, "", "", art === "bg" ? k.knoten.o.name : undefined, 2);
+                if (art === "bg" && k.klapp) this.nameKnopf(td, k.knoten.o.name, k.klapp.umschalten);
+                else if (art === "bg") td.textContent = this.text(k.knoten.o.name);
+                else this.nameKnopf(td, "Teile ohne Baugruppe", k.klapp.umschalten);
+                i += 2;
+                continue;
+            }
+            leer();
+        } else if (spalte === "teil") {
+            const t = k.knoten;
+            const td = this.zelle(tr, "", "", this.text(t.o.zeichnungsnummer) + "   " + this.text(t.o.benennung));
+            this.el(td, "span", "kom-ab-nr", t.o.zeichnungsnummer);
+            this.el(td, "span", "kom-ab-text", t.o.benennung);
+        } else if (spalte === "kunde") {
+            if (art === "ab") this.zelle(tr, k.knoten.o.kunde, "", k.knoten.o.kunde);
+            else leer();
+        } else if (spalte === "station") {
+            const wert = art === "ab" ? k.d.station : (art === "bg" ? k.g.station : "");
+            this.zelle(tr, wert || "");
+        } else if (spalte === "lager") {
+            let wert = "";
+            if (this.listeStation) {
+                if (art === "ab") wert = k.d.ort;
+                if (art === "bg") wert = k.g.ort;
+                if (art === "teil") wert = k.knoten.ort;
+            } else if (art === "teil") {
+                wert = this.text(k.knoten.o.lagerort);
+            }
+            this.zelle(tr, wert, "kom-mitte", wert);
+        } else if (spalte === "status") {
+            if (art === "ohne") leer();
+            else this.statusZelle(tr, k.knoten.w);
+        } else if (spalte === "termin") {
+            if (art === "ab") this.terminZelle(tr, k.d);
+            else leer();
+        } else if (spalte === "proz") {
+            if (art === "ohne") leer();
+            else this.zelle(tr, this.prozentText(k.knoten.w.prozent), "kom-zahl");
+        } else if (spalte === "balken") {
+            if (art === "ohne") leer();
+            else this.balkenZelle(tr, k.knoten.w);
+        } else if (spalte === "stand") {
+            if (art === "ohne") this.zelle(tr, k.g.teile.length + (k.g.teile.length === 1 ? " Teil" : " Teile"), "kom-leise");
+            else this.zelle(tr, k.knoten.w.fortschritt);
+        } else if (spalte === "planung") {
+            if (art === "ab") this.planungZelle(tr, k.d);
+            else leer("kom-mitte");
+        }
+
+        i++;
+    }
+},
+
+karteZeichnen: function (karte, d) {
+
+    karte.replaceChildren();
+
+    const a = d.a;
+    const tab = this.tabelleNeu(karte, d.ampel ? "kom-ampel kom-ampel-" + d.ampel : "");
+    const koerper = this.el(tab, "tbody");
+    const neu = () => this.karteZeichnen(karte, d);
+    const abUmschalten = () => { d.offen = !d.offen; this.gemerkt[d.schluessel] = d.offen; neu(); };
+
+    /* AB-Zeile: Nummer, Verkaufsartikel, Kunde */
+    const tr = this.el(koerper, "tr", "kom-dab " + this.statusKlasse(a.w));
+    this.zeileBauen(tr, "ab", {
+        knoten: a, d: d,
+        klapp: d.gruppen.length > 0 ? { offen: d.offen, name: a.o.ab_anzeige, umschalten: abUmschalten } : null
+    });
+
+    if (!d.offen) return;
+
+    d.gruppen.forEach(g => {
+        const gUmschalten = () => { g.offen = !g.offen; this.gemerkt[g.schluessel] = g.offen; neu(); };
+
+        if (g.bg) {
+            const btr = this.el(koerper, "tr", "kom-dbg");
+            this.zeileBauen(btr, "bg", {
+                knoten: g.bg, d: d, g: g,
+                klapp: g.teile.length ? { offen: g.offen, name: g.bg.o.name, umschalten: gUmschalten } : null
+            });
+        } else {
+            /* Teile ohne Baugruppe: eigene graue Zeile, damit man sie klappen kann */
+            const otr = this.el(koerper, "tr", "kom-dbg kom-dohne");
+            this.zeileBauen(otr, "ohne", {
+                knoten: {}, d: d, g: g,
+                klapp: { offen: g.offen, name: "Teile ohne Baugruppe", umschalten: gUmschalten }
+            });
+        }
+
+        if (!g.offen) return;
+
+        g.teile.forEach(t => {
+            const ttr = this.el(koerper, "tr", "kom-dteil " + this.statusKlasse(t.w));
+            this.zeileBauen(ttr, "teil", { knoten: t, d: d, g: g, klapp: null });
+        });
+    });
 },
 
 

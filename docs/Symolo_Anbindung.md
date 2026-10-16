@@ -82,7 +82,7 @@ Jede Ansicht hat eine eigene Wrapper-Klasse (`kom-bl`, `kom-db`, `kom-rg`, `kom-
 4. Es gibt **einen** Schreibpfad (`schreiben` in `40_daten.js`). Gelöscht wird nie, nur archiviert.
 5. Jede Anfrage hat ein Zeitlimit.
 6. Spaltennamen werden ohne Rücksicht auf Groß- und Kleinschreibung gelesen. `null` erscheint nie als „undefined“.
-7. SQL baut nur `sqlBauen`. Die Namen kommen nur aus `20_tabellen.js`, Werte werden maskiert. Benutzt werden nur `select * from … where … = / in / is null … order by …`, kein `limit` und kein `join`.
+7. SQL baut nur `sqlBauen`. Die Namen kommen nur aus `20_tabellen.js`, Werte werden maskiert. Benutzt werden nur `select * from … where … = / in / is null … order by …`, kein `limit` und kein `join`. Nur bei großen Tabellen (Zeilen des Forecast, archivierte Schweißzeilen für die Statistik) steht statt `*` eine Spaltenliste (`select id, udate, schluessel, termin from …`).
 
 ## 5. Beim Einbinden zu prüfen oder einzutragen
 
@@ -96,6 +96,9 @@ Jede Ansicht hat eine eigene Wrapper-Klasse (`kom-bl`, `kom-db`, `kom-rg`, `kom-
 | Reihenfolge von `par`, Form der `idList`, ID als Text oder Zahl | `40_daten.js` | wie der Pfad; `idList` als Text mit Kommas; ID als Text |
 | Schreibweise der Felder (Get gegenüber Select) | nichts | egal, die App liest tolerant |
 | SQL-Sprache, Zeilengrenze | `sqlBauen` | einfache Abfragen; einige tausend Zeilen |
+| Spaltenliste statt `*` | `sqlBauen` in `40_daten.js` (Option `felder`) | wird verstanden; wenn nicht, die Option weglassen (dann kommen alle Spalten) |
+| Tabellen `forecast`, `forecast_zeile`, `planungsmarke`, `schweisszeile` | `20_tabellen.js` | `fwm.kom_…`; `planungsmarke` mit Archiv-Feld `archiviert` (Häkchen entfernen = archivieren) |
+| Forecast: der neueste gilt | `fcLaden` in `4G_forecast.js` | die Ansicht nimmt den Forecast mit der neuesten Zeit; der Import (Phase 7) blendet den alten aus |
 | Länge einer Abfrage | `datenLesenIn` in `40_daten.js` | `in (…)` in Stücken zu 500 IDs |
 | Mengen als Zahl oder Text | `mengeMilli` in `45_rechnen.js` | beides geht; Text, der keine Zahl ist, zählt 0 |
 | Tabelle `aenderung` (Protokoll), Felder am AB für das Archiv | `20_tabellen.js` | `fwm.kom_aenderung`; `archiviert_am`, `archiv_herkunft`, `archiv_status` am Auftrag. Reichen Ihnen die Standardfelder als Protokoll, entfällt die Tabelle |
@@ -118,8 +121,9 @@ Jede Ansicht hat eine eigene Wrapper-Klasse (`kom-bl`, `kom-db`, `kom-rg`, `kom-
 3. Mit einer Testtabelle `schreibenErlaubtInSymolo` einschalten und anlegen und ändern prüfen. Die ID darf beim Anlegen nicht gesetzt werden, und beim Ändern muss das Komplettobjekt ankommen. Danach in der Bestandsliste eintragen (Vorhanden, Lagerort, Soll) und das **Regal** (`fertig/regal.js`) prüfen. Ein Lagerort am AB ändert alle Baugruppen und Teile darunter, also viele Einträge auf einmal.
 4. **Dashboard** (`fertig/dashboard.js`, nur lesen): liest wie die Bestandsliste und braucht keine weitere Tabelle.
 5. **Archiv** (`fertig/archiv.js`) und **Änderungsprotokoll** (`fertig/protokoll.js`): lesen `auftrag` (archivierte), `baugruppe`, `teil`, `schweisszeile`, `aenderung` und `einstellung`. Archivieren und Wiederherstellen schreiben nur Markierungen am AB (`archiviert`, `archiviert_am`, `archiv_herkunft`, `archiv_status`); das Protokoll schreibt eine Zeile je Änderung in `aenderung`. Es wird nichts gelöscht.
-6. Die weiteren Bereiche der Reihe nach, sobald sie gebaut sind.
-7. Tests: `python -m pytest tests/test_symolo.py`. Das umfasst die Skill-Prüfungen und die Datenschicht gegen den Nachbau.
+6. **Forecast** (`fertig/forecast.js`), **Planung** (`fertig/planung.js`) und **Statistik** (`fertig/statistik.js`): lesen `auftrag`, `baugruppe`, `teil`, `schweisszeile`, `forecast`, `forecast_zeile` und `planungsmarke`. Das **Dashboard** liest jetzt ebenfalls `planungsmarke`, `forecast`, `forecast_zeile` und `schweisszeile` (Spalte Planung, Kachel Forecast). Geschrieben wird nur das Häkchen „Planung“ in `planungsmarke`; ein entferntes Häkchen wird ausgeblendet (`archiviert`) und beim nächsten Setzen wieder eingeblendet. Das Einlesen der Forecast-Datei kommt mit dem Import (Phase 7).
+7. Die weiteren Bereiche der Reihe nach, sobald sie gebaut sind.
+8. Tests: `python -m pytest tests/test_symolo.py`. Das umfasst die Skill-Prüfungen und die Datenschicht gegen den Nachbau.
 
 ## 7. Lokal testen (ohne Symolo)
 

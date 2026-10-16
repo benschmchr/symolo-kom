@@ -148,3 +148,80 @@ def test_symolo_ab_nummern_wie_die_bisherige_app(tmp_path):
             ab_schluessel(f["ein"]),
             forecast_schluessel(f["ein"]),
         ), repr(f["ein"])
+
+
+@pytest.mark.skipif(NODE is None, reason="Node fehlt")
+def test_symolo_statistik_wie_die_bisherige_app(tmp_path):
+    """Liefertreue, Durchlaufzeit, überfällige ABs und Verspätung: 4I_statistik.js rechnet für viele Zufallsfälle
+    dasselbe wie bestand/statistik.py (Python: Wert und Text, Farbe, Anzahl, Hinweistext jedes Balkens)."""
+    import random
+    from datetime import date, timedelta
+
+    from bestand import statistik
+
+    zufall = random.Random(20261016)
+    heute = date(2026, 10, 14)
+
+    def tag(spanne):
+        return None if zufall.random() < 0.15 else heute + timedelta(days=zufall.randint(-spanne, spanne // 4))
+
+    eintraege = []
+    for i in range(600):
+        lt = tag(400)
+        tv = None if lt is None or zufall.random() < 0.2 else lt + timedelta(days=zufall.randint(-6, 12))
+        ein = None if tv is None or zufall.random() < 0.1 else tv - timedelta(days=zufall.randint(0, 30))
+        eintraege.append(
+            statistik.Eintrag(
+                zufall.choice(["ab", "ab", "teil"]), f"AB{i}", lt, tv, ein, archiviert=zufall.random() < 0.3
+            )
+        )
+
+    eingabe, ausgabe = tmp_path / "eingabe.json", tmp_path / "ausgabe.json"
+
+    def iso(d):
+        return None if d is None else d.isoformat()
+
+    eingabe.write_text(
+        json.dumps(
+            {
+                "heute": iso(heute),
+                "eintraege": [
+                    {
+                        "art": e.art,
+                        "anzeige": e.anzeige,
+                        "lt": iso(e.lt),
+                        "tv": iso(e.tv),
+                        "eingelagert": iso(e.eingelagert),
+                        "archiviert": e.archiviert,
+                    }
+                    for e in eintraege
+                ],
+            }
+        ),
+        encoding="utf-8",
+    )
+    env = {**os.environ, "KOM_STAT_EINGABE": str(eingabe), "KOM_STAT_AUSGABE": str(ausgabe)}
+    erg = subprocess.run(
+        [NODE, "--test", str(BASIS / "tests" / "symolo" / "statistik.test.js")], capture_output=True, text=True, env=env
+    )
+    assert erg.returncode == 0, erg.stdout[-4000:]
+    js = json.loads(ausgabe.read_text(encoding="utf-8"))
+
+    def b(liste):
+        return [[x.label, x.wert, x.text, x.hoehe, x.farbe, x.n, x.titel] for x in liste]
+
+    spaet_balken, spaet = statistik.verspaetung(eintraege, heute)
+    py = {
+        "monat_ab": b(statistik.liefertreue_monat(eintraege, "ab", heute)),
+        "monat_teil": b(statistik.liefertreue_monat(eintraege, "teil", heute)),
+        "ia_ab": b(statistik.liefertreue_ia(eintraege, "ab", heute)),
+        "ia_teil": b(statistik.liefertreue_ia(eintraege, "teil", heute)),
+        "dlz_woche": b(statistik.durchlaufzeit(eintraege, "woche", heute)),
+        "dlz_monat": b(statistik.durchlaufzeit(eintraege, "monat", heute)),
+        "dlz_jahr": b(statistik.durchlaufzeit(eintraege, "jahr", heute)),
+        "ueberfaellig": [[e.anzeige, e.lt.strftime("%d.%m.%Y")] for e in statistik.ueberfaellig(eintraege, heute)],
+        "verspaetung": [b(spaet_balken), spaet],
+    }
+    for name in py:
+        assert json.loads(json.dumps(py[name])) == js[name], name
+    assert py["ueberfaellig"] and any(x[1] is not None for x in py["monat_ab"] + py["ia_ab"])

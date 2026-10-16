@@ -9,10 +9,12 @@ const vm = require("node:vm");
 const SYMOLO = path.join(__dirname, "..", "..", "symolo");
 
 /* zusatz(ctx, v) darf die Umgebung vor dem Test anpassen; name wählt die Ansicht. */
-function umgebung(zusatz, name) {
+/* vorher(ctx) läuft vor dem Laden der Skripte (z. B. ein gespeicherter Browser-Stand). */
+function umgebung(zusatz, name, vorher) {
     const ctx = { console: { warn() {}, log: console.log }, setTimeout, clearTimeout, Promise, JSON };
     ctx.window = ctx;
     vm.createContext(ctx);
+    if (vorher) vorher(ctx);
     for (const datei of ["lokal/beispieldaten.js", "lokal/symolo-nachbau.js", "fertig/lokal_ansichten.js"]) {
         vm.runInContext(fs.readFileSync(path.join(SYMOLO, datei), "utf8"), ctx, { filename: datei });
     }

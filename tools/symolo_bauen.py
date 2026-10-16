@@ -31,7 +31,10 @@ FERTIG = SYMOLO / "fertig"
 # klasse: Wrapper-Klasse (jede CSS-Regel beginnt damit), praefix: für IDs, css_id: für injector.css/rmcss.
 ANSICHTEN = [
     {"name": "bestandsliste", "titel": "Bestandsliste", "klasse": "kom-bl", "praefix": "komBl", "css_id": "KOMBLCSS"},
-    {"name": "dashboard", "titel": "Dashboard", "klasse": "kom-db", "praefix": "komDb", "css_id": "KOMDBCSS"},
+    {"name": "dashboard", "titel": "Dashboard", "klasse": "kom-db", "praefix": "komDb", "css_id": "KOMDBCSS", "css": ["liste"]},
+    {"name": "forecast", "titel": "Forecast", "klasse": "kom-fc", "praefix": "komFc", "css_id": "KOMFCCSS", "css": ["liste"]},
+    {"name": "planung", "titel": "Planung", "klasse": "kom-pl", "praefix": "komPl", "css_id": "KOMPLCSS", "css": ["liste"]},
+    {"name": "statistik", "titel": "Statistik", "klasse": "kom-st", "praefix": "komSt", "css_id": "KOMSTCSS"},
     {"name": "archiv", "titel": "Archiv", "klasse": "kom-ar", "praefix": "komAr", "css_id": "KOMARCSS"},
     {"name": "protokoll", "titel": "Änderungsprotokoll", "klasse": "kom-pr", "praefix": "komPr", "css_id": "KOMPRCSS"},
     {"name": "regal", "titel": "Regal", "klasse": "kom-rg", "praefix": "komRg", "css_id": "KOMRGCSS"},
@@ -97,6 +100,8 @@ def css_bauen(a: dict) -> str:
     # Arbeitsseiten: Thema light ohne Glas (Design_Anwendung). Variablen an der Ansicht, nicht an :root.
     vars_ = "\n".join(gemeinsam + je_thema["light"])
     teile = [f".ANSICHT {{\n{vars_}\n}}", (SYMOLO / "quelle" / "gemeinsam.css").read_text(encoding="utf-8")]
+    for name in a.get("css", []):  # weitere gemeinsame Stile, z. B. "liste" für die Karten-Liste
+        teile.append((SYMOLO / "quelle" / f"{name}.css").read_text(encoding="utf-8"))
     eigen = SYMOLO / "ansichten" / a["name"] / "ansicht.css"
     if eigen.exists():
         teile.append(eigen.read_text(encoding="utf-8"))

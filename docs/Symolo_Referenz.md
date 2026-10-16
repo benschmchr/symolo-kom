@@ -185,6 +185,13 @@ Tabelle `fwm.stamm_prozesse` (BEKANNT), Ergebnis von `select * from fwm.stamm_pr
 | `symolo/quelle/4B_protokoll.js` | Änderungsprotokoll: Einstellungen, Eintrag schreiben, lesen, filtern, ausblenden |
 | `symolo/quelle/4C_ab_nummer.js` | AB-Nummern (R-AB1 bis R-AB5): Anzeigeform, Schlüssel, Losnummer, AB finden |
 | `symolo/quelle/4D_archiv.js` | Archiv: AB archivieren, wiederherstellen, die 28 Spalten, Suche |
+| `symolo/quelle/4E_termine.js` | Datum als Tageszahl, Kalenderwochen, Monate (für Forecast und Statistik) |
+| `symolo/quelle/4F_schweissen.js` | Schweißen lesen: Vererbung „(verschieden)“ (R-W6), Blöcke, ganze ABs für den Forecast (W11) |
+| `symolo/quelle/4G_forecast.js` | Forecast ansehen: früheste Termine je AB, Ampel, Liste, Kopf, Kachel |
+| `symolo/quelle/4H_planung.js` | Planung: Häkchen setzen und entfernen, Liste, Station und Lagerort |
+| `symolo/quelle/4I_statistik.js` | Statistik: Liefertreue, Durchlaufzeit, überfällige ABs, Verspätung |
+| `symolo/quelle/4J_liste.js` | Karten-Liste von Dashboard, Forecast und Planung (Spalten je Ansicht wählbar) |
+| `symolo/quelle/liste.css` | gemeinsame Stile der Karten-Liste (eingebunden über `"css": ["liste"]` im Bauschritt) |
 | `symolo/quelle/50_benutzer.js` | Platzhalter für Benutzer und Rollen (vorerst ohne) |
 | `symolo/ansichten/<bereich>/` | eine Ansicht je Bereich |
 | `symolo/fertig/<bereich>.js` | fertiges Hook-Objekt zum Einfügen in Symolo (gebaut mit `tools/symolo_bauen.py`) |
@@ -205,6 +212,8 @@ Im Code steht **OFFEN (Symolo)** an jeder ungeklärten Stelle und **VERMUTET** a
 | Archiv und Protokoll: Tabelle `kom_aenderung`, Felder `archiviert_am`, `archiv_herkunft`, `archiv_status` am AB | Vorschlag; Protokoll eventuell über die Standardfelder (`iuser`, `idate`, `uuser`, `udate`) |
 | Name der angemeldeten Person (fürs Protokoll) | leer, bis klar ist, woher er kommt |
 | Protokoll „leeren“ und „aufbewahren“ ohne Löschen | Einträge werden ausgeblendet (`archiviert`); endgültig löschen macht die IT |
+| Forecast, Planung, Statistik: Tabellen `forecast`, `forecast_zeile`, `planungsmarke` (mit `archiviert`), `schweisszeile` | Vorschlag; Häkchen entfernen und alter Forecast werden archiviert, nie gelöscht |
+| Spaltenliste in der Abfrage (`select a, b from …`) | `datenLesen(..., { felder })` holt bei den Forecast-Zeilen nur AB-Schlüssel und Termin; sonst wäre jede Zeile mit bis zu 80 Spalten dabei |
 | Suche im Archiv nach Zeilen (Zeichnungsnummer, Benennung …) | lädt beim ersten Suchen alle Zeilen; mit „like“ in der Abfrage wäre das nicht nötig |
 | Rückgabe von Create, Update und List | JSON-Text in `data.result` |
 | Fehlerformat von Symolo | unbekannt; wir zeigen die Meldung an |

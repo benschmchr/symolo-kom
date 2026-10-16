@@ -119,3 +119,48 @@ test("Jede Spalte aus 20_tabellen.js gibt es in den Beispieldaten", () => {
         for (const sp of Object.values(v.tabellen._standard)) assert.ok(felder.includes(sp), t.tabelle + ": " + sp);
     }
 });
+
+test("Lesen mit Spaltenliste holt nur diese Spalten (und ID, Änderungszeit, Archiv-Feld)", async () => {
+    const { v } = umgebung();
+
+    const sql = v.sqlBauen("forecast_zeile", { felder: ["schluessel", "termin"], wo: { forecast: [1] } });
+    assert.equal(sql, "select id, udate, schluessel, termin from fwm.kom_forecast_zeile where forecast_id_forecast in (1)");
+    assert.equal(v.sqlBauen("planungsmarke", { felder: ["ab_schluessel"] }),
+        "select id, udate, archiviert, ab_schluessel from fwm.kom_planungsmarke");
+    assert.equal(v.sqlBauen("forecast", {}), "select * from fwm.kom_forecast");
+
+    const zeilen = await v.datenLesenIn("forecast_zeile", "forecast", [1], { felder: ["schluessel", "termin"] });
+    assert.ok(zeilen.length > 10);
+    assert.ok(zeilen.every(z => z.schluessel && z.werte === null && z.nr === null));
+    assert.throws(() => v.sqlBauen("forecast_zeile", { felder: ["gibt_es_nicht"] }), /Unbekanntes Feld/);
+});
+
+test("Alter Browser-Stand ohne neue Spalte: Häkchen in der Planung lässt sich trotzdem entfernen", async () => {
+    /* Gespeichert vor Phase 5: planungsmarke ohne Spalte "archiviert". */
+    const vorher = umgebung().ctx.symolo._nachbau.daten();
+    const t = vorher["fwm.kom_planungsmarke"];
+    t.felder = t.felder.filter(f => f !== "archiviert");
+    t.zeilen.forEach(z => { delete z.archiviert; });
+    delete vorher["fwm.kom_forecast"];
+
+    const speicher = { "kom-symolo-nachbau-v1": JSON.stringify(vorher) };
+    const { v, ctx } = umgebung(null, "planung", c => {
+        c.localStorage = {
+            getItem: k => (k in speicher ? speicher[k] : null),
+            setItem: (k, w) => { speicher[k] = String(w); },
+            removeItem: k => { delete speicher[k]; }
+        };
+    });
+
+    const db = ctx.symolo._nachbau.daten();
+    assert.ok(db["fwm.kom_planungsmarke"].felder.includes("archiviert"));
+    assert.ok(db["fwm.kom_forecast"].zeilen.length > 0);
+
+    const zeilen = await v.plMarkenLaden();
+    const schluessel = Object.keys(v.plAktive(zeilen))[0];
+    assert.ok(schluessel);
+    await v.plSetzen(zeilen, schluessel, false, []);
+    assert.equal(v.plAktive(await v.plMarkenLaden())[schluessel], undefined);
+    /* und der Stand wurde mit der neuen Spalte gespeichert */
+    assert.ok(JSON.parse(speicher["kom-symolo-nachbau-v1"])["fwm.kom_planungsmarke"].felder.includes("archiviert"));
+});
