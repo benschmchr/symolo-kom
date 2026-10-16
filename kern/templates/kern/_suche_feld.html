@@ -1,0 +1,6 @@
+<div class="suche-feld" id="suche-feld" hidden data-url="{% url 'suche_treffer' %}">
+  <form method="get" action="{% url 'suche' %}" role="search">
+    <input type="search" name="q" id="kopfsuche" autocomplete="off" enterkeyhint="search" placeholder="AB oder Baugruppe (Nummer oder Name)" aria-label="Suche nach AB und Baugruppe in Bestandsliste und Schweißen">
+  </form>
+  <div class="suche-treffer" id="suche-treffer" aria-live="polite"></div>
+</div>

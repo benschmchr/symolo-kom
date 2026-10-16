@@ -1,0 +1,2 @@
+{# Liefertermin eines AB (R-F6): Datum oder „kein Termin“; überfällig als Hinweis. Parameter: d, kopf #}
+{% if d.termin %}<b>{{ d.termin|date:"d.m.Y" }}</b>{% if d.termin < kopf.heute %} <span class="klein">überfällig</span>{% endif %}{% else %}<span class="leise">kein Termin</span>{% endif %}

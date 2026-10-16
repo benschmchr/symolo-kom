@@ -1,0 +1,117 @@
+{% extends "kern/base.html" %}{% load static bestand_extras %}
+{% block titel %}Schweißen{% endblock %}
+{% block kopfzusatz %}<link rel="stylesheet" href="{% static 'kern/css/listen.css' %}">{% endblock %}
+{% block inhalt %}
+<div class="seitenkopf">
+  <h1>Schweißen</h1>
+  {% if darf_eintragen %}<div class="knopfreihe"><button type="button" class="knopf" id="mitarbeiter-verwalten" data-url="{% url 'sw_mitarbeiter' %}">Mitarbeiter verwalten</button></div>{% endif %}
+</div>
+<form class="leiste" method="get" action="{% url 'schweissen' %}" id="filter">
+  <div class="feld suche"><label for="suche">Suche</label>
+    <div class="suchzeile"><input type="search" id="suche" name="q" value="{{ q }}" placeholder="AB, Zeichnungsnr., Benennung, LK, Mitarbeiter oder Arbeitsplatz" enterkeyhint="search">
+      <button class="knopf such-knopf" type="submit" title="Suchen" aria-label="Suchen">{% include "kern/_lupe.html" %}</button></div></div>
+  <div class="leiste-knoepfe">
+    <a class="knopf{% if anzeige == 'ab' %} gewaehlt{% endif %}" href="{% url 'schweissen' %}?anzeige=ab">ABs</a>
+    <a class="knopf{% if anzeige == 'bg' %} gewaehlt{% endif %}" href="{% url 'schweissen' %}?anzeige=bg">BGs</a>
+    <a class="knopf" href="{% url 'schweissen' %}">Alles</a>
+  </div>
+  <div class="feld"><label for="f-mitarbeiter">Mitarbeiter</label>
+    <select id="f-mitarbeiter" name="mitarbeiter" data-sortieren><option value="">Alle</option>{% for n in mitarbeiter %}<option value="{{ n }}" {% if n == mit %}selected{% endif %}>{{ n }}</option>{% endfor %}</select></div>
+  <div class="feld"><label for="f-platz">Arbeitsplatz</label>
+    <select id="f-platz" name="platz" data-sortieren><option value="">Alle</option>{% for p in plaetze %}<option value="{{ p }}" {% if p == platz %}selected{% endif %}>{{ p }}</option>{% endfor %}<option value="Sonstiges" {% if platz == "Sonstiges" %}selected{% endif %}>Sonstiges</option></select></div>
+  <div class="feld"><label for="f-sort">Sortieren</label>
+    <select id="f-sort" name="sort" data-sortieren><option value="">Standard</option>{% for w, t in sortierungen %}<option value="{{ w }}" {% if w == sort %}selected{% endif %}>{{ t }}</option>{% endfor %}</select></div>
+  <label class="schalter nur-pc"><input type="checkbox" id="mehr-spalten"> Weitere Spalten</label>
+</form>
+<div class="zaehler" aria-label="Zähler">
+  <span class="pille">Arbeitsaufträge im Schweißen:&nbsp;<b>{{ anzahl }}</b>{% if anz_einzeln %} <span class="pille-zusatz">(davon {{ anz_einzeln }} einzelne Baugruppe{{ anz_einzeln|pluralize:"n" }})</span>{% endif %}</span>
+</div>
+<p class="klein leise">{% if darf_eintragen %}Mitarbeiter, Arbeitsplatz und Termine an AB- oder Baugruppen-Zeile eintragen: sie gelten für alles darunter. Termine: 15.10.2026, 15.10. oder 151026.{% else %}Zum Eintragen von Mitarbeiter, Arbeitsplatz und Terminen anmelden (Rolle Stahlbau).{% endif %}</p>
+{% if meldung %}<div class="hinweis" role="status">{{ meldung }} <a href="{% url 'schweissen' %}">Alles anzeigen</a></div>{% endif %}
+{% if not bloecke and not meldung %}<div class="hinweis">Noch nichts im Schweißen. Komplette ABs und Baugruppen werden in der Bestandsliste mit „» entnehmen“ hierher verschoben.</div>{% endif %}
+{% if bloecke %}
+<div class="nur-pc karten-liste sw-liste kacheln-liste" id="karten">
+  <table class="tabelle kopfzeile">{% include "bestand/_spalten_sw.html" %}
+    <thead><tr><th></th><th>AB / Zeichnungsnummer</th><th>Benennung</th><th class="zahl">LK</th><th class="zahl">Soll</th><th class="eingabe-kopf">Mitarbeiter</th><th class="eingabe-kopf">Arbeitsplatz</th><th>Eingelagert</th><th>Entnommen</th><th class="eingabe-kopf">Liefertermin Stahlbau</th><th class="eingabe-kopf">Termin Versand</th><th class="zahl">DLZ (Tage)</th>
+      <th class="mehr">Menge / BG</th><th class="mehr">Index</th><th class="mehr">Arbeitsgang</th><th class="mehr">Material</th><th class="mehr">Profil</th><th class="mehr">Abmaße</th><th class="mehr">Bemerkung</th><th></th></tr></thead>
+  </table>
+  {% for b in bloecke %}
+  {% if b.sammlung %}
+  {# Baugruppen eines AB, der teils im Schweißen und teils in der Bestandsliste liegt: eine AB-Überschrift, die Baugruppen als Kacheln, der Rest rot #}
+  <section class="ab-block kacheln" id="sw-{{ b.schluessel }}">
+  <table class="tabelle">{% include "bestand/_spalten_sw.html" %}
+    <tbody>
+    <tr class="ab" data-zeile="{{ b.kopf.id }}"><td><button type="button" class="klapp" data-klapp="ab" aria-expanded="{{ b.offen|yesno:'true,false' }}" aria-label="{{ b.anzeige }} auf- oder zuklappen">▾</button></td><td><button type="button" class="ab-klapp" data-klapp-ref="ab" aria-label="{{ b.anzeige }} auf- oder zuklappen">{{ b.anzeige }}</button></td><td colspan="2" title="{{ b.benennung }}">{{ b.benennung }}{% if b.kunde %} · {{ b.kunde }}{% endif %}</td><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td class="mehr"></td><td class="mehr"></td><td class="mehr"></td><td class="mehr"></td><td class="mehr"></td><td class="mehr"></td><td class="mehr"></td><td></td></tr>
+    </tbody>
+    {% for e in b.bloecke %}{% with bgkey=e.schluessel sam_zu=b.zu %}
+    <tbody class="bg-kachel">
+      <tr class="abstand unter" aria-hidden="true"{% if b.zu %} hidden{% endif %}><td colspan="13"></td></tr>
+      {% include "bestand/_sw_zeile.html" with z=e.kopf art="kopf" b=e %}
+      {% for g in e.bgs %}{% for z in g.teile %}{% if z.zeigen %}{% include "bestand/_sw_zeile.html" with art="teil" b=e bg_offen=e.offen %}{% endif %}{% endfor %}{% endfor %}
+    </tbody>
+    {% endwith %}{% endfor %}
+    {% for name in b.kom_bgs %}
+    <tbody class="bg-kachel rot">
+      <tr class="abstand unter" aria-hidden="true"{% if b.zu %} hidden{% endif %}><td colspan="13"></td></tr>
+      <tr class="bg unter"{% if b.zu %} hidden{% endif %}><td></td><td colspan="2" title="{{ name }}"><a class="sw-link"{% if b.auftrag_id %} href="{% url 'bestandsliste' %}?ab={{ b.auftrag_id }}"{% endif %}>{{ name }}</a></td><td colspan="5"></td><td colspan="4"><a class="sw-link hinweis-sw"{% if b.auftrag_id %} href="{% url 'bestandsliste' %}?ab={{ b.auftrag_id }}"{% endif %}>◀ Befindet sich im Kommissionierlager</a></td><td class="mehr"></td><td class="mehr"></td><td class="mehr"></td><td class="mehr"></td><td class="mehr"></td><td class="mehr"></td><td class="mehr"></td><td></td></tr>
+    </tbody>
+    {% endfor %}
+  </table>
+  </section>
+  {% else %}
+  <section class="ab-block kacheln" id="sw-{{ b.kopf.id }}">
+  <table class="tabelle">{% include "bestand/_spalten_sw.html" %}
+    <tbody>
+    {% include "bestand/_sw_zeile.html" with z=b.kopf art="kopf" %}
+    {% for z in b.ohne %}{% if z.zeigen %}{% include "bestand/_sw_zeile.html" with art="teil" bgkey="" %}{% endif %}{% endfor %}
+    </tbody>
+    {% for g in b.bgs %}{% if g.bg.zeigen %}{% with bgkey=g.html_id bg_offen=b.bgs_offen %}
+    <tbody class="bg-kachel">
+      <tr class="abstand unter" aria-hidden="true"{% if not b.offen %} hidden{% endif %}><td colspan="13"></td></tr>
+      {% include "bestand/_sw_zeile.html" with z=g.bg art="bg" %}
+      {% for z in g.teile %}{% if z.zeigen %}{% include "bestand/_sw_zeile.html" with art="teil" %}{% endif %}{% endfor %}
+    </tbody>
+    {% endwith %}{% endif %}{% endfor %}
+  </table>
+  </section>
+  {% endif %}
+  {% endfor %}
+</div>
+
+{# Handy: eine Karte je AB, Baugruppen aufklappbar, Eingabefelder an AB und Baugruppe #}
+<div class="nur-handy">
+  {% for b in bloecke %}
+  {% if b.sammlung %}
+  <article class="ab-karte kacheln" id="h-sw-{{ b.schluessel }}">
+    <header>
+      <div><div class="ab-nr">{{ b.anzeige }}</div>
+        <div class="leise klein">{{ b.benennung }}{% if b.kunde %} · {{ b.kunde }}{% endif %}</div></div>
+    </header>
+    {% for e in b.bloecke %}{% include "bestand/_sw_handy_bg.html" with g=e.bgs.0 offen=e.bgs_offen %}{% endfor %}
+    {% for name in b.kom_bgs %}<a class="sw-kachel"{% if b.auftrag_id %} href="{% url 'bestandsliste' %}?ab={{ b.auftrag_id }}"{% endif %}><span class="bg-name">{{ name }}</span><span class="hinweis-sw">◀ Befindet sich im Kommissionierlager</span></a>{% endfor %}
+  </article>
+  {% else %}{% with z=b.kopf %}
+  <article class="ab-karte kacheln" id="h-sw-{{ z.id }}">
+    <header>
+      <div><div class="ab-nr">{{ z.anzeige }}</div>
+        <div class="leise klein">{{ z.benennung }}{% if z.kopf.kunde %} · {{ z.kopf.kunde }}{% endif %} · entnommen {{ z.entnommen|date:"d.m.Y" }}</div></div>
+      <div class="rechts"><span class="status komplett">Komplett</span></div>
+      <div class="breit sw-felder">
+        {% include "bestand/_sw_handy_felder.html" %}
+      </div>
+      <div class="breit knopfreihe">
+        {% if darf_archivieren %}<a class="knopf-rot knopf-rund" href="{% url 'sw_archivieren' z.id %}" title="Ganzen AB ins Archiv verschieben" aria-label="Ganzen AB archivieren"><svg class="icon-muell" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 6h18M8 6V4h8v2M6 6l1 14h10l1-14M10 10v6M14 10v6"/></svg></a>{% endif %}
+        {% if darf_entnehmen %}<a class="knopf-rot knopf-klein" href="{% url 'sw_zurueck' z.id %}" data-dialog>Zurück</a>{% endif %}
+      </div>
+    </header>
+    {% for t in b.ohne %}{% if t.zeigen %}{% include "bestand/_sw_handy_teil.html" %}{% endif %}{% endfor %}
+    {% for g in b.bgs %}{% if g.bg.zeigen %}{% include "bestand/_sw_handy_bg.html" with offen=b.bgs_offen %}{% endif %}{% endfor %}
+  </article>
+  {% endwith %}{% endif %}
+  {% endfor %}
+</div>
+{% endif %}
+{% if darf_eintragen %}{{ mitarbeiter|json_script:"mitarbeiter-daten" }}{% endif %}
+<div class="meldung" id="meldung" role="alert" hidden></div>
+{% endblock %}
+{% block skripte %}<script src="{% static 'kern/js/klappen.js' %}" defer></script><script src="{% static 'bestand/schweissen.js' %}" defer></script>{% endblock %}

@@ -1,0 +1,33 @@
+{% extends "kern/base.html" %}{% load static %}
+{% block titel %}Forecast-Daten{% endblock %}
+{% block kopfzusatz %}<link rel="stylesheet" href="{% static 'kern/css/listen.css' %}">{% endblock %}
+{% block inhalt %}
+<p class="klein"><a href="{% url 'forecast' %}">← Forecast</a></p>
+<div class="seitenkopf"><h1>Forecast-Daten</h1><a class="knopf" href="{% url 'forecast_import' %}">Forecast importieren</a></div>
+{% if not f %}
+  <div class="hinweis">Noch kein Forecast importiert.</div>
+{% else %}
+<p class="leise">Die importierte Forecast-Liste mit allen Spalten: <strong>{{ f.datei }}</strong> · Blatt „{{ f.blatt }}“{% if f.stand %} · {{ f.stand }}{% endif %} · importiert am {{ f.zeit|date:"d.m.Y H:i" }}. Die beiden grauen Spalten vorn sind für den Abgleich: AB ohne Los und der Termin, der zählt (leer bei „bereits geliefert“ oder ohne Liefertermin).</p>
+<form class="leiste" method="get" action="{% url 'forecast_daten' %}">
+  <div class="feld suche"><label for="suche">Suche</label>
+    <input type="search" id="suche" name="q" value="{{ q }}" placeholder="AB, Kunde, Bezeichnung …" enterkeyhint="search"></div>
+  <div class="leiste-knoepfe"><button class="knopf" type="submit">Suchen</button>{% if q %}<a class="knopf" href="{% url 'forecast_daten' %}">Alles anzeigen</a>{% endif %}</div>
+</form>
+<div class="zaehler"><span class="pille">Zeilen:&nbsp;<b>{{ gesamt }}</b></span>{% if q %}<span class="pille">Treffer:&nbsp;<b>{{ treffer }}</b></span>{% endif %}</div>
+{% if not seite.object_list %}<div class="hinweis">Kein Treffer für „{{ q }}“.</div>{% else %}
+<div class="tabelle-rahmen archiv-rahmen">
+<table class="tabelle fc-daten">
+  <thead><tr><th class="fc-abgleich">AB_Abgleich</th><th class="fc-abgleich">Termin_Abgleich</th>{% for k in f.kopf %}<th>{{ k }}</th>{% endfor %}</tr></thead>
+  <tbody>
+  {% for z in seite %}<tr><td class="fc-abgleich">{{ z.schluessel }}</td><td class="fc-abgleich">{{ z.termin|date:"d.m.Y" }}</td>{% for w in z.werte %}<td>{{ w }}</td>{% endfor %}</tr>{% endfor %}
+  </tbody>
+</table>
+</div>
+{% if seite.has_other_pages %}<nav class="seiten" aria-label="Seiten">
+  {% if seite.has_previous %}<a class="knopf" href="?seite={{ seite.previous_page_number }}{% if q %}&amp;q={{ q|urlencode }}{% endif %}">← Zurück</a>{% endif %}
+  <span class="klein">Seite {{ seite.number }} von {{ seite.paginator.num_pages }}</span>
+  {% if seite.has_next %}<a class="knopf" href="?seite={{ seite.next_page_number }}{% if q %}&amp;q={{ q|urlencode }}{% endif %}">Weiter →</a>{% endif %}
+</nav>{% endif %}
+{% endif %}
+{% endif %}
+{% endblock %}

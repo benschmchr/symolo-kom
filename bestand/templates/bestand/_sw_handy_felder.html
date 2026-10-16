@@ -1,0 +1,6 @@
+{# Mitarbeiter, Arbeitsplatz und Termine einer AB- oder BG-Zeile am Handy. Parameter: z #}
+<div class="sw-feld"><span class="label">Mitarbeiter</span>{% include "bestand/_sw_feld.html" with f="mitarbeiter" wert=z.m edit=darf_eintragen titel="Mitarbeiter" %}</div>
+<label class="sw-feld"><span class="label">Arbeitsplatz</span>{% include "bestand/_sw_feld.html" with f="arbeitsplatz" wert=z.p edit=darf_eintragen titel="Arbeitsplatz" %}</label>
+<label class="sw-feld"><span class="label">Liefertermin Stahlbau</span>{% include "bestand/_sw_feld.html" with f="liefertermin_stahlbau" wert=z.lt edit=darf_eintragen titel="Liefertermin Stahlbau" %}</label>
+<label class="sw-feld"><span class="label">Termin Versand</span>{% include "bestand/_sw_feld.html" with f="termin_versand" wert=z.tv edit=darf_eintragen titel="Termin Versand" %}</label>
+<span class="sw-feld"><span class="label">DLZ (Tage)</span><span data-sw-id="{{ z.id }}" data-sw-feld="dlz">{{ z.dlz|default_if_none:"–" }}</span></span>

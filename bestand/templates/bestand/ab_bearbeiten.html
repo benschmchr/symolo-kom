@@ -1,0 +1,23 @@
+{% extends "kern/base.html" %}{% load static bestand_extras %}
+{% block titel %}AB bearbeiten · {{ a.o.ab_anzeige }}{% endblock %}
+{% block kopfzusatz %}<link rel="stylesheet" href="{% static 'kern/css/listen.css' %}">{% endblock %}
+{% block inhalt %}
+<p class="klein"><a href="{% url 'bestandsliste' %}?zu={{ a.o.id }}#ab-{{ a.o.id }}">← Bestandsliste</a></p>
+<h1>AB bearbeiten: {{ a.o.ab_anzeige }}</h1>
+<div class="hinweis">Hier änderst du die <strong>Soll-Menge</strong> („Menge Gesamt“) einzelner Teile. Normalerweise kommt sie aus der Kommissionierliste; ein neuer Import (Ersetzen) überschreibt die Änderung wieder. Status und Daten werden danach neu berechnet.</div>
+<form method="post" class="karte">{% csrf_token %}
+  <div class="tabelle-rahmen frei">
+  <table class="tabelle soll-tabelle">
+    <thead><tr><th>Zeichnungsnummer</th><th>Benennung</th><th class="zahl">LK</th><th class="zahl">Vorhanden</th><th class="zahl">Soll</th></tr></thead>
+    <tbody>
+    {% for t in a.ohne %}{% include "bestand/_soll_zeile.html" %}{% endfor %}
+    {% for b in a.bgs %}
+      <tr class="bg"><td colspan="5">{{ b.o.name }}</td></tr>
+      {% for t in b.teile %}{% include "bestand/_soll_zeile.html" %}{% endfor %}
+    {% endfor %}
+    </tbody>
+  </table>
+  </div>
+  <div class="knopfzeile"><button class="knopf-haupt" type="submit">Speichern</button><a class="knopf" href="{% url 'bestandsliste' %}?zu={{ a.o.id }}#ab-{{ a.o.id }}">Abbrechen</a></div>
+</form>
+{% endblock %}

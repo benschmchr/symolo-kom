@@ -1,0 +1,53 @@
+{% load static %}<!doctype html>
+<html lang="de" data-theme="{% block thema %}light{% endblock %}">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="author" content="Ben Schumacher">
+  <meta name="csrf-token" content="{{ csrf_token }}">
+  <title>{% block titel %}{{ APP_NAME }}{% endblock %} · FWM</title>
+  <link rel="icon" href="{% static 'kern/img/fwm-mark.svg' %}" type="image/svg+xml">
+  <link rel="stylesheet" href="{% static 'kern/design/tokens.css' %}">
+  <link rel="stylesheet" href="{% static 'kern/css/app.css' %}">
+  {% block kopfzusatz %}{% endblock %}
+</head>
+<body>
+<header class="kopf">
+  <div class="kopf-innen">
+    <a class="logo" href="{% url 'start' %}" aria-label="Startseite">
+      <img class="logo-hell" src="{% static 'kern/img/fwm-mark.svg' %}" alt="">
+      <img class="logo-dunkel" src="{% static 'kern/img/fwm-mark-dark.svg' %}" alt="">
+      <span><span class="logo-fwm">FWM</span><br><span class="logo-app">{{ APP_NAME }}</span></span>
+    </a>
+    {% include "kern/_suche.html" %}
+    <button class="knopf knopf-klein menue-knopf" aria-controls="menue" aria-expanded="false">Menü</button>
+    <nav class="menue" id="menue" aria-label="Hauptmenü">
+      {% for name, titel, phase in MENUE %}
+        <a href="{% url name %}" class="{% if request.resolver_match.url_name == name %}aktiv{% endif %}">{{ titel }}</a>
+      {% endfor %}
+      {% if "Admin" in meine_rollen %}<a href="{% url 'protokoll' %}" class="{% if request.resolver_match.url_name == 'protokoll' %}aktiv{% endif %}">Protokoll</a>{% endif %}
+      {% if user.is_authenticated %}
+        <a href="{% url 'konto' %}" class="konto-link {% if request.resolver_match.url_name == 'konto' %}aktiv{% endif %}" title="Mein Konto">{% include "kern/_konto.html" %}<span>{{ user.get_full_name|default:user.username }}</span></a>
+      {% else %}
+        <a href="{% url 'login' %}?next={{ request.path|urlencode }}" class="konto-link">{% include "kern/_konto.html" %}<span>Anmelden</span></a>
+      {% endif %}
+    </nav>
+  </div>
+  {% include "kern/_suche_feld.html" %}
+</header>
+<main id="inhalt">
+{% if messages %}<div class="nachrichten">{% for m in messages %}<div class="hinweis nachricht {{ m.tags }}" role="status">{{ m }}</div>{% endfor %}</div>{% endif %}
+{% block inhalt %}{% endblock %}
+</main>
+<footer class="fuss">
+  <div class="fuss-innen">
+    <span>{{ VERMERK }}</span>
+    <span>{% if user.is_authenticated %}Angemeldet: {{ user.username }}{% if meine_rollen %} · {{ meine_rollen|join:", " }}{% endif %}{% else %}Gast: ansehen und suchen; zum Ändern anmelden{% endif %}</span>
+  </div>
+</footer>
+<script src="{% static 'kern/js/menue.js' %}" defer></script>
+<script src="{% static 'kern/js/dialog.js' %}" defer></script>
+<script src="{% static 'kern/js/suche.js' %}" defer></script>
+{% block skripte %}{% endblock %}
+</body>
+</html>

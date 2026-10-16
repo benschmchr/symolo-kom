@@ -1,0 +1,28 @@
+Bestandsliste Kommissionierung - Testpaket fuer Windows
+=======================================================
+
+Nur zum Testen auf diesem PC. Die App laeuft nur hier (Adresse 127.0.0.1),
+niemand sonst im Netzwerk kann sie oeffnen. Es wird nichts installiert.
+
+Starten
+  1. ZIP-Datei mit Rechtsklick > "Alle extrahieren..." entpacken.
+  2. Im entpackten Ordner "App starten.bat" doppelklicken.
+  3. Es oeffnet sich ein schwarzes Fenster und danach die App im Browser.
+     Das schwarze Fenster offen lassen, solange Sie testen.
+  4. Beenden: das schwarze Fenster schliessen.
+
+Anmeldung (Testkonto mit allen Rollen, nur fuer diesen Test)
+  Benutzer:  test
+  Passwort:  Test-Kommission-2026
+
+Falls Windows warnt ("Der Computer wurde durch Windows geschuetzt")
+  Auf "Weitere Informationen" klicken, dann "Trotzdem ausfuehren".
+  Blockiert der Virenschutz der Firma das Programm, kann es nur die IT freigeben.
+
+Daten
+  Beim ersten Start werden die Beispiel-Kommissionierlisten und ein erfundener
+  Beispiel-Forecast geladen (echte Forecast-Liste: Forecast > Forecast importieren).
+  Alle Aenderungen liegen im Ordner "daten" und bleiben beim naechsten Start erhalten.
+  "Neu anfangen.bat" loescht die Testdaten; danach startet die App wieder mit den Beispielen.
+
+Erstellt: Ben Schumacher, 09.10.2026

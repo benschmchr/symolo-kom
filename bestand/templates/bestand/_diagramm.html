@@ -1,0 +1,15 @@
+{% load bestand_extras %}{# Balkendiagramm aus HTML/CSS. Parameter: balken, soll (Linie in %, optional), einheit (Text hinter dem Wert) #}
+{% if balken|hat_werte %}
+<div class="sb-diagramm" role="img" aria-label="{{ beschriftung }}: {% for b in balken %}{{ b.label }} {{ b.text }}{% if not forloop.last %}, {% endif %}{% endfor %}">
+  <div class="sb-flaeche">
+    {% if soll %}<div class="sb-soll" style="bottom:{{ soll }}%"><span>Soll {{ soll }} %</span></div>{% endif %}
+    {% for b in balken %}
+    <div class="sb-spalte" title="{{ b.titel }}">
+      <div class="sb-balken sb-{{ b.farbe }}{% if b.hoehe < 14 %} sb-klein{% endif %}" style="height:{{ b.hoehe }}%"><span class="sb-wert">{{ b.text }}{% if b.wert is not None and einheit %} <small>{{ einheit }}</small>{% endif %}</span></div>
+    </div>
+    {% endfor %}
+  </div>
+  <div class="sb-achse">{% for b in balken %}<span>{{ b.label }}</span>{% endfor %}</div>
+</div>
+{% else %}<p class="klein leise sb-leer">Dafür gibt es noch keine Daten.</p>
+{% endif %}

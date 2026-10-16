@@ -1,0 +1,2 @@
+{# Planungs-Häkchen eines AB (gemeinsam für Dashboard, Forecast, Planung). Parameter: d (DashAB), darf_planen, beschriftung #}
+<label class="plan-haken"><input type="checkbox" data-plan="{{ d.a.o.ab_schluessel }}" {% if d.geplant %}checked{% endif %} {% if not darf_planen %}disabled{% endif %} aria-label="{{ d.a.o.ab_anzeige }} zur Planung vormerken">{% if beschriftung %} Planung{% endif %}</label>

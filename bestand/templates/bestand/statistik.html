@@ -1,0 +1,58 @@
+{% extends "kern/base.html" %}{% load static bestand_extras %}
+{% block titel %}Statistik{% endblock %}
+{% block kopfzusatz %}<link rel="stylesheet" href="{% static 'kern/css/listen.css' %}">{% endblock %}
+{% block inhalt %}
+<p class="label kein-rand">Statistik</p><h1>Liefertreue und Durchlaufzeit</h1>
+<p class="klein leise">Grundlage: „Liefertermin Stahlbau“ und „Termin Versand“ aus dem Schweißen, archivierte ABs zählen mit. Stand: {{ heute|date:"d.m.Y" }}.</p>
+
+<div class="leiste">
+  <div class="leiste-knoepfe" role="group" aria-label="Auswertung der Liefertreue">
+    {% for w, t in was_liste %}<a class="knopf{% if was == w %} gewaehlt{% endif %}" href="?was={{ w }}&amp;zeit={{ zeit }}" {% if was == w %}aria-current="true"{% endif %}>{{ t }}</a>{% endfor %}
+  </div>
+  <span class="klein leise">gilt für beide Liefertreue-Kacheln</span>
+</div>
+
+<div class="bento sb-gitter">
+  <section class="kachel breit-2" aria-labelledby="sb-monat">
+    <h2 id="sb-monat" class="label">Liefertreue Monat</h2>
+    <p class="klein leise">Letzte und aktuelle KW: Anteil {% if was == "abs" %}der ABs{% else %}aller Bauteile{% endif %}, die am Liefertermin oder davor versendet wurden.</p>
+    {% include "bestand/_diagramm.html" with balken=monat soll=soll einheit="" beschriftung="Liefertreue Monat" %}
+  </section>
+
+  <section class="kachel breit-2" aria-labelledby="sb-ia">
+    <h2 id="sb-ia" class="label">Liefertreue IA</h2>
+    <p class="klein leise">Letzte zwölf Monate: Anteil {% if was == "abs" %}der ABs{% else %}aller Bauteile{% endif %}, die am Liefertermin oder davor versendet wurden.</p>
+    {% include "bestand/_diagramm.html" with balken=ia soll=soll einheit="" beschriftung="Liefertreue IA" %}
+  </section>
+
+  <section class="kachel breit-2" aria-labelledby="sb-dlz">
+    <h2 id="sb-dlz" class="label">Durchschnittliche Durchlaufzeit</h2>
+    <div class="leiste-knoepfe" role="group" aria-label="Zeitraum">
+      {% for w, t in zeiten %}<a class="knopf{% if zeit == w %} gewaehlt{% endif %}" href="?was={{ was }}&amp;zeit={{ w }}" {% if zeit == w %}aria-current="true"{% endif %}>{{ t }}</a>{% endfor %}
+    </div>
+    <p class="klein leise">Ø Tage von „Eingelagert“ bis „Termin Versand“ je AB, nach dem Versanddatum eingeordnet.
+      {% if zeit == "woche" %}Letzte 7 Tage.{% elif zeit == "jahr" %}Letzte 12 Monate.{% else %}Letzte 4 Kalenderwochen.{% endif %}</p>
+    {% include "bestand/_diagramm.html" with balken=dlz soll=None einheit="Tage" beschriftung="Durchschnittliche Durchlaufzeit" %}
+  </section>
+
+  <section class="kachel breit-2" aria-labelledby="sb-spaet">
+    <h2 id="sb-spaet" class="label">Verspätung</h2>
+    <p class="klein leise">Ø Tage Verspätung der zu spät versendeten ABs, nach Versandmonat (letzte 12 Monate).
+      {% if not spaet.versandt %}Noch kein AB mit Termin versendet.{% elif not spaet.spaet %}Von {{ spaet.versandt }} versendeten ABs mit Termin war keiner zu spät.{% else %}Von {{ spaet.versandt }} versendeten ABs mit Termin waren {{ spaet.spaet }} zu spät, im Schnitt um {{ spaet.mittel }} Tage.{% endif %}</p>
+    {% include "bestand/_diagramm.html" with balken=spaet_balken soll=None einheit="Tage" beschriftung="Verspätung" %}
+  </section>
+
+  <section class="kachel breit-4" aria-labelledby="sb-ueber">
+    <h2 id="sb-ueber" class="label">Überfällige ABs</h2>
+    {% if ueberfaellig %}
+    <p class="klein leise"><b>{{ ueberfaellig|length }}</b> AB{{ ueberfaellig|length|pluralize:"s" }} im Schweißen mit vergangenem Liefertermin und ohne Termin Versand.</p>
+    <div class="tabelle-rahmen"><table class="tabelle">
+      <thead><tr><th>Arbeitsauftrag</th><th>Liefertermin</th><th class="zahl">Überfällig seit</th><th>Arbeitsplatz</th><th>Mitarbeiter</th></tr></thead>
+      <tbody>{% for e in ueberfaellig %}
+        <tr><td><b>{{ e.anzeige }}</b></td><td>{{ e.lt|date:"d.m.Y" }}</td><td class="zahl">{{ e.lt|tage_bis:heute }} Tage</td><td>{{ e.platz }}</td><td>{{ e.mitarbeiter }}</td></tr>
+      {% endfor %}</tbody></table></div>
+    {% else %}<p class="klein leise">Keine überfälligen ABs. Alle ABs im Schweißen mit Liefertermin sind versendet oder noch nicht fällig.</p>{% endif %}
+  </section>
+</div>
+{% endblock %}
+{% block skripte %}<script src="{% static 'bestand/statistik.js' %}" defer></script>{% endblock %}

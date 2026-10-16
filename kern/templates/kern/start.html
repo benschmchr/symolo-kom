@@ -1,0 +1,53 @@
+{% extends "kern/base.html" %}
+{% block titel %}Übersicht{% endblock %}
+{% block inhalt %}
+<div class="buehne">
+  <p class="label kein-rand kopf-oben">Kommissionierung Stahlbau</p>
+  <h1 class="kopf-oben">Übersicht</h1>
+  {% if not u.anz_ab %}<p class="hinweis klein kopf-oben">Noch keine Arbeitsaufträge. Sobald Kommissionierlisten importiert sind, stehen hier die Zahlen.</p>{% endif %}
+  <div class="bento uebersicht">
+    <div class="kachel kachel-akzent breit-2">
+      <span class="label">Gesamtfortschritt (Teile vorhanden / Soll)</span><span class="zahl">{{ u.gesamt_txt }}</span>
+      <span class="balken" style="background:var(--surface-glass)"><span style="width:{% widthratio u.gesamt 1 100 %}%;background:var(--on-brand)"></span></span>
+      <span class="klein">{{ u.teile_komplett }} von {{ u.teile }} Teilen komplett</span>
+    </div>
+    <div class="kachel breit-2">
+      <span class="label">Arbeitsaufträge nach Status</span><span class="zahl">{{ u.anz_ab }}</span>
+      <div class="verteilung" role="img" aria-label="{{ u.z.Komplett }} komplett, {{ u.z.Teilweise }} teilweise, {{ u.z.Offen }} offen">
+        <span class="komplett" style="flex:{{ u.z.Komplett }}" title="Komplett: {{ u.z.Komplett }}"></span>
+        <span class="teilweise" style="flex:{{ u.z.Teilweise }}" title="Teilweise: {{ u.z.Teilweise }}"></span>
+        <span class="offen" style="flex:{{ u.z.Offen }}" title="Offen: {{ u.z.Offen }}"></span>
+      </div>
+      <div class="legende klein">
+        <span><i class="punkt komplett"></i>Komplett {{ u.z.Komplett }} ({{ u.anteil.Komplett }} %)</span>
+        <span><i class="punkt teilweise"></i>Teilweise {{ u.z.Teilweise }} ({{ u.anteil.Teilweise }} %)</span>
+        <span><i class="punkt offen"></i>Offen {{ u.z.Offen }} ({{ u.anteil.Offen }} %)</span>
+      </div>
+    </div>
+
+    <a class="kachel" href="{% url 'bestandsliste' %}"><span class="label">Einzelteile</span><span class="zahl">{{ u.teile }}</span>
+      <span class="klein leise">{{ u.teile_komplett }} komplett</span></a>
+    <a class="kachel" href="{% url 'regal' %}"><span class="label">Regal</span><span class="zahl">{{ u.regal.einsortiert }}</span>
+      <span class="klein leise">einsortiert · {{ u.regal.nicht }} nicht einsortiert{% if u.regal.ungueltig %} · {{ u.regal.ungueltig }} ohne gültigen Platz{% endif %}</span></a>
+    <a class="kachel" href="{% url 'arbeitsplaetze' %}"><span class="label">Arbeitsplätze</span><span class="zahl">{{ u.arbeitsplaetze.einsortiert }}</span>
+      <span class="klein leise">auf einem Platz · {{ u.arbeitsplaetze.abs }} AB{{ u.arbeitsplaetze.abs|pluralize:"s" }} im Schweißen · {{ u.arbeitsplaetze.nicht }} ohne Platz{% if u.arbeitsplaetze.ungueltig %} · {{ u.arbeitsplaetze.ungueltig }} ohne gültigen Platz{% endif %}</span></a>
+    {% include "bestand/_forecast_kachel.html" with fk=u.forecast %}
+
+    <div class="kachel breit-2 diagramm-kachel">
+      <span class="label">Teile komplett je Arbeitstag</span>
+      <span class="klein leise">{{ u.tage_summe }} Teile in den letzten {{ u.tage|length }} Arbeitstagen</span>
+      <div class="saeulen" role="img" aria-label="Teile komplett je Arbeitstag">
+        {% for t in u.tage %}<div class="saeule" title="{{ t.tag }}: {{ t.n }} Teile"><span class="wert klein">{{ t.n }}</span><span class="stab" style="height:calc({{ t.hoehe }} * 1.1px)"></span><span class="tag">{{ t.tag }}</span></div>{% endfor %}
+      </div>
+    </div>
+    <div class="kachel">
+      <span class="label">Zuletzt komplett</span>
+      <ul class="kurzliste">{% for a in u.zuletzt %}<li><span>{{ a.o.ab_anzeige }}</span><span class="status komplett">Komplett</span></li>{% empty %}<li class="leise">keine</li>{% endfor %}</ul>
+    </div>
+    <div class="kachel">
+      <span class="label">Noch offen</span>
+      <ul class="kurzliste">{% for a in u.aelteste %}<li><span>{{ a.o.ab_anzeige }}</span><span class="status offen">Offen</span></li>{% empty %}<li class="leise">keine</li>{% endfor %}</ul>
+    </div>
+  </div>
+</div>
+{% endblock %}

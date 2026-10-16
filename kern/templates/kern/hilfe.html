@@ -1,0 +1,33 @@
+{% extends "kern/base.html" %}
+{% block titel %}Hilfe{% endblock %}
+{% block inhalt %}
+<h1>Hilfe</h1>
+<div class="hilfe-hinweis"><strong>Bei Problemen, Fragen oder Verbesserungsvorschlägen</strong> bitte bei Ben Schumacher melden.<br>E-Mail: <a href="mailto:{{ hilfe_mail }}">{{ hilfe_mail }}</a></div>
+<div class="hilfe-raster">
+  <div class="karte">
+    <h2>So benutzt du die Bestandsliste</h2>
+    <ol class="klein">
+      <li><strong>Ansehen:</strong> Alle im Firmennetz sehen Bestandsliste, Regal, Dashboard, Forecast, Schweißen und Arbeitsplätze, auch ohne Anmeldung.</li>
+      <li><strong>Anmelden:</strong> Zum Ändern oben rechts auf „Anmelden“ tippen. Welche Rolle du hast, steht unter „Mein Konto“.</li>
+      <li><strong>Suchen:</strong> Lupe oben oder Taste „/“. Ab 2 Zeichen: AB-Nummer, Baugruppe oder Zeichnungsnummer.</li>
+      <li><strong>Vorhanden eintragen</strong> (Kommissionierung): In der Bestandsliste die Menge im Feld „Vorhanden“ eintragen. Der Status wechselt von selbst.</li>
+      <li><strong>Lagerort setzen</strong> (Kommissionierung): Im Regal den Eintrag auf ein Fach ziehen oder antippen und den Platz wählen. Rechtsklick: AB aufsplitten.</li>
+      <li><strong>ABs importieren, ersetzen, löschen, archivieren</strong> (Kommissionierung): In der Bestandsliste „Kommissionierliste importieren“, Datei wählen, prüfen, bestätigen. Rechtsklick auf einen AB: bearbeiten oder löschen. Gelöschte ABs holst du im Archiv zurück.</li>
+      <li><strong>Ins Schweißen übernehmen</strong> (Stahlbau): Ist ein AB komplett, erscheint „Entnehmen“. Dort trägt der Stahlbau auch Mitarbeiter, Arbeitsplatz und Termine ein und holt ABs bei Bedarf zurück.</li>
+      <li><strong>Arbeitsplätze</strong> (Stahlbau): Wie die Magnettafel in der Halle: Eintrag auf einen anderen Platz ziehen oder antippen.</li>
+      <li><strong>Forecast</strong> (Stahlbau): „Forecast importieren“ lädt die neue Forecast-Datei hoch.</li>
+    </ol>
+  </div>
+  <div class="karte">
+    <h2>Probleme und Antworten</h2>
+    <ul class="klein">
+      <li><strong>Ich kann nichts ändern.</strong> Bitte anmelden. Fehlt trotzdem die Möglichkeit, fehlt dir die Rolle: bei Ben melden.</li>
+      <li><strong>„Entnehmen“ fehlt.</strong> Der AB ist noch nicht komplett oder du hast nicht die Rolle Stahlbau.</li>
+      <li><strong>Meine Eingabe wurde abgelehnt.</strong> Nur ganze Zahlen ab 0, ohne Buchstaben.</li>
+      <li><strong>AB nicht gefunden.</strong> Vielleicht schon archiviert: im Reiter „Archiv“ suchen.</li>
+      <li><strong>Seite zeigt Altes.</strong> Seite neu laden (F5).</li>
+      <li><strong>Passwort vergessen.</strong> Bei Ben melden.</li>
+    </ul>
+  </div>
+</div>
+{% endblock %}

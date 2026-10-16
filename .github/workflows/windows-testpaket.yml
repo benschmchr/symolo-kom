@@ -1,0 +1,40 @@
+name: Windows-Testpaket
+# Baut das Testpaket (ZIP, Start per Doppelklick), prüft es auf einem echten Windows-PC
+# und legt es als Download unter „Releases“ ab (Name: testpaket), immer der neueste Stand:
+# main oder ein Pull Request aus diesem Repository (so lässt sich jede Phase vor dem „los“ testen).
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+permissions:
+  contents: write
+jobs:
+  paket:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install -r requirements.txt
+      - run: python tools/windows_paket.py
+      - name: Paket entpacken (Ordner mit Leerzeichen und Umlaut) und prüfen
+        shell: pwsh
+        run: |
+          $ziel = Join-Path $env:RUNNER_TEMP "Test Ordner ä"
+          Expand-Archive dist/Bestandsliste-Test.zip -DestinationPath $ziel
+          python tools/windows_paket_pruefen.py (Join-Path $ziel "Bestandsliste-Test")
+          python tools/windows_paket_pruefen.py (Join-Path $ziel "Bestandsliste-Test")
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Bestandsliste-Test
+          path: dist/Bestandsliste-Test.zip
+      - name: Als Download ablegen
+        if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release delete testpaket --yes --cleanup-tag 2>$null
+          gh release create testpaket dist/Bestandsliste-Test.zip --target ${{ github.event.pull_request.head.sha || github.sha }} --title "Testpaket für Windows" --notes "Herunterladen: Bestandsliste-Test.zip. Anleitung in der Datei LIESMICH.txt im Paket. Stand: ${{ github.event.pull_request.head.sha || github.sha }}"

@@ -1,0 +1,55 @@
+{% extends "kern/base.html" %}{% load static %}
+{% block titel %}Kommissionierliste importieren{% endblock %}
+{% block kopfzusatz %}<link rel="stylesheet" href="{% static 'kern/css/listen.css' %}">{% endblock %}
+{% block inhalt %}
+<p class="klein"><a href="{% url 'bestandsliste' %}">← Bestandsliste</a></p>
+<h1>Kommissionierliste importieren</h1>
+{% if schritt == 1 %}
+<form method="post" enctype="multipart/form-data" class="karte">{% csrf_token %}
+  <div class="ablage" id="ablage">
+    <strong>Dateien hierher ziehen</strong>
+    <span class="leise klein">oder auswählen · eine oder mehrere Kommissionierlisten (.xlsx, .xlsm), bis {{ max_dateien }} auf einmal</span>
+    <input type="file" name="dateien" id="dateien" multiple accept=".xlsx,.xlsm,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel.sheet.macroEnabled.12">
+    <ul class="dateiliste" id="dateiliste"></ul>
+  </div>
+  <p class="leise klein abstand-oben">Die Dateien werden nur gelesen, Makros werden nie ausgeführt. Im nächsten Schritt siehst du, was übernommen wird, und entscheidest, ob schon vorhandene ABs ersetzt werden.</p>
+  <div class="knopfzeile"><button class="knopf-haupt" type="submit">Prüfen →</button><a class="knopf" href="{% url 'bestandsliste' %}">Abbrechen</a></div>
+</form>
+{% else %}
+<form method="post" class="karte">{% csrf_token %}
+  <p>Bitte prüfen. Übernommen wird erst mit <strong>Importieren</strong>.</p>
+  {% if fehler %}<div class="hinweis hinweis-warnung"><strong>Nicht lesbar:</strong>
+    <ul>{% for name, text in fehler %}<li>{{ name }}: {{ text }}</li>{% endfor %}</ul></div>{% endif %}
+  {% if zeilen %}
+  <div class="tabelle-rahmen frei">
+  <table class="tabelle import-tabelle">
+    <thead><tr><th>Datei</th><th>AB</th><th>Kunde · Verkaufsartikel</th><th class="zahl">Baugruppen</th><th class="zahl">Teile</th><th>Was passiert</th></tr></thead>
+    <tbody>
+    {% for z in zeilen %}
+    <tr>
+      <td>{{ z.g.datei }}</td>
+      <td>{% if z.g.ab %}<strong>{{ z.g.ab }}</strong>{% if z.g.kopf.haupt_ab and z.g.kopf.haupt_ab != "-" %}<br><span class="leise klein">Haupt-AB {{ z.g.kopf.haupt_ab }}</span>{% endif %}
+          {% else %}<label class="klein" for="ab_{{ z.nr }}">Fertigungs-AB fehlt in der Datei, bitte eintragen:</label><br><input type="text" id="ab_{{ z.nr }}" name="ab_{{ z.nr }}" placeholder="z. B. AB2616200 L1">{% endif %}</td>
+      <td>{{ z.g.kopf.kunde|default:"–" }} · {{ z.g.kopf.verkaufsartikel|default:"–" }}</td>
+      <td class="zahl">{{ z.g.anz_bg }}</td><td class="zahl">{{ z.g.anz_teile }}</td>
+      <td>{% if z.doppelt %}<span class="leise">Kommt weiter unten noch einmal vor, die letzte Datei gilt.</span>
+          {% elif z.alt %}<strong>{{ z.alt.ab_anzeige }} ist schon in der Bestandsliste.</strong>
+            <div class="frage"><label><input type="radio" name="ersetzen_{{ z.nr }}" value="ja"> Ersetzen (erfasste Mengen, Lagerort und Daten der Teile werden übernommen)</label>
+            <label><input type="radio" name="ersetzen_{{ z.nr }}" value="nein" checked> Nicht importieren</label></div>
+            <span class="leise klein">Hinweis: Der Lagerort am AB und an den Baugruppen geht beim Ersetzen verloren (wie in Excel).</span>
+          {% else %}Neu{% endif %}
+          {% if z.im_schweissen %}<div class="frage"><strong>Dieser AB liegt schon im Bereich Schweißen.</strong>
+            <label><input type="radio" name="schweissen_{{ z.nr }}" value="ja"> Trotzdem in die Bestandsliste importieren</label>
+            <label><input type="radio" name="schweissen_{{ z.nr }}" value="nein" checked> Nicht importieren</label></div>{% endif %}
+          {% for h in z.g.hinweise %}<div class="klein leise">{{ h }}</div>{% endfor %}</td>
+    </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  </div>
+  {% endif %}
+  <div class="knopfzeile">{% if zeilen %}<button class="knopf-haupt" type="submit">Importieren →</button>{% endif %}<a class="knopf" href="{% url 'bestand_import' %}">Andere Dateien wählen</a></div>
+</form>
+{% endif %}
+{% endblock %}
+{% block skripte %}<script src="{% static 'bestand/import.js' %}" defer></script>{% endblock %}

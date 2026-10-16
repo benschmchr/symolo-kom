@@ -1,0 +1,15 @@
+{# Eingabe oder Anzeige im Schweißen (R-W6). Parameter: z, f (mitarbeiter | arbeitsplatz | liefertermin_stahlbau | termin_versand), wert, edit, titel #}
+{% load bestand_extras %}{% if edit and z.ebene != "Teil" %}
+{% if f == "arbeitsplatz" %}<select class="sw-eingabe" data-sw-id="{{ z.id }}" data-sw-feld="arbeitsplatz" data-url="{% url 'sw_eintragen' z.id %}" data-wert="{{ wert }}" aria-label="Arbeitsplatz {{ z.anzeige }}">
+  <option value="" {% if not wert %}selected{% endif %}>–</option>
+  {% if wert == "(verschieden)" %}<option value="__v" selected disabled>(verschieden)</option>{% elif wert and wert not in plaetze and wert != "Sonstiges" %}<option value="__alt" selected disabled>{{ wert }} (kein Arbeitsplatz)</option>{% endif %}
+  {% for p in plaetze %}<option value="{{ p }}" {% if p == wert %}selected{% endif %}>{{ p }}</option>{% endfor %}<option value="Sonstiges" {% if wert == "Sonstiges" %}selected{% endif %}>Sonstiges</option></select>
+{% elif f == "mitarbeiter" %}<details class="mehrfach" data-sw-id="{{ z.id }}" data-sw-feld="mitarbeiter" data-url="{% url 'sw_eintragen' z.id %}" data-wert="{{ wert }}">
+  <summary class="sw-eingabe" title="{{ wert }}" aria-label="Mitarbeiter {{ z.anzeige }}">{% if wert %}{{ wert }}{% else %}–{% endif %}</summary>
+  <div class="mehrfach-liste">
+    {% for n in mitarbeiter %}<label><input type="checkbox" value="{{ n }}" {% if n in wert|swnamen %}checked{% endif %}> {{ n }}</label>{% endfor %}
+    {% for n in wert|swfehlt:mitarbeiter %}<label><input type="checkbox" value="{{ n }}" checked> {{ n }} <small class="leise">(nicht in der Liste)</small></label>{% endfor %}
+    {% if not mitarbeiter and not wert|swfehlt:mitarbeiter %}<span class="klein leise">Noch keine Mitarbeiter eingetragen: oben „Mitarbeiter verwalten“.</span>{% endif %}
+  </div></details>
+{% else %}<input class="sw-eingabe sw-datum" type="text" inputmode="numeric" autocomplete="off" data-sw-id="{{ z.id }}" data-sw-feld="{{ f }}" data-url="{% url 'sw_eintragen' z.id %}" value="{{ wert|swdatum }}" placeholder="TT.MM.JJJJ" aria-label="{{ titel }} {{ z.anzeige }}">{% endif %}
+{% else %}<span data-sw-id="{{ z.id }}" data-sw-feld="{{ f }}">{{ wert|swdatum }}</span>{% endif %}

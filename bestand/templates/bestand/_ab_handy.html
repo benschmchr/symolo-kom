@@ -1,0 +1,26 @@
+{# Handy: eine Karte je AB (wie Entwurf B), Baugruppen aufklappbar, Details eines Teils auf Antippen (R-A5) #}
+<article class="ab-karte kacheln {{ a.w.css }}" id="h-ab-{{ a.o.id }}" data-statusfarbe data-zeile="{{ a.schluessel }}"{% if darf_ab_aendern %} {% include "bestand/_ab_menue_daten.html" %}{% endif %}>
+  <header>
+    <div><div class="ab-nr">{{ a.o.ab_anzeige }}</div>
+      <div class="leise klein">{{ a.o.verkaufsartikel }}{% if a.o.kunde %} · {{ a.o.kunde }}{% endif %} · {{ a.bgs|length }} Baugruppe{{ a.bgs|length|pluralize:"n" }}, {{ a.w.anz_teile }} Teile{% if a.o.lagerort and not darf_mengen %} · <span class="pille">{{ a.o.lagerort }}</span>{% endif %}</div></div>
+    <div class="rechts">{% if darf_mengen and a.alle_teile %}{% url 'bestand_alles' a.o.id as au %}{% include "bestand/_status.html" with z=a teil_url="" alles_url=au alles_name="AB "|add:a.o.ab_anzeige alles_anzahl=a.w.anz_teile alles_ref=a.schluessel %}{% else %}{% include "bestand/_status.html" with z=a teil_url="" %}{% endif %}<div class="klein leise" data-feld="fortschritt">{{ a.w.fortschritt }}</div></div>
+    <div class="breit">{% include "bestand/_balken.html" with z=a %}</div>
+    <div class="breit knopfreihe">
+      {% url 'sw_entnehmen_ab' a.o.id as eu %}{% include "bestand/_entnehmen.html" with z=a eurl=eu %}
+      {% if darf_mengen %}<label class="platz-label klein">Platz {% include "bestand/_platz_feld.html" with art="ab" id=a.o.id wert=a.o.lagerort name=a.o.ab_anzeige %}</label>{% endif %}
+      {% if darf_ab_aendern %}<button type="button" class="knopf knopf-klein" data-ab-menue-knopf>AB-Menü</button>{% endif %}
+    </div>
+  </header>
+  {% for t in a.ohne %}{% if t.zeigen %}{% include "bestand/_teil_handy.html" %}{% endif %}{% endfor %}
+  {% for b in a.bgs %}{% if b.zeigen %}
+  <details class="bg-block {{ b.w.css }}" data-statusfarbe data-zeile="{{ b.schluessel }}" {% if b.offen and a.offen %}open{% endif %}>
+    <summary><span class="bg-name">{{ b.o.name }}{% if b.o.lagerort and not darf_mengen %} <span class="pille">{{ b.o.lagerort }}</span>{% endif %}</span>
+      {% include "bestand/_balken.html" with z=b %}
+      <span class="klein leise" data-feld="fortschritt">{{ b.w.fortschritt }}</span>{% if darf_mengen and b.teile %}{% url 'bestand_alles' a.o.id as au %}{% include "bestand/_status.html" with z=b teil_url="" alles_url=au alles_bg=b.o.id alles_name="Baugruppe "|add:b.o.name alles_anzahl=b.w.anz_teile alles_ref=b.schluessel %}{% else %}{% include "bestand/_status.html" with z=b teil_url="" %}{% endif %}</summary>
+    {% if darf_mengen and b.teile %}<div class="bg-knoepfe">{% url 'sw_entnehmen_bg' a.o.id b.o.id as eu %}{% include "bestand/_entnehmen.html" with z=b eurl=eu %}
+      <label class="platz-label klein">Platz {% include "bestand/_platz_feld.html" with art="bg" id=b.o.id wert=b.o.lagerort name=b.o.kurzname %}</label></div>{% endif %}
+    {% for t in b.teile %}{% if t.zeigen %}{% include "bestand/_teil_handy.html" %}{% endif %}{% endfor %}
+  </details>
+  {% endif %}{% endfor %}
+  {% for z in a.im_schweissen %}<a class="sw-kachel" href="{% url 'schweissen' %}?q={{ z.ab_nr|urlencode }}"><span class="bg-name">{{ z.baugruppe }}</span><span class="hinweis-sw">▶ Befinden sich im Schweißen</span></a>{% endfor %}
+</article>

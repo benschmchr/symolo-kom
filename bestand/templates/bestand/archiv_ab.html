@@ -1,0 +1,38 @@
+{% extends "kern/base.html" %}{% load static bestand_extras %}
+{% block titel %}Archiv · {{ v.ab_anzeige }}{% endblock %}
+{% block kopfzusatz %}<link rel="stylesheet" href="{% static 'kern/css/listen.css' %}">{% endblock %}
+{% block inhalt %}
+<p class="klein"><a href="{% url 'archiv' %}{% if q %}?q={{ q|urlencode }}{% endif %}">← Archiv</a></p>
+<div class="seitenkopf">
+  <h1>{{ v.ab_anzeige }} <span class="leise klein">im Archiv</span></h1>
+  {% if darf_wiederherstellen %}
+  <details class="wiederherstellen">
+    <summary class="knopf">Wiederherstellen …</summary>
+    <form method="post" action="{% url 'archiv_wiederherstellen' v.id %}" class="karte">{% csrf_token %}
+      <p><strong>{{ v.ab_anzeige }}</strong> mit {{ zeilen|length }} Zeilen wieder {% if v.herkunft == 'Archiviert aus Schweißen' %}ins Schweißen{% else %}in die Bestandsliste{% endif %} holen?</p>
+      <p class="leise klein">Mengen, Lagerort und Daten kommen so zurück, wie sie beim {% if v.herkunft == 'Archiviert aus Schweißen' %}Archivieren (mit Mitarbeiter, Arbeitsplatz und Terminen){% else %}Löschen{% endif %} waren. Der Eintrag verschwindet danach aus dem Archiv.</p>
+      <button class="knopf-haupt" type="submit">Ja, wiederherstellen</button>
+    </form>
+  </details>
+  {% endif %}
+</div>
+<div class="zaehler">
+  <span class="pille">Gelöscht am&nbsp;<b>{{ v.geloescht_am|date:"d.m.Y H:i" }}</b></span>
+  <span class="pille">{{ v.herkunft|default:"alte Zeile aus Excel" }}</span>
+  {% if v.kunde %}<span class="pille">Kunde:&nbsp;<b>{{ v.kunde }}</b></span>{% endif %}
+  <span class="pille"><b>{{ zeilen|length }}</b>&nbsp;Zeilen</span>
+</div>
+{% if q %}<p class="leise klein">Zeilen mit „{{ q }}“ sind hervorgehoben.</p>{% endif %}
+<div class="tabelle-rahmen archiv-rahmen">
+<table class="tabelle archiv-zeilen">
+  <thead><tr>{% for k in kopf %}<th>{{ k }}</th>{% endfor %}</tr></thead>
+  <tbody>
+  {% for z in zeilen %}
+  <tr class="{% if z.ebene == 'AB' %}ab{% elif z.ebene == 'BG' %}bg{% else %}teil {% if z.status == 'Komplett' %}komplett{% elif z.status == 'Teilweise' %}teilweise{% else %}offen{% endif %}{% endif %}{% if z.treffer %} treffer{% endif %}">
+    {% for f in felder %}<td class="{% if f in 'menge_gesamt vorhanden dlz' %}zahl{% endif %}">{% archivwert z f %}</td>{% endfor %}
+  </tr>
+  {% endfor %}
+  </tbody>
+</table>
+</div>
+{% endblock %}

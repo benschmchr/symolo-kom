@@ -1,0 +1,12 @@
+{% if zu_kurz %}<p class="leise klein suche-leer">Bitte mindestens 2 Zeichen eingeben.</p>
+{% elif not q %}<p class="leise klein suche-leer">AB oder Baugruppe eingeben (Nummer oder Name).</p>
+{% elif not gruppen %}<p class="leise klein suche-leer">Kein Treffer für „{{ q }}“.</p>
+{% else %}{% for g in gruppen %}
+<section class="suche-gruppe">
+  <h2 class="suche-titel">{{ g.titel }} <span class="anzahl">{{ g.gesamt }}</span></h2>
+  <ul class="suche-liste">
+    {% for t in g.treffer %}<li><a href="{{ t.url }}"><strong>{{ t.titel }}</strong>{% if t.benennung %}<span class="klein">{{ t.benennung }}</span>{% endif %}<span class="leise klein">{% for name, wert in t.infos %}{{ name }}: {{ wert }}{% if not forloop.last %} · {% endif %}{% endfor %}</span></a></li>{% endfor %}
+    {% if g.mehr > 0 %}<li class="suche-mehr"><a href="{{ g.alle_url }}">{{ g.mehr }} weitere in {{ g.titel }} ansehen</a></li>{% endif %}
+  </ul>
+</section>
+{% endfor %}{% endif %}

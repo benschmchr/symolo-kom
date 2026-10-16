@@ -1,0 +1,49 @@
+{% extends "kern/base.html" %}{% load static %}
+{% block titel %}Bestandsliste{% endblock %}
+{% block kopfzusatz %}<link rel="stylesheet" href="{% static 'kern/css/listen.css' %}">{% endblock %}
+{% block inhalt %}
+<div class="seitenkopf">
+  <h1>Bestandsliste</h1>
+<div class="zaehler zaehler-mitte" aria-label="Zähler">
+    <span class="pille">Arbeitsaufträge:&nbsp;<b data-zaehler="ab">{{ zaehler.ab }}</b>&nbsp;gesamt</span>
+    <span class="pille z-komplett"><b data-zaehler="komplett">{{ zaehler.komplett }}</b>&nbsp;komplett</span>
+    <span class="pille z-teilweise"><b data-zaehler="teilweise">{{ zaehler.teilweise }}</b>&nbsp;teilweise</span>
+    <span class="pille z-offen"><b data-zaehler="offen">{{ zaehler.offen }}</b>&nbsp;offen</span>
+  </div>
+  {% if darf_import %}<div class="knopfreihe"><a class="knopf-haupt" href="{% url 'bestand_import' %}">Kommissionierliste importieren →</a></div>{% endif %}
+</div>
+<form class="leiste" method="get" action="{% url 'bestandsliste' %}" id="filter">
+  <div class="feld suche"><label for="suche">Suche</label>
+    <div class="suchzeile"><input type="search" id="suche" name="q" value="{{ q }}" placeholder="AB, Zeichnungsnr., Benennung, LK oder Lagerort" enterkeyhint="search">
+      <button class="knopf such-knopf" type="submit" title="Suchen" aria-label="Suchen">{% include "kern/_lupe.html" %}</button></div></div>
+  <div class="feld"><label for="statusf">Status</label>
+    <select id="statusf" name="status" data-filter>{% for w, t in stati %}<option value="{{ w }}" {% if w == status %}selected{% endif %}>{{ t }}</option>{% endfor %}</select></div>
+  <div class="feld"><label for="sortf">Sortierung</label>
+    <select id="sortf" name="sort" data-sortieren>{% for w, t in sortierungen %}<option value="{{ w }}" {% if w == sort %}selected{% endif %}>{{ t }}</option>{% endfor %}</select></div>
+  <div class="leiste-knoepfe">
+    <a class="knopf{% if anzeige == 'ab' %} gewaehlt{% endif %}" href="{% url 'bestandsliste' %}?anzeige=ab&amp;sort={{ sort }}">ABs</a>
+    <a class="knopf{% if anzeige == 'bg' %} gewaehlt{% endif %}" href="{% url 'bestandsliste' %}?anzeige=bg&amp;sort={{ sort }}">BGs</a>
+    <a class="knopf" href="{% url 'bestandsliste' %}?sort={{ sort }}">Alles</a>
+  </div>
+  <label class="schalter nur-pc"><input type="checkbox" id="mehr-spalten"> Weitere Spalten</label>
+</form>
+{% if meldung %}<div class="hinweis" role="status">{{ meldung }} <a href="{% url 'bestandsliste' %}">Alles anzeigen</a></div>{% endif %}
+{% if nur and abs %}<div class="hinweis" role="status">Nur dieser AB wird angezeigt. <a href="{% url 'bestandsliste' %}?sort={{ sort }}">Alle ABs anzeigen</a></div>{% endif %}
+{% if not abs and not meldung %}
+<div class="hinweis">Noch keine Arbeitsaufträge in der Bestandsliste.{% if darf_import %} <a href="{% url 'bestand_import' %}">Kommissionierliste importieren</a>{% endif %}</div>
+{% endif %}
+{% if abs %}
+<div class="nur-pc karten-liste kacheln-liste" id="karten">
+  <table class="tabelle kopfzeile">{% include "bestand/_spalten.html" %}
+    <thead><tr><th></th><th>AB / Zeichnungsnummer</th><th>Benennung</th><th class="zahl">LK</th><th class="zahl">Soll</th><th class="zahl eingabe-kopf">Vorhanden</th><th class="mitte eingabe-kopf">Lagerort</th><th>Status</th><th>Fortschritt</th><th></th><th>Eingelagert</th><th>Komplett</th>
+      <th class="mehr">Menge / BG</th><th class="mehr">Index</th><th class="mehr">Arbeitsgang</th><th class="mehr">Material</th><th class="mehr">Profil</th><th class="mehr">Abmaße</th><th class="mehr">Bemerkung</th><th>Entnehmen</th></tr></thead>
+  </table>
+  {% for a in abs %}{% include "bestand/_ab_pc.html" %}{% endfor %}
+</div>
+<div class="nur-handy">
+  {% for a in abs %}{% include "bestand/_ab_handy.html" %}{% endfor %}
+</div>
+{% endif %}
+<div class="meldung" id="meldung" role="alert" hidden></div>
+{% endblock %}
+{% block skripte %}<script src="{% static 'kern/js/klappen.js' %}" defer></script><script src="{% static 'bestand/bestand.js' %}" defer></script>{% endblock %}

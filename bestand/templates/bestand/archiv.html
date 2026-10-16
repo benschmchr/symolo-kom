@@ -1,0 +1,52 @@
+{% extends "kern/base.html" %}{% load static %}
+{% block titel %}Archiv{% endblock %}
+{% block kopfzusatz %}<link rel="stylesheet" href="{% static 'kern/css/listen.css' %}">{% endblock %}
+{% block inhalt %}
+<div class="seitenkopf"><h1>Archiv</h1></div>
+<p class="leise">Gelöschte Arbeitsaufträge mit allen Zeilen, so wie sie beim Löschen waren. Das Archiv kann man nur ansehen und durchsuchen{% if darf_wiederherstellen %}; kannst du einen AB wiederherstellen{% endif %}.</p>
+<form class="leiste" method="get" action="{% url 'archiv' %}">
+  <div class="feld suche"><label for="suche">Suche</label>
+    <input type="search" id="suche" name="q" value="{{ q }}" placeholder="AB, Kunde, Zeichnungsnr., Benennung, LK oder Lagerort" enterkeyhint="search"></div>
+  <div class="leiste-knoepfe"><button class="knopf" type="submit">Suchen</button>{% if q %}<a class="knopf" href="{% url 'archiv' %}">Alles anzeigen</a>{% endif %}</div>
+</form>
+<div class="zaehler"><span class="pille">Im Archiv:&nbsp;<b>{{ gesamt }}</b>&nbsp;Arbeitsauftr{{ gesamt|pluralize:"ag,äge" }}</span>
+  {% if q %}<span class="pille">Treffer:&nbsp;<b>{{ seite.paginator.count }}</b></span>{% endif %}</div>
+{% if not seite.object_list %}
+  <div class="hinweis">{% if q %}Kein Treffer für „{{ q }}“. <a href="{% url 'archiv' %}">Alles anzeigen</a>{% else %}Das Archiv ist noch leer. Gelöschte Arbeitsaufträge landen hier.{% endif %}</div>
+{% else %}
+<div class="tabelle-rahmen frei nur-pc">
+<table class="tabelle archiv-tabelle">
+  <thead><tr><th>AB</th><th>Kunde</th><th>Verkaufsartikel</th><th>Status beim Löschen</th><th class="zahl">Zeilen</th><th>Gelöscht am</th><th>Herkunft</th></tr></thead>
+  <tbody>
+  {% for v in seite %}
+  <tr>
+    <td><a class="ab-link-archiv" href="{% url 'archiv_ab' v.id %}{% if q %}?q={{ q|urlencode }}{% endif %}"><strong>{{ v.ab_anzeige }}</strong></a></td>
+    <td>{{ v.kunde|default:"–" }}</td>
+    <td class="text-kurz" title="{{ v.verkaufsartikel }}">{{ v.verkaufsartikel|default:"–" }}</td>
+    <td>{% if v.status %}<span class="status {% if v.status == 'Komplett' %}komplett{% elif v.status == 'Teilweise' %}teilweise{% elif v.status == 'Offen' %}offen{% else %}leer{% endif %}">{{ v.status }}</span>{% endif %}</td>
+    <td class="zahl">{{ v.anzahl }}</td>
+    <td class="zahl">{{ v.geloescht_am|date:"d.m.Y H:i" }}</td>
+    <td class="leise">{{ v.herkunft|default:"alte Zeile aus Excel" }}</td>
+  </tr>
+  {% endfor %}
+  </tbody>
+</table>
+</div>
+<div class="nur-handy archiv-karten">
+  {% for v in seite %}
+  <a class="karte archiv-karte" href="{% url 'archiv_ab' v.id %}{% if q %}?q={{ q|urlencode }}{% endif %}">
+    <span class="archiv-karte-kopf"><strong>{{ v.ab_anzeige }}</strong>{% if v.status %}<span class="status {% if v.status == 'Komplett' %}komplett{% elif v.status == 'Teilweise' %}teilweise{% elif v.status == 'Offen' %}offen{% else %}leer{% endif %}">{{ v.status }}</span>{% endif %}</span>
+    <span class="klein">{{ v.kunde|default:"–" }} · {{ v.verkaufsartikel|default:"–" }}</span>
+    <span class="klein leise">Gelöscht am {{ v.geloescht_am|date:"d.m.Y H:i" }} · {{ v.anzahl }} Zeilen</span>
+  </a>
+  {% endfor %}
+</div>
+{% if seite.has_other_pages %}
+<nav class="seiten" aria-label="Seiten">
+  {% if seite.has_previous %}<a class="knopf knopf-klein" href="?{% if q %}q={{ q|urlencode }}&amp;{% endif %}seite={{ seite.previous_page_number }}">← Neuere</a>{% endif %}
+  <span class="leise klein">Seite {{ seite.number }} von {{ seite.paginator.num_pages }}</span>
+  {% if seite.has_next %}<a class="knopf knopf-klein" href="?{% if q %}q={{ q|urlencode }}&amp;{% endif %}seite={{ seite.next_page_number }}">Ältere →</a>{% endif %}
+</nav>
+{% endif %}
+{% endif %}
+{% endblock %}

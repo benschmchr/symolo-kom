@@ -1,0 +1,34 @@
+{% extends "kern/base.html" %}{% load static %}
+{% block titel %}Forecast importieren{% endblock %}
+{% block kopfzusatz %}<link rel="stylesheet" href="{% static 'kern/css/listen.css' %}">{% endblock %}
+{% block inhalt %}
+<p class="klein"><a href="{% url 'forecast' %}">← Forecast</a></p>
+<h1>Forecast importieren</h1>
+<p class="leise formular-breit">Die Forecast-Liste („Forecast Cockpit“) hochladen. Gelesen wird das Blatt „Auftragsübersicht“ (sonst das erste Blatt mit den Spalten „Auftrag.-Nr“ und „Liefertermin“). Der neue Forecast <strong>ersetzt</strong> den bisherigen ganz.</p>
+{% if f %}<div class="hinweis">Aktuell: <strong>{{ f.datei }}</strong> · Blatt „{{ f.blatt }}“{% if f.stand %} · {{ f.stand }}{% endif %} · importiert am {{ f.zeit|date:"d.m.Y H:i" }}{% if f.benutzer %} von {{ f.benutzer.get_full_name|default:f.benutzer.username }}{% endif %}</div>{% endif %}
+
+<form method="post" enctype="multipart/form-data" class="karte formular-breit">{% csrf_token %}
+  {% if link %}<p><a class="knopf" href="{{ link }}" target="_blank" rel="noopener noreferrer">Forecast-Datei öffnen ↗</a>
+    <span class="leise klein">Datei dort herunterladen und hier auswählen.</span></p>{% endif %}
+  <div class="ablage" id="ablage">
+    <strong>Datei hierher ziehen</strong>
+    <span class="leise klein">oder auswählen · eine Forecast-Liste (.xlsx, .xlsm), bis {{ max_mb }} MB</span>
+    <input type="file" name="datei" id="dateien" required accept=".xlsx,.xlsm,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel.sheet.macroEnabled.12">
+    <ul class="dateiliste" id="dateiliste"></ul>
+  </div>
+  <p class="leise klein abstand-oben">Die Datei wird nur gelesen, Makros werden nie ausgeführt.</p>
+  <div class="knopfzeile"><button class="knopf-haupt" type="submit">Importieren →</button><a class="knopf" href="{% url 'forecast' %}">Abbrechen</a></div>
+</form>
+
+{# R-F1: Link zur Datei hinterlegen (der Server liest sie erst, wenn die IT es erlaubt; bis dahin zum Herunterladen) #}
+<details class="karte formular-breit einstellungen" {% if not quelle %}open{% endif %}>
+  <summary><strong>Link zur Forecast-Datei</strong> <span class="leise klein">{% if quelle %}hinterlegt{% else %}noch keiner{% endif %}</span></summary>
+  <form method="post" class="abstand-oben">{% csrf_token %}
+    <div class="feld"><label for="quelle">Link oder Pfad (aus SharePoint „Link kopieren“ oder der Adresszeile)</label>
+      <input type="text" id="quelle" name="quelle" value="{{ quelle }}" placeholder="https://firma.sharepoint.com/sites/…/Forecast.xlsm"></div>
+    <p class="leise klein">Ein Teilen-Link wird automatisch gekürzt (alles ab „?“ und „/:x:/r/“ fällt weg). Später kann der Server die Datei damit selbst abrufen (wenn die IT den Zugriff erlaubt).</p>
+    <div class="knopfzeile"><button class="knopf" type="submit">Link speichern</button></div>
+  </form>
+</details>
+{% endblock %}
+{% block skripte %}<script src="{% static 'bestand/import.js' %}" defer></script>{% endblock %}

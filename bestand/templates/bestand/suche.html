@@ -1,0 +1,11 @@
+{% extends "kern/base.html" %}{% load static %}
+{% block titel %}Suche{% endblock %}
+{% block kopfzusatz %}<link rel="stylesheet" href="{% static 'kern/css/listen.css' %}">{% endblock %}
+{% block inhalt %}
+<div class="seitenkopf"><h1>Suche</h1></div>
+<form class="suchzeile" method="get" action="{% url 'suche' %}">
+  <input type="search" name="q" value="{{ q }}" placeholder="AB oder Baugruppe (Nummer oder Name)" aria-label="Suche" enterkeyhint="search" autofocus>
+  <button class="knopf" type="submit">Suchen</button>
+</form>
+<div class="suche-seite">{% include "bestand/_suche_treffer.html" %}</div>
+{% endblock %}

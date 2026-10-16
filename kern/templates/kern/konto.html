@@ -1,0 +1,20 @@
+{% extends "kern/base.html" %}
+{% block titel %}Mein Konto{% endblock %}
+{% block inhalt %}
+<h1>Mein Konto</h1>
+<div class="karte karte-schmal karte-konto">
+  <p><strong>{{ user.get_full_name|default:user.username }}</strong> <span class="leise">({{ user.username }})</span></p>
+  <h2>Meine Rollen</h2>
+  <ul class="klein">
+  {% for rolle, text, hat in rollen %}
+    <li>{% if hat %}<strong>{{ rolle }}</strong>{% else %}<span class="leise">{{ rolle }} (nicht zugeteilt)</span>{% endif %}: {{ text }}</li>
+  {% endfor %}
+  </ul>
+  <p class="klein leise">Ansehen dürfen alle im Firmennetz, auch ohne Anmeldung.</p>
+  <div class="knopfreihe">
+    <a class="knopf" href="{% url 'password_change' %}">Passwort ändern</a>
+    {% if "Admin" in meine_rollen %}<a class="knopf" href="{% url 'admin:index' %}">Benutzer und Rollen verwalten</a>{% endif %}
+    <form method="post" action="{% url 'logout' %}">{% csrf_token %}<button class="knopf-haupt" type="submit">Abmelden</button></form>
+  </div>
+</div>
+{% endblock %}

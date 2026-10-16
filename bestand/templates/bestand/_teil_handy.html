@@ -1,0 +1,16 @@
+{% load bestand_extras %}<div class="teil-zeile {{ t.w.css }}" data-zeile="{{ t.schluessel }}" data-statusfarbe>
+  <details class="teil-details">
+    <summary><strong>{{ t.o.benennung|default:"–" }}</strong><br><span class="leise">{{ t.o.zeichnungsnummer }}</span></summary>
+    <dl class="details-liste klein">
+      <dt>LK</dt><dd>{{ t.o.lk_nummer|default:"–" }}</dd><dt>Menge / BG</dt><dd>{{ t.o.menge_bg|default:"–" }}</dd>
+      <dt>Index</dt><dd>{{ t.o.index|default:"–" }}</dd><dt>Arbeitsgang</dt><dd>{{ t.o.arbeitsgang|default:"–" }}</dd>
+      <dt>Material</dt><dd>{{ t.o.material|default:"–" }}</dd><dt>Profil</dt><dd>{{ t.o.profil|default:"–" }}</dd>
+      <dt>Abmaße</dt><dd>{{ t.o.abmasse|default:"–" }}</dd><dt>Lagerort</dt><dd data-feld="lagerort">{{ t.o.lagerort|default:"–" }}</dd>
+      <dt>Bemerkung</dt><dd>{{ t.o.bemerkung|default:"–" }}</dd><dt>Fortschritt</dt><dd data-feld="fortschritt">{{ t.w.fortschritt }}</dd>
+      <dt>Eingelagert</dt><dd data-feld="eingelagert">{{ t.w.eingelagert|date:"d.m.Y" }}</dd><dt>Komplett</dt><dd data-feld="komplett">{{ t.w.komplett|date:"d.m.Y" }}</dd>
+    </dl>
+  </details>
+  <div class="soll-ist leise">Soll {{ t.o.soll_anzeige }}</div>
+  {% if darf_mengen %}<input class="eingabe" id="v-h-{{ t.o.id }}" type="text" inputmode="numeric" autocomplete="off" data-feld="vorhanden" data-soll="{{ t.o.menge_gesamt|zahl }}" data-url="{% url 'bestand_vorhanden' t.o.id %}" data-version="{{ t.o.version }}" value="{{ t.o.vorhanden|zahl }}" aria-label="Vorhanden {{ t.o.zeichnungsnummer }}">{% else %}<span class="zahl" data-feld="vorhanden">{{ t.o.vorhanden|zahl }}</span>{% endif %}
+  {% if darf_mengen %}{% url 'bestand_umschalten' t.o.id as tu %}{% include "bestand/_status.html" with z=t teil_url=tu %}{% else %}{% include "bestand/_status.html" with z=t teil_url="" %}{% endif %}
+</div>

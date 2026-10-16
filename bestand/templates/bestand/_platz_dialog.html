@@ -1,0 +1,19 @@
+{# Platz ändern (R-R5): Auswahl wie das Regal, freier Text nur mit Bestätigung (R-L4). Knöpfe: Ben, 15.10. #}
+<dialog class="platz-dialog" id="platz-dialog" aria-labelledby="pd-titel" data-url="{% url 'regal_platz' %}"
+        data-liste="{% url 'bestandsliste' %}" data-teilen="{% url 'regal_teilen' %}" data-zusammen="{% url 'regal_zusammen' %}">
+  <form method="dialog">
+    <h2 id="pd-titel">Platz ändern</h2>
+    <p class="klein leise" id="pd-bisher"></p>
+    <div class="platz-raster" role="group" aria-label="Regalplatz wählen">
+      <span class="label">Links</span><span class="label">Rechts</span>
+      {% for n in etagen_nr %}<button type="button" class="platz-knopf" data-wahl="L{{ n }}">L{{ n }}</button><button type="button" class="platz-knopf{% if n == 3 %} sperr{% endif %}" data-wahl="R{{ n }}">R{{ n }}{% if n == 3 %}<small>Sperrlager / Vermessen</small>{% endif %}</button>{% endfor %}
+    </div>
+    <div class="feld pd-frei"><label for="pd-text">Anderer Platz (kein Regalfach)</label>
+      <div class="pd-zeile"><input id="pd-text" type="text" maxlength="40" autocomplete="off" placeholder="z. B. Kiste 4"><button type="button" class="knopf" data-frei>Eintragen</button></div></div>
+    <div class="knopfzeile">
+      <button type="button" class="knopf" data-wahl="">Kein Platz</button>
+      <button type="button" class="knopf menue-knopf" data-menue-knopf>AB-Menü</button>
+      <button class="knopf-rot" value="abbrechen">Abbrechen</button>
+    </div>
+  </form>
+</dialog>

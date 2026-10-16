@@ -1,0 +1,595 @@
+/* Arbeitsseiten: Tabellen, Regal, Hallenplan. Nur Variablen aus tokens.css (+ Tafelfarben unten). */
+
+/* Tafelfarben der Arbeitsplätze (Bedeutungsfarben wie die Magnettafel, nicht im Designsystem; aus ArbeitsplaetzeAnlegen) */
+:root {
+  --tafel-grau: #d9d9d9; --tafel-blau: #9bc2e6; --tafel-gruen: #a9d08e; --tafel-gelb: #ffd966;
+  --tafel-lila: #b4a7d6; --tafel-orange: #f4b084; --tafel-rosa: #f8c4be;
+}
+
+/* Werkzeugleiste über einer Liste */
+.leiste { display: flex; flex-wrap: wrap; gap: var(--space-3); align-items: end; margin-bottom: var(--space-4); }
+.leiste .feld { margin: 0; }
+.leiste .suche { flex: 1 1 260px; }
+.leiste .suche input { width: 100%; }
+.zaehler { display: flex; flex-wrap: wrap; gap: var(--space-2); margin-bottom: var(--space-4); }
+
+/* Dichte Tabelle */
+.tabelle-rahmen { background: var(--surface-100); border: 1px solid var(--line); border-radius: var(--radius-lg); overflow: auto; max-height: 75vh; }
+table.tabelle { width: 100%; border-collapse: separate; border-spacing: 0; font-size: var(--fs-small); line-height: var(--lh-small); }
+.tabelle th { position: sticky; top: 0; z-index: 2; background: var(--surface-100); color: var(--ink-muted);
+  font-size: var(--fs-label); font-weight: var(--fw-label); text-align: left; padding: var(--space-2) var(--space-3);
+  border-bottom: 1px solid var(--line); white-space: nowrap; }
+.tabelle td { padding: var(--space-1) var(--space-3); border-bottom: 1px solid var(--line); vertical-align: middle; height: 44px; }
+.tabelle .zahl { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.tabelle .mitte { text-align: center; }
+/* AB, Baugruppe und Teil sind klar voneinander abgesetzt: AB = kräftige Statusfarbe, Baugruppe = helle Statusfarbe mit Balken
+   links und Linie darüber, Teil = zarte Statusfarbe, eingerückt. Offen: AB dunkelgrau, Baugruppe und Teil weiß. */
+.tabelle tr.ab td { background: var(--brand-gray); color: var(--on-brand); font-weight: 700; font-size: var(--fs-body); }
+.tabelle tr.ab.komplett td { background: var(--status-komplett); color: var(--on-status); }
+.tabelle tr.ab.teilweise td { background: var(--status-teilweise); color: var(--on-status); }
+.tabelle tr.ab .status { border: 1px solid var(--on-status); background: var(--surface-100); color: var(--ink); }
+.tabelle tr.ab.offen .status, .tabelle tr.ab.leer .status { border-color: var(--on-brand); }
+.tabelle tr.bg td { background: var(--surface-100); font-weight: 700; border-top: 2px solid var(--line-strong); }
+.tabelle tr.bg td:first-child { box-shadow: inset 6px 0 0 var(--brand-gray); }
+.tabelle tr.bg.komplett td { background: var(--status-komplett-bg); }
+.tabelle tr.bg.teilweise td { background: var(--status-teilweise-bg); }
+.tabelle tr.bg.komplett td:first-child { box-shadow: inset 6px 0 0 var(--status-komplett); }
+.tabelle tr.bg.teilweise td:first-child { box-shadow: inset 6px 0 0 var(--status-teilweise); }
+.tabelle tr.teil td { font-weight: 400; }
+.tabelle tr.teil.komplett td { background: color-mix(in srgb, var(--status-komplett-bg) 60%, var(--surface-100)); }
+.tabelle tr.teil.teilweise td { background: color-mix(in srgb, var(--status-teilweise-bg) 60%, var(--surface-100)); }
+.tabelle tr.teil.offen td { background: var(--status-offen-bg); }
+.tabelle tr.teil td:first-child { padding-left: var(--space-8); }
+/* Baugruppen dunkler (Offen: Grau), Teile heller (Offen: Weiß), damit beide stärker auseinanderstehen (Ben, 14.10.) */
+.tabelle tr.bg.komplett td { background: color-mix(in srgb, var(--status-komplett) 55%, var(--surface-100)); }
+.tabelle tr.bg.teilweise td { background: color-mix(in srgb, var(--status-teilweise) 55%, var(--surface-100)); }
+.tabelle tr.bg.offen td, .tabelle tr.bg.leer td { background: color-mix(in srgb, var(--brand-gray) 22%, var(--surface-100)); }
+.tabelle tr.teil.komplett td { background: var(--status-komplett-bg); }
+.tabelle tr.teil.teilweise td { background: var(--status-teilweise-bg); }
+.tabelle tr.teil.offen td, .tabelle tr.teil.leer td { background: var(--surface-100); }
+/* Fortschrittsbalken in der AB-Zeile: heller Grund, dunkle Füllung (sonst gleiche Farbe wie die Zeile) */
+.tabelle tr.ab .balken { background: var(--surface-100); }
+.tabelle tr.ab .balken > span { background: var(--ink); }
+.eingabe { width: 76px; min-height: 36px; text-align: right; }
+.klapp { background: none; border: 0; color: inherit; font: inherit; cursor: pointer; min-width: 28px; min-height: 28px; }
+.entnehmen { color: var(--ink); background: var(--surface-100); }
+
+/* Karten je Auftrag (Entwurf B) */
+.ab-karte { background: var(--surface-100); border: 1px solid var(--line); border-radius: var(--radius-lg); margin-bottom: var(--space-4); overflow: hidden; }
+.ab-karte > header { display: grid; grid-template-columns: 1fr auto; gap: var(--space-2) var(--space-4); padding: var(--space-4) var(--space-6);
+  border-top: 4px solid var(--brand-gray); }
+.ab-karte .ab-nr { font-size: var(--fs-h3); line-height: var(--lh-h3); font-weight: 700; }
+.bg-block { border-top: 1px solid var(--line); }
+.bg-block > summary { list-style: none; cursor: pointer; display: flex;
+  gap: var(--space-3); align-items: center; padding: var(--space-3) var(--space-6); min-height: 52px; font-weight: 600; }
+.bg-block > summary::-webkit-details-marker { display: none; }
+.bg-block > summary::before { content: "›"; display: inline-block; margin-right: var(--space-2); transition: transform .15s; }
+.bg-block[open] > summary::before { transform: rotate(90deg); }
+.bg-block > summary .bg-name { flex: 1; }
+.bg-block > summary .balken { width: 120px; flex: none; }
+.bg-block > summary .klein { width: 72px; flex: none; }
+.teil-zeile { display: grid; grid-template-columns: 1fr 72px 90px 96px; gap: var(--space-3); align-items: center;
+  padding: var(--space-2) var(--space-6) var(--space-2) var(--space-12); border-top: 1px solid var(--line); font-size: var(--fs-small); min-height: 52px; }
+.teil-zeile.komplett { background: var(--status-komplett-bg); }
+.teil-zeile.teilweise { background: var(--status-teilweise-bg); }
+@media (max-width: 700px) {
+  .bg-block > summary { padding: var(--space-3) var(--space-4); }
+  .bg-block > summary .balken, .bg-block > summary .klein { display: none; }
+  .teil-zeile { grid-template-columns: 1fr 80px; padding-left: var(--space-6); }
+  .teil-zeile .soll-ist, .teil-zeile .status { grid-column: 1; }
+  .ab-karte > header { padding: var(--space-4); }
+}
+
+/* Liste und Detail (Entwurf C) */
+.geteilt { display: grid; grid-template-columns: 340px 1fr; gap: var(--space-4); align-items: start; }
+.ab-liste { background: var(--surface-100); border: 1px solid var(--line); border-radius: var(--radius-lg); overflow: hidden; }
+.ab-liste a { display: grid; grid-template-columns: 1fr auto; gap: var(--space-1) var(--space-3); padding: var(--space-3) var(--space-4);
+  border-bottom: 1px solid var(--line); color: var(--ink); text-decoration: none; }
+.ab-liste a.aktiv { box-shadow: inset 4px 0 0 var(--glow-red); background: var(--surface-0); }
+@media (max-width: 900px) { .geteilt { grid-template-columns: 1fr; } }
+
+/* Regal (R-R2) */
+.regal { display: grid; grid-template-columns: 48px 1fr 1fr; gap: var(--space-2); }
+.regal .etage { display: flex; align-items: center; justify-content: center; font-weight: 700; color: var(--ink-muted); }
+.regal .seite { text-align: center; font-weight: 700; color: var(--ink-muted); font-size: var(--fs-label); }
+.fach { background: var(--surface-100); border: 1px solid var(--line); border-bottom: 4px solid var(--line-strong);
+  border-radius: var(--radius-md); padding: var(--space-2); min-height: 72px; display: flex; flex-wrap: wrap; gap: var(--space-1); align-content: flex-start; }
+.fach .platz { width: 100%; font-size: var(--fs-label); font-weight: 700; color: var(--ink-muted); }
+.fach.sperr { border: 2px solid var(--glow-red); }
+.fach.sperr .platz { color: var(--glow-red); }
+.eintrag { display: inline-flex; align-items: center; min-height: 32px; padding: 0 var(--space-2); border-radius: var(--radius-pill);
+  font-size: var(--fs-label); font-weight: 600; border: 1px solid var(--line-strong); background: var(--status-offen-bg); color: var(--ink); cursor: pointer; }
+.eintrag.komplett { background: var(--status-komplett); color: var(--on-status); border-color: var(--status-komplett); }
+.eintrag.teilweise { background: var(--status-teilweise); color: var(--on-status); border-color: var(--status-teilweise); }
+.listen { display: grid; grid-template-columns: repeat(3, 1fr); gap: var(--space-4); margin-top: var(--space-6); }
+@media (max-width: 800px) { .regal { grid-template-columns: 32px 1fr; } .regal .seite.r, .regal .fach.r { grid-column: 2; }
+  .listen { grid-template-columns: 1fr; } }
+
+/* Hallenplan (R-AP2) */
+.halle { display: grid; grid-template-columns: repeat(8, 1fr); grid-auto-rows: minmax(110px, auto); gap: var(--space-3);
+  background: var(--surface-100); border: 1px solid var(--line); border-radius: var(--radius-lg); padding: var(--space-4); }
+.ap { border-radius: var(--radius-lg); border: 1px solid var(--line); border-top: 8px solid var(--tafel-grau); background: var(--surface-0);
+  padding: var(--space-3); display: flex; flex-direction: column; gap: var(--space-1); }
+.ap h3 { margin: 0 0 var(--space-1); }
+.ap.grau { border-top-color: var(--tafel-grau); } .ap.blau { border-top-color: var(--tafel-blau); }
+.ap.gruen { border-top-color: var(--tafel-gruen); } .ap.gelb { border-top-color: var(--tafel-gelb); }
+.ap.lila { border-top-color: var(--tafel-lila); } .ap.orange { border-top-color: var(--tafel-orange); } .ap.rosa { border-top-color: var(--tafel-rosa); }
+.ap .eintrag { background: var(--surface-100); align-self: flex-start; }
+@media (max-width: 900px) { .halle { display: flex; flex-direction: column; } }
+
+/* Dashboard-Tabelle (R-DB6): AB-Zeile in Statusfarbe mit dicker Linie oben, BG mittel */
+.tabelle.dash tr.dab td { font-size: var(--fs-body); font-weight: 600; border-top: 3px solid var(--brand-gray); }
+.tabelle.dash tr.dab.komplett td { background: var(--status-komplett-bg); }
+.tabelle.dash tr.dab.teilweise td { background: var(--status-teilweise-bg); }
+.tabelle.dash tr.dab.offen td { background: var(--status-offen-bg); }
+.tabelle.dash tr.dbg td { background: var(--surface-100); }
+
+@media (max-width: 600px) {
+  .leiste { display: grid; grid-template-columns: 1fr 1fr; }
+  .leiste .suche, .leiste .knopf-haupt { grid-column: 1 / -1; }
+  .leiste select { width: 100%; }
+}
+
+/* Bestandsliste D: eine Karte je AB, Spalten über alle Karten gleich (Kopfzeile einmal oben) */
+.karten-liste { padding-bottom: var(--space-2); }
+/* schmaler: waagerecht scrollen; die Kopfzeile ist dann nicht fest, sonst rutscht sie über die Zeilen (Ben, 14.10.) */
+@media (max-width: 1439px) { .karten-liste { overflow-x: auto; } .karten-liste .kopfzeile, .karten-liste .kopfzeile th { position: static; } }
+.karten-liste.alle-spalten .kopfzeile, .karten-liste.alle-spalten .kopfzeile th { position: static; }
+.karten-liste table.tabelle { table-layout: fixed; min-width: 1400px; }
+.kopfzeile { position: sticky; top: 70px; z-index: 5; background: var(--surface-0); }
+.kopfzeile th { background: var(--surface-0); border-bottom: none; }
+.ab-block { background: var(--surface-100); border: 1px solid var(--line); border-radius: var(--radius-lg);
+  overflow: hidden; margin-bottom: var(--space-3); min-width: 1400px; box-shadow: var(--shadow-glass); }
+.ab-block .tabelle tr:last-child td { border-bottom: none; }
+.ab-block .tabelle td { white-space: nowrap; }
+.ab-block .tabelle td:nth-child(2), .ab-block .tabelle td:nth-child(3) { overflow: hidden; text-overflow: ellipsis; }
+.karten-liste .tabelle td:first-child, .karten-liste .tabelle th:first-child { padding: 0 var(--space-2); }
+.klapp[aria-expanded="false"] { transform: rotate(-90deg); }
+.nur-handy { display: none; }
+.menue-knopf { display: none; }  /* „AB-Menü“ im Platzfenster: nur am Handy, am PC gibt es den Rechtsklick */
+@media (max-width: 700px) { .nur-pc { display: none; } .nur-handy { display: block; } .menue-knopf { display: inline-flex; } }
+.ab-block .tabelle.dash tr.dab td { border-top: none; }
+/* Dashboard D: Kopfzeile ohne eigenen Hintergrund (Bens Wunsch), daher nicht fest beim Scrollen */
+.dash-karten .kopfzeile { position: static; background: transparent; }
+.dash-karten .kopfzeile th { position: static; background: transparent; }
+
+/* ---------- Bestandsliste (Phase 1) ---------- */
+.seitenkopf { display: flex; flex-wrap: wrap; gap: var(--space-3); align-items: center; justify-content: space-between; margin-bottom: var(--space-4); }
+.seitenkopf h1 { margin: 0; }
+.leiste-knoepfe { display: flex; flex-wrap: wrap; gap: var(--space-2); }
+.schalter { display: inline-flex; align-items: center; gap: var(--space-2); min-height: 44px; font-size: var(--fs-small); cursor: pointer; }
+.schalter input { width: 20px; height: 20px; }
+.zaehler-trenner { width: var(--space-4); }
+.zaehler-mitte { justify-content: center; margin: 0; flex: 1 1 auto; }
+.zaehler b { font-weight: 700; }
+.zaehler .z-komplett { border-color: var(--status-komplett); background: var(--status-komplett-bg); }
+.zaehler .z-teilweise { border-color: var(--status-teilweise); background: var(--status-teilweise-bg); }
+.zaehler .z-offen { border-color: var(--line-strong); background: var(--status-offen-bg); }
+.ab-block { margin-bottom: var(--space-6); }
+.ab-karte.komplett > header { background: var(--status-komplett-bg); }
+.ab-karte.teilweise > header { background: var(--status-teilweise-bg); }
+.bg-block.komplett > summary { background: var(--status-komplett-bg); }
+.bg-block.teilweise > summary { background: var(--status-teilweise-bg); }
+
+/* Suchzeile: Feld und Lupe nebeneinander; gewählte Anzeige hervorgehoben */
+.suchzeile { display: flex; gap: var(--space-2); }
+.suchzeile input { flex: 1; min-width: 0; }
+.such-knopf { min-height: 44px; width: 44px; padding: 0; flex: none; }
+.knopf.gewaehlt { border-color: var(--ink); box-shadow: inset 0 0 0 1px var(--ink); }
+
+/* Mitteldialog (Rückfragen, AB-Menü): Hintergrund ausgegraut */
+.mitte-dialog { border: 1px solid var(--line); border-radius: var(--radius-lg); padding: var(--space-6); width: min(520px, calc(100vw - 32px));
+  background: var(--surface-100); color: var(--ink); box-shadow: var(--shadow-glass); }
+.mitte-dialog::backdrop { background: color-mix(in srgb, var(--ink) 45%, transparent); }
+.mitte-dialog .loeschen-frage { border-left: 0; padding: 0; margin: 0; }
+.mitte-dialog .knopfzeile { margin-top: var(--space-4); }
+.mitte-dialog input[type=text] { width: 100%; }
+.ab-menue h2 { margin-bottom: var(--space-2); }
+
+/* Spaltenbreiten (gleich in Kopfzeile und allen Karten) */
+.c-klapp { width: 40px; } .c-nr { width: 190px; } .c-lk { width: 52px; } .c-soll { width: 60px; } .c-vh { width: 96px; }
+.c-lager { width: 80px; } .c-status { width: 108px; } .c-fort { width: 130px; } .c-balken { width: 80px; } .c-datum { width: 150px; }
+.c-mbg { width: 72px; } .c-idx { width: 88px; } .c-text { width: 150px; } .c-aktion { width: 130px; }
+.tabelle .eingabe { min-height: 34px; height: 34px; padding-top: 0; padding-bottom: 0; }
+.tabelle td.aktion { white-space: normal; line-height: 1.6; }
+.karten-liste .mehr { display: none; }
+.karten-liste.alle-spalten .mehr { display: table-cell; }
+.karten-liste.alle-spalten col.mehr { display: table-column; }
+.karten-liste.alle-spalten table.tabelle, .karten-liste.alle-spalten .ab-block { min-width: 2410px; }
+.kopfzeile th { white-space: normal; }
+
+.status.leer { background: var(--surface-100); color: var(--ink-muted); border: 1px dashed var(--line-strong); }
+.status-knopf { font-family: inherit; line-height: inherit; cursor: pointer; border: 1px solid transparent; }
+.status-knopf.offen { border-color: var(--line-strong); }
+.status-knopf:hover { box-shadow: 0 0 0 2px var(--line-strong); }
+.alles { min-height: 32px; }
+.ab-klapp { background: none; border: 0; padding: 0; font: inherit; color: inherit; cursor: pointer; text-align: left; }
+.ab-klapp:hover { text-decoration: underline; }
+.ab-link { color: inherit; text-decoration: none; }
+.ab-link:hover { text-decoration: underline; }
+.tabelle tr.ab .ab-link { color: var(--on-brand); }
+.entnehmen-hinweis { display: inline-block; font-size: var(--fs-label); font-weight: 600; padding: 0 var(--space-2);
+  border-radius: var(--radius-pill); border: 1px solid var(--line-strong); background: var(--surface-100); color: var(--ink); cursor: help; }
+.entnehmen-hinweis:has(.knopf-rot) { padding: 0; border: 0; background: none; cursor: auto; }
+/* „Entnehmen“ und „Zurück“: durchgehend FWM-Rot, weiße Schrift, kein Pfeil, nicht unterstrichen (Ben, 14.10.) */
+.knopf-rot { display: inline-flex; align-items: center; justify-content: center; border: 0; border-radius: var(--radius-pill);
+  background: var(--brand-red); color: var(--on-brand); font-weight: var(--fw-button); text-decoration: none; cursor: pointer; }
+.knopf-rund { width: 32px; height: 32px; padding: 0; border-radius: 50%; margin-right: var(--space-1); }
+.knopf-rot:hover, .knopf-rot:focus-visible { text-decoration: none; filter: brightness(1.1); }
+.entnehmen-hinweis[hidden] { display: none; }
+/* „AB bearbeiten“: absichtlich klein und unauffällig (Bens Wunsch) */
+.bearbeiten { font-size: var(--fs-label); font-weight: 400; color: inherit; opacity: .75; white-space: nowrap; }
+.tabelle .bearbeiten { display: block; }
+.bearbeiten:hover { opacity: 1; }
+.eingabe { font-variant-numeric: tabular-nums; }
+.eingabe.speichert { border-color: var(--ink-muted); }
+.eingabe.ungueltig { border: 2px solid var(--glow-red); }
+
+/* Meldung unten (gespeichert, Hinweis, Fehler) */
+.meldung { position: fixed; left: 50%; bottom: var(--space-6); transform: translateX(-50%); z-index: 50; max-width: min(640px, calc(100vw - 32px));
+  background: var(--ink); color: var(--surface-100); border-radius: var(--radius-md); padding: var(--space-3) var(--space-4); box-shadow: var(--shadow-glass); font-size: var(--fs-small); }
+.meldung.fehler { border-left: 6px solid var(--glow-red); }
+.nachrichten { margin-bottom: var(--space-4); }
+.nachricht { margin-bottom: var(--space-2); }
+.nachricht.success { border-left-color: var(--status-komplett); }
+.nachricht.error { border-left-color: var(--glow-red); }
+
+/* Handy-Karten */
+.ab-karte .rechts { text-align: right; }
+.ab-karte .breit { grid-column: 1 / -1; }
+.ab-karte .ab-nr .ab-link { color: inherit; }
+.knopfreihe, .bg-knoepfe { display: flex; flex-wrap: wrap; gap: var(--space-2); align-items: center; }
+.knopfreihe:empty { display: none; }
+.bg-knoepfe { padding: 0 var(--space-6) var(--space-3) var(--space-12); }
+.teil-zeile .eingabe { width: 100%; min-height: 44px; }
+.teil-zeile .status { min-height: 44px; display: inline-flex; align-items: center; justify-content: center; }
+.teil-details > summary { list-style: none; cursor: pointer; }
+.teil-details > summary::-webkit-details-marker { display: none; }
+.details-liste { display: grid; grid-template-columns: auto 1fr; gap: 2px var(--space-3); margin: var(--space-2) 0 0; }
+.details-liste dt { color: var(--ink-muted); }
+.details-liste dd { margin: 0; overflow-wrap: anywhere; }
+@media (max-width: 700px) {
+  .teil-zeile { grid-template-columns: 1fr 76px 104px; gap: var(--space-2); padding-left: var(--space-4); padding-right: var(--space-4); }
+  .teil-zeile .teil-details { grid-column: 1 / -1; }
+  .teil-zeile .soll-ist { grid-column: 1; align-self: center; }
+  .teil-zeile .status { grid-column: auto; min-width: 0; }
+  .bg-knoepfe { padding-left: var(--space-4); }
+  .seitenkopf .knopf-haupt { width: 100%; }
+  .leiste-knoepfe { grid-column: 1 / -1; }
+  .leiste-knoepfe .knopf { flex: 1; }
+  .leiste .schalter.nur-pc { display: none; }
+}
+
+/* Import */
+.ablage { border: 2px dashed var(--line-strong); border-radius: var(--radius-lg); background: var(--surface-100); padding: var(--space-8) var(--space-6);
+  text-align: center; display: flex; flex-direction: column; gap: var(--space-3); align-items: center; }
+.ablage.drueber { border-color: var(--glow-red); background: var(--surface-0); }
+.ablage input[type=file] { max-width: 100%; }
+.dateiliste { list-style: none; padding: 0; margin: 0; font-size: var(--fs-small); }
+.import-tabelle td, .import-tabelle th { white-space: normal; }
+.import-tabelle td { height: auto; padding-top: var(--space-2); padding-bottom: var(--space-2); }
+.frage { display: flex; flex-wrap: wrap; gap: var(--space-2) var(--space-4); }
+.frage label { display: inline-flex; gap: var(--space-2); align-items: center; min-height: 44px; }
+.knopfzeile { display: flex; flex-wrap: wrap; gap: var(--space-3); margin-top: var(--space-6); }
+.soll-tabelle input { width: 110px; text-align: right; }
+.karten-liste.alle-spalten { overflow-x: auto; }   /* weitere Spalten: waagerecht scrollen */
+
+/* ---------- Lagerort und Regal (Phase 2) ---------- */
+.platz-wahl { min-height: 32px; height: 32px; padding: 0 var(--space-1); font-size: var(--fs-label); font-weight: 600; max-width: 100%; }
+.tabelle tr.ab .platz-wahl { color: var(--ink); }
+.platz-wahl.speichert { border-color: var(--ink-muted); }
+.platz-label { display: inline-flex; align-items: center; gap: var(--space-2); }
+.platz-label .platz-wahl { min-height: 40px; height: 40px; font-size: var(--fs-small); }
+span.eintrag[role="button"] { font-family: inherit; cursor: pointer; user-select: none; }
+a.eintrag { text-decoration: none; }
+.eintrag-platz { font-weight: 400; margin-left: var(--space-1); }
+.eintrag[draggable="true"] { cursor: grab; }
+.fach.drueber { border-color: var(--ink); box-shadow: 0 0 0 2px var(--ink); }
+.listen .eintraege { display: flex; flex-wrap: wrap; gap: var(--space-1); }
+.listen h2 { display: flex; align-items: center; gap: var(--space-2); }
+.anzahl { font-size: var(--fs-label); font-weight: 600; color: var(--ink-muted); }
+.einsortiert-liste { list-style: none; padding: 0; margin: var(--space-3) 0 0; columns: 2; column-gap: var(--space-6); }
+.einsortiert-liste li { break-inside: avoid; padding: 2px 0; }
+.punkt-status { display: inline-block; width: 10px; height: 10px; border-radius: 50%; margin-right: var(--space-2);
+  background: var(--status-offen-bg); box-shadow: inset 0 0 0 1px var(--line-strong); }
+.punkt-status.komplett { background: var(--status-komplett); box-shadow: none; }
+.punkt-status.teilweise { background: var(--status-teilweise); box-shadow: none; }
+
+/* Platz-Auswahl (Dialog), aufgebaut wie das Regal */
+.platz-dialog { border: 1px solid var(--line); border-radius: var(--radius-lg); padding: var(--space-6); width: min(480px, calc(100vw - 32px));
+  background: var(--surface-100); color: var(--ink); box-shadow: var(--shadow-glass); }
+.platz-dialog::backdrop { background: color-mix(in srgb, var(--ink) 35%, transparent); }
+.platz-dialog h2 { margin-bottom: var(--space-1); overflow-wrap: anywhere; }
+.platz-raster { display: grid; grid-template-columns: 1fr 1fr; gap: var(--space-2); margin: var(--space-3) 0 var(--space-4); }
+.platz-raster .label { text-align: center; }
+.platz-knopf { min-height: 52px; border-radius: var(--radius-md); border: 1px solid var(--line-strong); border-bottom-width: 4px;
+  background: var(--surface-100); color: var(--ink); font: inherit; font-weight: 700; font-size: var(--fs-body); cursor: pointer;
+  display: flex; flex-direction: column; align-items: center; justify-content: center; line-height: 1.2; }
+.platz-knopf small { font-size: var(--fs-label); font-weight: 600; }
+.platz-knopf.sperr { border-color: var(--glow-red); color: var(--glow-red); }
+.platz-knopf[aria-pressed="true"] { background: var(--ink); color: var(--surface-100); border-color: var(--ink); }
+.platz-knopf:hover { border-color: var(--ink); }
+.pd-zeile { display: flex; gap: var(--space-2); }
+.pd-zeile input { flex: 1; min-width: 0; }
+.platz-dialog .knopfzeile { margin-top: var(--space-2); gap: var(--space-2); }
+.platz-dialog .knopfzeile .knopf { padding-left: var(--space-4); padding-right: var(--space-4); }
+.platz-dialog [hidden] { display: none; }
+
+
+/* ---------- Dashboard (Phase 3, R-DB1 bis R-DB6) ---------- */
+.dash-kopf { margin-bottom: var(--space-4); }
+.bento.dash-reihe { grid-template-columns: repeat(4, 1fr); }
+/* flachere Kacheln (Ben, 14.10.) */
+.bento.dash-reihe .kachel { min-height: 0; padding: var(--space-2) var(--space-4); gap: 0; }
+.bento.dash-reihe .kachel .zahl { font-size: var(--fs-h3); line-height: var(--lh-h3); }
+.kachel .zahl-mittel { font-size: var(--fs-h3); line-height: var(--lh-h3); font-weight: 700; }
+@media (max-width: 700px) { .bento.dash-reihe { grid-template-columns: repeat(2, 1fr); } }
+.d-station { width: 120px; } .d-plan { width: 74px; } .d-ab { width: 170px; } .d-bg { width: 150px; } .d-kunde { width: 130px; } .d-lager { width: 80px; }
+.d-proz { width: 64px; } .d-balken { width: 130px; } .d-stand { width: 120px; }
+.dash-karten table.tabelle, .dash-karten .ab-block { min-width: 1300px; }
+/* R-DB6: AB-Zeile groß und fett, dicke Linie oben (Markenfarbe statt Excel-Dunkelblau), ganze Zeile in Statusfarbe */
+.dash-karten .ab-block { border-top: 4px solid var(--brand-gray); }
+.tabelle.dash tr.dab .ab-nr { font-weight: 700; font-size: var(--fs-h3); line-height: var(--lh-h3); }
+.tabelle.dash .ab-text { margin-left: var(--space-3); }
+.tabelle.dash tr.dab.leer td { background: var(--status-offen-bg); }
+.tabelle.dash td[colspan] { overflow: hidden; text-overflow: ellipsis; }
+/* BG mittel, Teil klein und grau; nur Status und Balken farbig */
+.tabelle.dash tr.dbg td { font-size: var(--fs-small); font-weight: 600; }
+.tabelle.dash tr.dohne td { font-weight: 400; font-style: italic; color: var(--ink-muted); }
+.tabelle.dash tr.dteil td { font-size: var(--fs-label); color: var(--ink-muted); height: 36px; background: var(--surface-100); }
+.tabelle.dash tr.dteil td:nth-child(4) { overflow: hidden; text-overflow: ellipsis; }
+.tabelle.dash tr.dteil .status { font-size: var(--fs-label); }
+
+/* Dashboard am Handy */
+.dash-karte { background: var(--surface-100); border: 1px solid var(--line); border-top: 4px solid var(--brand-gray);
+  border-radius: var(--radius-lg); margin-bottom: var(--space-3); overflow: hidden; }
+.dash-karte > summary { list-style: none; cursor: pointer; display: flex; flex-direction: column; gap: var(--space-1);
+  padding: var(--space-3) var(--space-4); min-height: 44px; }
+.dash-karte > summary::-webkit-details-marker { display: none; }
+.dash-karte.komplett > summary { background: var(--status-komplett-bg); }
+.dash-karte.teilweise > summary { background: var(--status-teilweise-bg); }
+.dash-karte .ab-nr { font-size: var(--fs-h3); line-height: var(--lh-h3); }
+.dk-zeile { display: flex; align-items: center; justify-content: space-between; gap: var(--space-3); }
+.dk-zeile .balken { flex: 1; }
+.dk-zahl { min-width: 44px; text-align: right; font-variant-numeric: tabular-nums; }
+.dk-stand { white-space: nowrap; }
+.dash-teil { display: grid; grid-template-columns: 1fr auto auto; gap: var(--space-2); align-items: center;
+  padding: var(--space-2) var(--space-4) var(--space-2) var(--space-8); border-top: 1px solid var(--line); font-size: var(--fs-small); min-height: 44px; }
+.dt-text { display: flex; flex-direction: column; overflow-wrap: anywhere; min-width: 0; }
+
+/* ---------- Löschen, Archiv, Protokoll (Phase 4) ---------- */
+.formular-breit { max-width: 720px; }
+.formular-breit input[type=text] { width: 100%; }
+.gross { font-size: var(--fs-h3); line-height: var(--lh-h3); }
+.loeschen-frage { border-left: 4px solid var(--glow-red); }
+.loeschen-frage .details-liste { margin: var(--space-4) 0; }
+.archiv-tabelle td { white-space: nowrap; }
+.archiv-tabelle .text-kurz { max-width: 360px; overflow: hidden; text-overflow: ellipsis; }
+.archiv-rahmen { max-height: 75vh; }
+.archiv-zeilen td { white-space: nowrap; height: 36px; }
+.archiv-zeilen tr.treffer td { box-shadow: inset 0 -2px 0 var(--glow-red); font-weight: 600; }
+.wiederherstellen { position: relative; }
+.wiederherstellen > summary { list-style: none; }
+.wiederherstellen > summary::-webkit-details-marker { display: none; }
+.wiederherstellen .karte { position: absolute; right: 0; top: calc(100% + var(--space-2)); z-index: 20; width: min(420px, calc(100vw - 32px)); box-shadow: var(--shadow-glass); }
+.seiten { display: flex; gap: var(--space-3); align-items: center; justify-content: center; margin-top: var(--space-4); }
+.einstellungen { margin-bottom: var(--space-4); padding: var(--space-4) var(--space-6); }
+.einstellungen > summary { cursor: pointer; min-height: 32px; }
+.schalter-zeile { display: flex; gap: var(--space-2); align-items: center; min-height: 44px; }
+.einstellungen .leeren { display: flex; flex-wrap: wrap; gap: var(--space-3); align-items: center; border-top: 1px solid var(--line); margin-top: var(--space-4); padding-top: var(--space-3); }
+.hinweis-warnung { border-left-color: var(--glow-red); }
+.protokoll-tabelle td { white-space: nowrap; }
+@media (max-width: 700px) {
+  .wiederherstellen .karte { left: 0; right: auto; }
+}
+.archiv-karte + .archiv-karte { margin-top: var(--space-3); }
+.archiv-karte { display: flex; flex-direction: column; gap: var(--space-1); padding: var(--space-4); color: var(--ink); text-decoration: none; }
+.archiv-karte-kopf { display: flex; justify-content: space-between; align-items: center; gap: var(--space-2); }
+
+/* ---------- Forecast (Phase 5, R-F10): Ampelfarben sind Bedeutungsfarben aus dem Designsystem ---------- */
+.fc-kopf { margin-bottom: var(--space-4); }
+.bento.fc-kopf { grid-template-columns: repeat(4, 1fr); }
+@media (max-width: 700px) { .bento.fc-kopf { grid-template-columns: repeat(2, 1fr); } }
+.fc-kopf .kachel { background: var(--surface-100); backdrop-filter: none; -webkit-backdrop-filter: none; }
+.fc-kopf .kachel.fc-kachel-rot { background: var(--ampel-rot); color: var(--on-status); }
+.fc-kopf .kachel.fc-kachel-gelb { background: var(--ampel-gelb); color: var(--on-status); }
+.fc-kopf .kachel.fc-kachel-rot .label, .fc-kopf .kachel.fc-kachel-gelb .label { color: var(--on-status); }
+.fc-kopf .kachel.fc-alt { background: var(--status-teilweise); color: var(--on-status); }
+.fc-kopf .kachel.fc-alt .label { color: var(--on-status); }
+.fc-erklaerung { margin: calc(-1 * var(--space-2)) 0 var(--space-4); }
+.fc-punkt { display: inline-block; width: 12px; height: 12px; border-radius: 3px; vertical-align: -1px; margin-right: var(--space-1); border: 1px solid var(--line); }
+.fc-punkt.rot { background: var(--ampel-rot); } .fc-punkt.gelb { background: var(--ampel-gelb); }
+/* AB-Zeile kräftig, Baugruppen und Teile desselben AB hell; der Balken behält seine Statusfarbe */
+.tabelle.fc tr.dab td { background: var(--surface-100); }
+.tabelle.fc-rot tr.dab td { background: var(--ampel-rot); color: var(--on-status); }
+.tabelle.fc-gelb tr.dab td { background: var(--ampel-gelb); color: var(--on-status); }
+.tabelle.fc-rot tr.dbg td, .tabelle.fc-rot tr.dteil td { background: var(--ampel-rot-bg); }
+.tabelle.fc-gelb tr.dbg td, .tabelle.fc-gelb tr.dteil td { background: var(--ampel-gelb-bg); }
+.fc-karte.fc-rot > summary { background: var(--ampel-rot); color: var(--on-status); }
+.fc-karte.fc-gelb > summary { background: var(--ampel-gelb); color: var(--on-status); }
+.fc-karte.fc-rot .bg-block, .fc-karte.fc-rot .dash-teil { background: var(--ampel-rot-bg); }
+.fc-karte.fc-gelb .bg-block, .fc-karte.fc-gelb .dash-teil { background: var(--ampel-gelb-bg); }
+.fc-termin { white-space: nowrap; }
+.fc-daten td { white-space: nowrap; height: 36px; }
+.fc-daten .fc-abgleich { background: var(--surface-0); font-weight: 600; }
+@media (max-width: 520px) {
+  .fc-kopf { grid-template-columns: 1fr 1fr; gap: var(--space-2); }
+  .fc-kopf .breit-2 { grid-column: span 2; }
+  .fc-kopf .kachel { min-height: 0; padding: var(--space-3); }
+}
+
+/* ---------- Schweißen (Phase 6) ---------- */
+/* Schweißen: Spaltenbreiten in Prozent, damit die Zeile immer auf den Bildschirm passt und „zurück in Bestandsliste“
+   am rechten Rand zu sehen ist (Ben, 14.10.). Mit „Weitere Spalten“ gelten feste Breiten und es wird seitlich gescrollt. */
+.sw-liste col.c-klapp { width: 3%; } .sw-liste col.c-nr { width: 9%; } .sw-liste col.c-ben { width: 9.5%; }
+.sw-liste col.c-lk { width: 3.5%; } .sw-liste col.c-soll { width: 3.5%; } .sw-liste col.c-swm { width: 10%; }
+.sw-liste col.c-swp { width: 8%; } .sw-liste col.c-datum { width: 11%; } .sw-liste col.c-swt { width: 9%; }
+.sw-liste col.c-dlz { width: 4.5%; } .sw-liste col.c-aktion { width: 9%; }
+.sw-liste table.tabelle { min-width: 0; table-layout: fixed; }
+.sw-liste .ab-block { min-width: 0; }
+.sw-liste.alle-spalten table.tabelle, .sw-liste.alle-spalten .ab-block { min-width: 2300px; }
+.c-ben { width: 170px; } .c-swm { width: 160px; } .c-swp { width: 120px; } .c-swt { width: 142px; } .c-dlz { width: 64px; }
+.sw-liste.alle-spalten col.c-klapp { width: 40px; } .sw-liste.alle-spalten col.c-nr { width: 150px; } .sw-liste.alle-spalten col.c-ben { width: 170px; }
+.sw-liste.alle-spalten col.c-lk { width: 50px; } .sw-liste.alle-spalten col.c-soll { width: 56px; } .sw-liste.alle-spalten col.c-swm { width: 160px; }
+.sw-liste.alle-spalten col.c-swp { width: 120px; } .sw-liste.alle-spalten col.c-datum { width: 150px; } .sw-liste.alle-spalten col.c-swt { width: 142px; }
+.sw-liste.alle-spalten col.c-dlz { width: 64px; } .sw-liste.alle-spalten col.c-aktion { width: 170px; }
+.sw-liste .kopfzeile th { white-space: normal; line-height: 1.2; }
+.sw-liste .tabelle td.aktion { white-space: nowrap; padding-left: var(--space-2); padding-right: var(--space-2); }
+.sw-liste .tabelle td { padding-left: var(--space-2); padding-right: var(--space-2); }
+.sw-liste .tabelle .sw-datum { width: calc(100% - 28px); min-width: 0; padding: 0 var(--space-1); }
+/* Ohne „Weitere Spalten“ ist die Spalte zu schmal für Datum und Kalenderknopf: das Datum bekommt die ganze Breite (Eintippen geht weiter). */
+.sw-liste:not(.alle-spalten) .tabelle .sw-datum { width: 100%; }
+.sw-liste:not(.alle-spalten) .tabelle .sw-kalender { display: none; }
+.mitarbeiter-verwaltung { list-style: none; margin: var(--space-3) 0; padding: 0; display: flex; flex-direction: column; gap: var(--space-2); max-height: 40vh; overflow: auto; }
+.mitarbeiter-verwaltung li { display: flex; justify-content: space-between; align-items: center; gap: var(--space-3); border-bottom: 1px solid var(--line); padding-bottom: var(--space-2); }
+.mitarbeiter-neu { display: flex; gap: var(--space-2); }
+.mitarbeiter-neu input { flex: 1; min-width: 0; }
+/* Mitarbeiter-Auswahl mit mehreren Namen */
+details.mehrfach { position: relative; }
+details.mehrfach > summary.sw-eingabe { display: block; list-style: none; cursor: pointer; line-height: 34px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  border: 1px solid var(--line-strong); border-radius: var(--radius-sm); padding: 0 var(--space-6) 0 var(--space-2); position: relative; }
+details.mehrfach > summary::-webkit-details-marker { display: none; }
+details.mehrfach > summary::after { content: "▾"; position: absolute; right: var(--space-2); top: 0; }
+details.mehrfach.speichert > summary { border-color: var(--ink-muted); }
+details.mehrfach.ungueltig > summary { border: 2px solid var(--glow-red); }
+.mehrfach-liste { position: fixed; z-index: 60; min-width: 220px; max-width: calc(100vw - 16px); max-height: 50vh; overflow: auto; background: var(--surface-100); color: var(--ink);
+  border: 1px solid var(--line-strong); border-radius: var(--radius-md); box-shadow: var(--shadow-glass); padding: var(--space-2); font-weight: 400; white-space: normal; }
+.mehrfach-liste label { display: flex; align-items: center; gap: var(--space-2); min-height: 40px; padding: 0 var(--space-2); cursor: pointer; font-size: var(--fs-small); }
+.mehrfach-liste input { width: 20px; height: 20px; }
+.sw-feld details.mehrfach > summary.sw-eingabe { line-height: 42px; min-height: 44px; }
+.tabelle .sw-eingabe { width: 100%; min-height: 34px; height: 34px; padding: 0 var(--space-2); background: var(--surface-0); color: var(--ink); }
+.tabelle .sw-datum { width: calc(100% - 30px); }
+.tabelle tr.ab .sw-eingabe, .tabelle tr.ab select.sw-eingabe { font-weight: 400; }
+.sw-eingabe.speichert { border-color: var(--ink-muted); }
+.sw-eingabe.ungueltig { border: 2px solid var(--glow-red); }
+.sw-kalender { background: none; border: 0; cursor: pointer; width: 28px; min-height: 28px; padding: 0; font-size: 1rem; vertical-align: middle; }
+.sw-kalender-eingabe { position: absolute; width: 1px; height: 1px; opacity: 0; pointer-events: none; }
+.tabelle tr.ab.einzel td { background: var(--brand-gray); }
+.sw-felder { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--space-2) var(--space-3); }
+.sw-feld { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.sw-feld .sw-eingabe { width: 100%; min-height: 44px; }
+.bg-knoepfe.sw-felder { padding-right: var(--space-6); }
+
+/* Hallenplan: Einträge antippbar (Rolle Stahlbau), Ablegen auf einen Platz */
+.ap.drueber { outline: 3px dashed var(--ink-muted); }
+.ap .eintraege { display: flex; flex-wrap: wrap; gap: var(--space-1); }
+.ap span.eintrag[role="button"] { font-family: inherit; cursor: pointer; user-select: none; }
+.ap span.eintrag[draggable="true"] { cursor: grab; }
+.mehrfach-liste.statisch { position: static; max-height: 40vh; box-shadow: none; margin: var(--space-3) 0; }
+
+.karte.drueber { border-color: var(--ink); box-shadow: 0 0 0 2px var(--ink); }
+
+/* Planungs-Häkchen */
+.plan-haken { display: inline-flex; align-items: center; gap: var(--space-2); cursor: pointer; min-height: 32px; }
+.plan-haken input { width: 22px; height: 22px; accent-color: var(--brand-red); cursor: pointer; }
+.plan-haken input:disabled { cursor: default; opacity: .6; }
+.plan-handy { display: block; margin-top: var(--space-1); }
+
+/* Statistik: Balkendiagramme aus HTML/CSS */
+.breit-4 { grid-column: 1 / -1; }
+.sb-gitter .kachel { min-width: 0; }
+.tabelle-rahmen { overflow-x: auto; }
+.sb-diagramm { margin-top: var(--space-3); }
+.sb-flaeche { position: relative; display: flex; align-items: flex-end; gap: var(--space-2); height: 220px; border-bottom: 2px solid var(--line-strong); }
+.sb-spalte { flex: 1 1 0; min-width: 0; height: 100%; display: flex; flex-direction: column; justify-content: flex-end; }
+.sb-balken { position: relative; border-radius: 4px 4px 0 0; text-align: center; color: var(--on-brand); }
+.sb-wert { display: block; padding-top: var(--space-1); font-size: var(--fs-label); font-weight: 700; white-space: nowrap; }
+.sb-wert small { font-weight: 400; }
+.sb-gruen { background: var(--status-komplett); color: var(--on-status); }
+.sb-gelb { background: var(--status-teilweise); color: var(--on-status); }
+.sb-rot { background: var(--brand-red); }
+.sb-neutral { background: var(--brand-gray); }
+.sb-klein { color: var(--ink); }                                  /* zu niedrig für Text im Balken: Zahl steht darüber */
+.sb-klein .sb-wert { position: absolute; left: 0; right: 0; bottom: 100%; padding: 0 0 2px; }
+.sb-soll { position: absolute; left: 0; right: 0; border-top: 2px dashed var(--ink); pointer-events: none; z-index: 1; }
+.sb-soll span { position: absolute; left: 0; top: -20px; font-size: var(--fs-label); background: var(--surface-100); padding: 0 var(--space-1); }
+.sb-achse { display: flex; gap: var(--space-2); }
+.sb-achse span { flex: 1 1 0; min-width: 0; text-align: center; font-size: var(--fs-label); color: var(--ink-muted); padding-top: var(--space-1); }
+@media (max-width: 520px) { .sb-flaeche { height: 180px; } .sb-achse span, .sb-wert { font-size: 11px; } }
+
+/* Kleine Hilfsklassen (statt Stilangaben in den Vorlagen) */
+.kein-rand { margin: 0; }
+.abstand-oben { margin-top: var(--space-3); }
+.kopf-oben { position: relative; }
+.tabelle-rahmen.frei { max-height: none; }
+.feld-schmal { max-width: 260px; }
+.karte-schmal { max-width: 720px; }
+.knopfreihe { display: flex; gap: var(--space-3); flex-wrap: wrap; }
+
+/* ---------- Baugruppen als eigene Kacheln im AB (Ben, 15.10.) ----------
+   AB = Überkachel mit innerem Rand; jede Baugruppe samt ihren Teilen = Kachel mit Rahmen und runden Ecken.
+   PC: eine Tabelle je AB (Spalten bleiben untereinander), die Baugruppe ist ein eigener <tbody>. Statusfarben bleiben. */
+.ab-block.kacheln { padding: 0 var(--space-2) var(--space-2); }
+.kacheln-liste .ab-block.kacheln, .kacheln-liste.alle-spalten .ab-block.kacheln { min-width: 1400px; }
+.karten-liste.kacheln-liste .ab-block.kacheln table.tabelle, .karten-liste.kacheln-liste.alle-spalten .ab-block.kacheln table.tabelle { min-width: 0; }
+.kacheln-liste.alle-spalten .ab-block.kacheln { min-width: 2410px; }
+.sw-liste.kacheln-liste .ab-block.kacheln { min-width: 0; }
+.sw-liste.kacheln-liste.alle-spalten .ab-block.kacheln { min-width: 2300px; }
+/* Kopfzeile um den Innenrand (1px Rand + Innenabstand) eingerückt, damit die Spalten untereinander bleiben */
+.karten-liste.kacheln-liste table.kopfzeile { margin: 0 calc(var(--space-2) + 1px); width: calc(100% - 2 * (var(--space-2) + 1px)); min-width: calc(1400px - 2 * (var(--space-2) + 1px)); }
+.karten-liste.kacheln-liste.alle-spalten table.kopfzeile { min-width: calc(2410px - 2 * (var(--space-2) + 1px)); }
+.sw-liste.kacheln-liste table.kopfzeile { min-width: 0; }
+.sw-liste.kacheln-liste.alle-spalten table.kopfzeile { min-width: calc(2300px - 2 * (var(--space-2) + 1px)); }
+/* AB-Zeile = Überschrift der großen Kachel: füllt oben die ganze Breite (Schatten füllt den Innenrand), untere Ecken eckig */
+.kacheln tr.ab td:first-child { box-shadow: calc(-1 * var(--space-2)) 0 0 0 var(--ab-farbe, var(--brand-gray)); }
+.kacheln tr.ab td:last-child { box-shadow: var(--space-2) 0 0 0 var(--ab-farbe, var(--brand-gray)); }
+.kacheln tr.ab.komplett td { --ab-farbe: var(--status-komplett); }
+.kacheln tr.ab.teilweise td { --ab-farbe: var(--status-teilweise); }
+.ab-block.kacheln .tabelle tr.ab td { border-bottom: none; }
+.ab-block.kacheln .tabelle tr.abstand td { height: var(--space-2); padding: 0; border: 0; background: transparent; }
+.bg-kachel > tr:not(.abstand) > td:first-child { border-left: 1px solid var(--line-strong); }
+.bg-kachel > tr:not(.abstand) > td:last-child { border-right: 1px solid var(--line-strong); }
+.ab-block.kacheln .tabelle .bg-kachel tr.bg td { border-top: 1px solid var(--line-strong); }
+.bg-kachel > tr.bg > td:first-child { border-top-left-radius: var(--radius-md); }
+.bg-kachel > tr.bg > td:last-child { border-top-right-radius: var(--radius-md); }
+/* letzte sichtbare Zeile der Kachel: Unterkante und runde untere Ecken (auch bei zugeklappter Baugruppe) */
+.ab-block.kacheln .tabelle .bg-kachel > tr:not([hidden]):not(:has(~ tr:not([hidden]))) > td { border-bottom: 1px solid var(--line-strong); }
+.bg-kachel > tr:not([hidden]):not(:has(~ tr:not([hidden]))) > td:first-child { border-bottom-left-radius: var(--radius-md); }
+.bg-kachel > tr:not([hidden]):not(:has(~ tr:not([hidden]))) > td:last-child { border-bottom-right-radius: var(--radius-md); }
+/* Handy: Baugruppe = Kachel mit Rahmen im AB */
+.ab-karte.kacheln { padding-bottom: var(--space-2); }
+.ab-karte.kacheln > header { margin-bottom: var(--space-2); }
+.ab-karte.kacheln > .bg-block { margin: var(--space-2) var(--space-2) 0; border: 1px solid var(--line-strong); border-radius: var(--radius-md); overflow: hidden; }
+.ab-karte.kacheln > .bg-block > summary { padding-left: var(--space-4); padding-right: var(--space-4); }
+.ab-karte.kacheln > .bg-block .teil-zeile { padding-left: var(--space-6); }
+.ab-karte.kacheln > .bg-block .bg-knoepfe { padding-left: var(--space-4); padding-right: var(--space-4); }
+
+/* Aufgeteilter AB (Ben, 15.10.): Baugruppen im anderen Bereich als rote, nicht aufklappbare Hinweiskachel (FWM-Rot, hell hinterlegt) */
+.ab-block.kacheln .tabelle .bg-kachel.rot > tr.bg > td { background: color-mix(in srgb, var(--brand-red) 16%, var(--surface-100)); font-weight: 600; color: var(--ink); border-top-color: var(--brand-red); }
+.ab-block.kacheln .tabelle .bg-kachel.rot > tr > td { border-bottom-color: var(--brand-red); }
+.ab-block.kacheln .tabelle .bg-kachel.rot > tr:not(.abstand) > td:first-child { border-left-color: var(--brand-red); box-shadow: inset 6px 0 0 var(--brand-red); }
+.ab-block.kacheln .tabelle .bg-kachel.rot > tr:not(.abstand) > td:last-child { border-right-color: var(--brand-red); }
+.sw-link { color: inherit; text-decoration: none; }
+.sw-link:hover { text-decoration: underline; }
+.hinweis-sw { color: var(--brand-red); font-weight: 700; }
+.ab-karte.kacheln > .sw-kachel { display: flex; flex-wrap: wrap; gap: var(--space-1) var(--space-3); align-items: center; justify-content: space-between; min-height: 52px;
+  margin: var(--space-2) var(--space-2) 0; padding: var(--space-3) var(--space-4); border: 1px solid var(--brand-red); border-left-width: 6px; border-radius: var(--radius-md);
+  background: color-mix(in srgb, var(--brand-red) 16%, var(--surface-100)); color: var(--ink); font-weight: 600; text-decoration: none; }
+
+/* Dashboard (Ben, 15.10.): Baugruppen, die schon im Schweißen liegen, ganz unten, hellgrau und durchgestrichen */
+.status.schweissen { background: var(--surface-100); color: inherit; border: 1px solid var(--line); }
+.tabelle.dash tr.dsw td { background: var(--surface-100); color: color-mix(in srgb, var(--ink) 40%, var(--surface-100)); font-weight: 400; }
+.tabelle.dash tr.dsw td:not(:has(.status)) { text-decoration: line-through; }
+.tabelle.dash tr.dsw .sw-link { color: inherit; }
+.dash-karte > .dash-sw { display: flex; align-items: center; justify-content: space-between; gap: var(--space-3); padding: var(--space-3) var(--space-4);
+  border-top: 1px solid var(--line); color: color-mix(in srgb, var(--ink) 40%, var(--surface-100)); text-decoration: none; }
+.dash-karte > .dash-sw .bg-name { text-decoration: line-through; }
+
+/* Eingeklappter AB (Ben, 15.10.): einfarbig ohne weißen Streifen unten, Schrift und Felder in der Kachel zentriert */
+.ab-block.kacheln:not(:has(tr.unter:not([hidden]))) { padding-bottom: 0; }
+.ab-block.kacheln:not(:has(tr.unter:not([hidden]))) tr.ab > td { text-align: center; }
+
+/* Platz- und Arbeitsplatz-Fenster (Ben, 15.10.): wenige, große Knöpfe nebeneinander, „Abbrechen“ in FWM-Rot */
+.platz-dialog .knopfzeile .knopf, .platz-dialog .knopfzeile .knopf-rot { flex: 1 1 0; min-height: 52px; font-size: var(--fs-body); }
+.platz-dialog .knopfzeile .knopf-rot { padding: 0 var(--space-4); }
+
+/* Rechtsklick-Menü zu AB und Baugruppe (Ben, 15.10.): kleine Kachel, Titel mittig, alle Knöpfe untereinander gleich groß */
+.mitte-dialog:has(.ab-menue) { width: min(300px, calc(100vw - 32px)); padding: var(--space-4); }
+.ab-menue { text-align: center; }
+.ab-menue h2 { margin-bottom: var(--space-3); overflow-wrap: anywhere; }
+.ab-menue .knopfzeile { flex-direction: column; flex-wrap: nowrap; gap: var(--space-2); margin-top: 0; }
+.ab-menue .knopfzeile > * { width: 100%; min-height: 48px; padding: 0 var(--space-4); font-size: var(--fs-body); box-sizing: border-box; }
+
+/* Bestandsliste und Schweißen: Spalte „AB / Zeichnungsnummer“ steht überall mittig unter der Überschrift */
+.kacheln-liste .tabelle th:nth-child(2), .kacheln-liste .tabelle td:nth-child(2) { text-align: center; }
+.kacheln-liste .tabelle td:nth-child(2) .ab-klapp { display: block; width: 100%; text-align: center; }

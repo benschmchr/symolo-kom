@@ -1,0 +1,29 @@
+{% extends "kern/base.html" %}{% load static %}
+{% block titel %}AB löschen{% endblock %}
+{% block kopfzusatz %}<link rel="stylesheet" href="{% static 'kern/css/listen.css' %}">{% endblock %}
+{% block inhalt %}
+<p class="klein"><a href="{% url 'bestandsliste' %}{% if a %}?zu={{ a.o.id }}#ab-{{ a.o.id }}{% endif %}">← Bestandsliste</a></p>
+<h1>AB löschen</h1>
+{% if not a %}
+<form method="get" class="karte formular-breit">
+  <input type="hidden" name="los" value="1">
+  <div class="feld"><label for="ab">Welcher Arbeitsauftrag soll vollständig aus der Bestandsliste entfernt werden?</label>
+    <input type="text" id="ab" name="ab" value="{{ eingabe }}" placeholder="z. B. 2515204 oder AB2616200 Los 1" autofocus autocomplete="off"></div>
+  <p class="leise klein">Die Nummer darf ohne „AB“ und in anderer Los-Schreibweise eingegeben werden. Im nächsten Schritt kommt eine Sicherheitsfrage.</p>
+  <div class="knopfzeile"><button class="knopf-haupt" type="submit">Weiter →</button><a class="knopf" href="{% url 'bestandsliste' %}">Abbrechen</a></div>
+</form>
+{% else %}
+<form method="post" class="karte formular-breit loeschen-frage">{% csrf_token %}
+  <p class="gross">Arbeitsauftrag <strong>{{ a.o.ab_anzeige }}</strong> mit <strong>{{ zeilen }} Zeilen</strong> endgültig löschen?</p>
+  <dl class="details-liste">
+    {% if a.o.kunde %}<dt>Kunde</dt><dd>{{ a.o.kunde }}</dd>{% endif %}
+    {% if a.o.verkaufsartikel %}<dt>Verkaufsartikel</dt><dd>{{ a.o.verkaufsartikel }}</dd>{% endif %}
+    <dt>Inhalt</dt><dd>{{ a.bgs|length }} Baugruppe{{ a.bgs|length|pluralize:"n" }}, {{ a.alle_teile|length }} Teil{{ a.alle_teile|length|pluralize:"e" }}</dd>
+    <dt>Status</dt><dd><span class="status {{ a.w.css }}">{{ a.w.status }}</span> {{ a.w.fortschritt }}</dd>
+    {% if a.o.lagerort %}<dt>Lagerort</dt><dd>{{ a.o.lagerort }}</dd>{% endif %}
+  </dl>
+  <p class="leise">Eine Kopie aller Zeilen (mit Mengen, Lagerort und Daten) wird im <a href="{% url 'archiv' %}">Archiv</a> abgelegt. Der AB verschwindet aus Bestandsliste, Dashboard und Regal.</p>
+  <div class="knopfzeile"><button class="knopf-gefahr" type="submit">Ja, löschen und ins Archiv</button><a class="knopf" href="{% url 'bestandsliste' %}?zu={{ a.o.id }}#ab-{{ a.o.id }}">Nein, abbrechen</a></div>
+</form>
+{% endif %}
+{% endblock %}

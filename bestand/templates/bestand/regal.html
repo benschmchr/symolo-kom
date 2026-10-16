@@ -1,0 +1,33 @@
+{% extends "kern/base.html" %}{% load static %}
+{% block titel %}Regal{% endblock %}
+{% block kopfzusatz %}<link rel="stylesheet" href="{% static 'kern/css/listen.css' %}">{% endblock %}
+{% block inhalt %}
+<div class="seitenkopf">
+  <h1>Regal</h1>
+</div>
+<p class="klein leise">Grün = komplett, gelb = teilweise, weiß = offen.
+  {% if darf_mengen %}Eintrag antippen, um den Platz zu ändern; am PC auch auf ein anderes Fach oder nach „Nicht einsortiert“ ziehen. Rechtsklick auf einen AB: aufsplitten; Rechtsklick auf eine Baugruppe: AB zusammenführen. Der Platz gilt dann für den ganzen AB bzw. die Baugruppe in der Bestandsliste.{% else %}Eintrag antippen: AB in der Bestandsliste ansehen. Zum Ändern anmelden (Rolle Kommissionierung).{% endif %}</p>
+<div id="regal-inhalt" data-neu-laden>
+<div class="regal">
+  <div></div><div class="seite">Links (L)</div><div class="seite r">Rechts (R)</div>
+  {% for e in etagen %}
+    <div class="etage">{{ e.nr }}</div>
+    <div class="fach" data-ablage="L{{ e.nr }}"><span class="platz">L{{ e.nr }}</span>{% for x in e.L %}{% include "bestand/_regal_eintrag.html" %}{% endfor %}</div>
+    <div class="fach r{% if e.nr == 3 %} sperr{% endif %}" data-ablage="R{{ e.nr }}"><span class="platz">R{{ e.nr }}{% if e.nr == 3 %} · {{ r3_name }}{% endif %}</span>{% for x in e.R %}{% include "bestand/_regal_eintrag.html" %}{% endfor %}</div>
+  {% endfor %}
+</div>
+<div class="listen">
+  <section class="karte" data-ablage=""><h2>Nicht einsortiert <span class="anzahl">{{ nicht|length }}</span></h2>
+    <div class="eintraege">{% for x in nicht %}{% include "bestand/_regal_eintrag.html" %}{% empty %}<p class="leise">Alles einsortiert</p>{% endfor %}</div></section>
+  <section class="karte"><h2>Sonstiges <span class="anzahl">{{ ungueltig|length }}</span></h2>
+    <div class="eintraege">{% for x in ungueltig %}{% include "bestand/_regal_eintrag.html" with mit_platz=True %}{% empty %}<p class="leise">keine</p>{% endfor %}</div></section>
+  <section class="karte"><h2>Einsortiert <span class="anzahl">{{ einsortiert|length }}</span></h2>
+    {% if einsortiert %}<details><summary class="klein">Liste „Name · Platz“ anzeigen</summary>
+      <ul class="einsortiert-liste klein">{% for x in einsortiert %}<li><span class="punkt-status {{ x.css }}"></span>{{ x.name }} · {{ x.platz }}</li>{% endfor %}</ul></details>
+    {% else %}<p class="leise">keine</p>{% endif %}</section>
+</div>
+</div>
+{% if darf_mengen %}{% include "bestand/_platz_dialog.html" %}{% endif %}
+<div class="meldung" id="meldung" role="alert" hidden></div>
+{% endblock %}
+{% block skripte %}{% if darf_mengen %}<script src="{% static 'bestand/lagerort.js' %}" defer></script>{% endif %}{% endblock %}

@@ -1,0 +1,46 @@
+{% extends "kern/base.html" %}{% load static %}
+{% block titel %}Arbeitsplätze{% endblock %}
+{% block kopfzusatz %}<link rel="stylesheet" href="{% static 'kern/css/listen.css' %}">{% endblock %}
+{% block inhalt %}
+<div class="seitenkopf">
+  <h1>Arbeitsplätze – Schweißen</h1>
+</div>
+<p class="klein leise">Wie die Magnettafel in der Halle. {% if darf_aendern %}Eintrag antippen, um den Arbeitsplatz zu ändern; am PC auch auf einen anderen Platz oder nach „Nicht einsortiert“ ziehen. Rechtsklick auf einen Eintrag: AB aufsplitten bzw. zusammenführen und Mitarbeiter ändern. Der Platz gilt dann auch im Schweißen.{% else %}Eintrag antippen: AB im Schweißen ansehen. Zum Ändern anmelden (Rolle Stahlbau).{% endif %}</p>
+<div id="ap-inhalt" data-neu-laden>
+<div class="halle">
+  {% for x in plaetze %}
+  <div class="ap {{ x.p.farbe }}" data-ablage="{{ x.p.name }}" style="grid-column:{{ x.p.spalte }} / span {{ x.p.breite }};grid-row:{{ x.p.zeile }} / span {{ x.p.hoehe }}">
+    <h3>{{ x.p.name }}</h3>
+    <div class="eintraege">{% for e in x.eintraege %}{% include "bestand/_ap_eintrag.html" %}{% empty %}<span class="klein leise">frei</span>{% endfor %}</div>
+  </div>
+  {% endfor %}
+</div>
+<div class="listen">
+  <section class="karte" data-ablage=""><h2>Nicht einsortiert <span class="anzahl">{{ nicht|length }}</span></h2>
+    <div class="eintraege">{% for e in nicht %}{% include "bestand/_ap_eintrag.html" %}{% empty %}<p class="leise">Alles einsortiert</p>{% endfor %}</div></section>
+  <section class="karte"><h2>Sonstiges <span class="anzahl">{{ ungueltig|length }}</span></h2>
+    <div class="eintraege">{% for e in ungueltig %}{% include "bestand/_ap_eintrag.html" with mit_platz=True %}{% empty %}<p class="leise">keine</p>{% endfor %}</div></section>
+  <section class="karte"><h2>Einsortiert <span class="anzahl">{{ einsortiert|length }}</span></h2>
+    <div class="eintraege">{% for e, p in einsortiert %}{% include "bestand/_ap_eintrag.html" with mit_platz=True %}{% empty %}<p class="leise">keine</p>{% endfor %}</div></section>
+</div>
+</div>
+{% if darf_aendern %}
+<dialog class="platz-dialog" id="ap-dialog" aria-labelledby="ap-titel" data-url="{% url 'ap_platz' %}" data-liste="{% url 'schweissen' %}" data-mitarbeiter-url="{% url 'ap_mitarbeiter' %}" data-teilen="{% url 'ap_teilen' %}" data-zusammen="{% url 'ap_zusammen' %}">
+  <form method="dialog">
+    <h2 id="ap-titel">Arbeitsplatz ändern</h2>
+    <p class="klein leise" id="ap-bisher"></p>
+    <div class="platz-raster ap-raster" role="group" aria-label="Arbeitsplatz wählen">
+      {% for n in namen %}<button type="button" class="platz-knopf" data-wahl="{{ n }}">{{ n }}</button>{% endfor %}
+    </div>
+    <div class="knopfzeile">
+      <button type="button" class="knopf" data-wahl="">Kein Arbeitsplatz</button>
+      <button type="button" class="knopf menue-knopf" data-menue-knopf>AB-Menü</button>
+      <button class="knopf-rot" value="abbrechen">Abbrechen</button>
+    </div>
+  </form>
+</dialog>
+{% endif %}
+{% if darf_aendern %}{{ mitarbeiter|json_script:"mitarbeiter-daten" }}{% endif %}
+<div class="meldung" id="meldung" role="alert" hidden></div>
+{% endblock %}
+{% block skripte %}{% if darf_aendern %}<script src="{% static 'bestand/arbeitsplaetze.js' %}" defer></script>{% endif %}{% endblock %}

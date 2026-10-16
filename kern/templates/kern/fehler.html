@@ -1,0 +1,7 @@
+{% extends "kern/base.html" %}
+{% block titel %}{{ titel }}{% endblock %}
+{% block inhalt %}
+<h1>{{ titel }}</h1>
+<p>{{ text }}</p>
+<p><a href="{% url 'start' %}">Zur Startseite →</a></p>
+{% endblock %}

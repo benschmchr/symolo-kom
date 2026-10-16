@@ -1,0 +1,5 @@
+{% load bestand_extras %}<tr class="teil {{ t.w.css }}">
+  <td>{{ t.o.zeichnungsnummer }}</td><td>{{ t.o.benennung }}</td><td class="zahl">{{ t.o.lk_nummer }}</td><td class="zahl">{{ t.o.vorhanden|zahl }}</td>
+  <td class="zahl"><input type="text" inputmode="decimal" name="soll_{{ t.o.id }}" aria-label="Soll {{ t.o.zeichnungsnummer }}" value="{{ t.eingabe }}"
+    {% if t.fehler %}class="ungueltig" title="{{ t.fehler }}"{% endif %}></td>
+</tr>

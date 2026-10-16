@@ -1,0 +1,63 @@
+{% extends "kern/base.html" %}{% load static %}
+{% block titel %}Änderungsprotokoll{% endblock %}
+{% block kopfzusatz %}<link rel="stylesheet" href="{% static 'kern/css/listen.css' %}">{% endblock %}
+{% block inhalt %}
+<div class="seitenkopf"><h1>Änderungsprotokoll</h1></div>
+<p class="leise">Wer hat wann welche Menge, welchen Lagerort oder welches Soll geändert, dazu Import, Löschen und Wiederherstellen. Nur Admins sehen diese Seite.</p>
+{% if not e.aktiv %}<div class="hinweis hinweis-warnung"><strong>Das Protokoll ist ausgeschaltet.</strong> Es werden keine neuen Einträge geschrieben.</div>
+{% elif not e.namen %}<div class="hinweis">Das Protokoll läuft <strong>ohne Namen</strong>: gespeichert wird nur, was wann geändert wurde.</div>{% endif %}
+
+<details class="karte einstellungen"{% if not gesamt %} open{% endif %}>
+  <summary><strong>Einstellungen</strong> <span class="leise klein">· {% if e.aktiv %}an{% else %}aus{% endif %} · {% if e.namen %}mit Namen{% else %}ohne Namen{% endif %} · {% if e.tage %}{{ e.tage }} Tage aufbewahren{% else %}unbegrenzt aufbewahren{% endif %}</span></summary>
+  <p class="klein leise">Betriebsrat und Datenschutz sind noch nicht geklärt. Bis dahin lässt sich das Protokoll hier abschalten, ohne Namen führen oder zeitlich begrenzen.</p>
+  <form method="post" action="{% url 'protokoll_einstellen' %}">{% csrf_token %}
+    <label class="schalter-zeile"><input type="checkbox" name="aktiv" value="1" {% if e.aktiv %}checked{% endif %}> Protokoll führen</label>
+    <label class="schalter-zeile"><input type="checkbox" name="namen" value="1" {% if e.namen %}checked{% endif %}> Namen speichern <span class="leise klein">(beim Ausschalten werden auch die Namen in allen bisherigen Einträgen entfernt)</span></label>
+    <div class="feld feld-schmal abstand-oben"><label for="tage">Aufbewahren (Tage, 0 = unbegrenzt)</label>
+      <input type="number" id="tage" name="tage" min="0" max="3650" value="{{ e.tage }}"></div>
+    <button class="knopf-haupt" type="submit">Speichern</button>
+  </form>
+  <form method="post" action="{% url 'protokoll_leeren' %}" class="leeren">{% csrf_token %}
+    <label class="schalter-zeile"><input type="checkbox" name="sicher" value="ja"> Ja, alle Einträge löschen</label>
+    <button class="knopf-gefahr knopf-klein" type="submit">Protokoll leeren</button>
+  </form>
+</details>
+
+<form class="leiste" method="get" action="{% url 'protokoll' %}">
+  <div class="feld suche"><label for="suche">Suche</label>
+    <input type="search" id="suche" name="q" value="{{ q }}" placeholder="AB oder Zeichnungsnummer" enterkeyhint="search"></div>
+  <div class="feld"><label for="art">Was</label>
+    <select id="art" name="art"><option value="">Alles</option>{% for w, t in arten %}<option value="{{ w }}" {% if w == art %}selected{% endif %}>{{ t }}</option>{% endfor %}</select></div>
+  {% if namen %}<div class="feld"><label for="wer">Wer</label>
+    <select id="wer" name="wer"><option value="">Alle</option>{% for n in namen %}<option value="{{ n }}" {% if n == wer %}selected{% endif %}>{{ n }}</option>{% endfor %}</select></div>{% endif %}
+  <div class="leiste-knoepfe"><button class="knopf" type="submit">Anzeigen</button>{% if q or art or wer %}<a class="knopf" href="{% url 'protokoll' %}">Alles</a>{% endif %}</div>
+</form>
+{% if not seite.object_list %}
+<div class="hinweis">{% if q or art or wer %}Keine Einträge für diese Auswahl.{% else %}Noch keine Einträge.{% endif %}</div>
+{% else %}
+<div class="tabelle-rahmen frei">
+<table class="tabelle protokoll-tabelle">
+  <thead><tr><th>Wann</th><th>Wer</th><th>Was</th><th>AB</th><th>Zeile</th><th class="zahl">Vorher</th><th></th><th>Nachher</th></tr></thead>
+  <tbody>
+  {% for x in seite %}
+  <tr>
+    <td class="zahl">{{ x.zeit|date:"d.m.Y H:i:s" }}</td>
+    <td>{{ x.benutzer_name|default:"–" }}</td>
+    <td>{{ x.get_art_display }}</td>
+    <td><strong>{{ x.ab }}</strong></td>
+    <td>{{ x.objekt|default:"AB" }}</td>
+    <td class="zahl">{{ x.alt }}</td><td class="leise">→</td><td>{{ x.neu }}</td>
+  </tr>
+  {% endfor %}
+  </tbody>
+</table>
+</div>
+{% if seite.has_other_pages %}
+<nav class="seiten" aria-label="Seiten">
+  {% if seite.has_previous %}<a class="knopf knopf-klein" href="?q={{ q|urlencode }}&amp;art={{ art }}&amp;wer={{ wer|urlencode }}&amp;seite={{ seite.previous_page_number }}">← Neuere</a>{% endif %}
+  <span class="leise klein">Seite {{ seite.number }} von {{ seite.paginator.num_pages }}</span>
+  {% if seite.has_next %}<a class="knopf knopf-klein" href="?q={{ q|urlencode }}&amp;art={{ art }}&amp;wer={{ wer|urlencode }}&amp;seite={{ seite.next_page_number }}">Ältere →</a>{% endif %}
+</nav>
+{% endif %}
+{% endif %}
+{% endblock %}

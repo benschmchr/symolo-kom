@@ -1,0 +1,37 @@
+# Bestandsliste Kommissionierung Stahlbau
+
+Interne Web-App (löst `bestand_kom_stahlbau.xlsm` ab). Ersteller-Vermerk „Erstellt: Ben Schumacher, 09.10.2026“ bleibt in jeder Fußzeile, Mail und jedem Ausdruck.
+
+## Stack
+Python 3.12, Django 5.2, SQLite, Vorlagen (Templates) mit eigenem CSS aus dem FWM-Design und einfachem JavaScript. Kein React, Astro oder WordPress.
+
+## Ordner
+- `config/` Einstellungen, Adressen
+- `kern/` Grundseiten, Rollen (`rollen.py`), Vorlagen, Stile (`static/kern/css`), Schrift, Logo
+- `bestand/` Fachlogik: `models.py`, `rechnen.py`, `importer.py`, `lagerort.py`, `archiv.py`, `forecast.py`, `schweissen/` (Paket mit Modulen nach Thema), `planung.py`, `statistik.py`; Ansichten in `views*.py`, Adressen in `urls*.py`
+- `design/tokens.json` Designwerte; `tools/tokens_erzeugen.py` erzeugt daraus `kern/static/kern/design/tokens.css`
+- `tests/` automatische Tests, `tests/daten/pruef_status.csv` ist der Prüffall
+- `docs/Entscheidungen.md` Entscheidungen (W…, D…) nach Phase
+
+## Befehle
+- Tests: `python -m pytest` (gezielt: `python -m pytest tests/test_schweissen.py -k R_W3`)
+- Prüfen: `ruff check .` und `ruff format --check .`; Formatieren: `ruff format .`
+- Starten: `KOM_DEBUG=1 KOM_DATENBANK=db.sqlite3 python manage.py runserver` (ohne `KOM_DATENBANK` bricht der Start ab)
+
+## Konventionen
+- Alle Texte für Benutzer auf Deutsch, kurz, ohne Fachbegriffe.
+- Farben nur über die FWM-Variablen (`var(--…)`), keine festen Farbwerte. Statusfarben (grün/gelb/weiß, Ampel rot/gelb) sind Bedeutungsfarben und bleiben.
+- Ändernde Ansichten tragen `@rolle_noetig(...)` aus `kern/rollen.py`; Rollen werden serverseitig geprüft.
+- Jede Regel R-… hat einen Test; der Testname enthält die Regelnummer (z. B. `test_R_P2_…`). Der Prüffall muss grün bleiben. Tests nie abschalten, um grün zu werden.
+- Hochgeladene Excel-Dateien werden nur gelesen (nie Makros), Passwörter gehasht.
+- Neue Entscheidungen in `docs/Entscheidungen.md` nachtragen. Beim Arbeiten nur den Abschnitt der eigenen Phase lesen, nicht die ganze Datei.
+- Keine neuen README- oder Übersichtsdateien anlegen, außer Ben verlangt es.
+
+## Arbeitsregeln (Ben, 15.10.2026)
+1. Tests: Während der Arbeit nur die betroffenen Tests ausführen. Die volle Testreihe läuft genau einmal, direkt vor dem PR.
+2. Meldungen: Threads melden sich beim Koordinator nur bei einem fertigen Ergebnis, einer nötigen Entscheidung oder einem Fehler. Fortschritt wird nicht gemeldet.
+3. Koordinator: Wenn eine Meldung keine Antwort braucht, nicht antworten und keine weiteren Schritte auslösen.
+4. Bündeln: Zusammenhängende Wünsche kommen in einen Thread, nicht in mehrere.
+5. Keine Vorschaubilder oder Screenshots ohne ausdrückliche Bitte.
+6. Nur die Dateien lesen, die für die Aufgabe nötig sind. Große Dateien wie Uebergabe_Website.md nur gezielt abschnittsweise lesen.
+7. Fertige Threads sofort beenden, nicht offen lassen.

@@ -1,0 +1,2 @@
+{# R-W1: „Entnehmen“ bei AB/BG mit Status Komplett. Planung: roter Knopf (mit Sicherheitsfrage), sonst nur Hinweis. Parameter: z, eurl #}
+<span class="entnehmen-hinweis" data-feld="entnehmen" {% if not z.w.entnehmen %}hidden{% endif %}>{% if darf_entnehmen and eurl %}<a class="knopf-rot knopf-klein" href="{{ eurl }}" data-dialog title="Ins Schweißen verschieben (mit Sicherheitsfrage)">Entnehmen</a>{% else %}<span title="Komplett: kann vom Stahlbau ins Schweißen entnommen werden">Entnehmen</span>{% endif %}</span>

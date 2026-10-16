@@ -1,0 +1,5 @@
+{# Kachel Forecast (Startseite, Dashboard): ABs mit Liefertermin bis 14 Tage (rot) und 15–30 Tage (gelb). Parameter: fk #}
+<a class="kachel" href="{% url 'forecast' %}" data-kachel="forecast"><span class="label">Forecast</span>
+{% if fk %}<span class="zahl">{{ fk.rot }}<span class="klein leise"> rot · </span>{{ fk.gelb }}<span class="klein leise"> gelb</span></span>
+  <span class="klein leise"><i class="fc-punkt rot"></i>bis 14 Tage · <i class="fc-punkt gelb"></i>15–30 Tage · vom {{ fk.vom|date:"d.m." }}</span>
+{% else %}<span class="zahl">–</span><span class="klein leise">Noch kein Forecast importiert</span>{% endif %}</a>

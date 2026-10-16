@@ -1,0 +1,2 @@
+{% load bestand_extras %}{# Lagerort an AB oder BG (R-L1): Rolle Kommissionierung wählt aus der Liste, sonst nur Anzeige. Parameter: art, id, wert, name #}
+{% if darf_mengen %}<select class="platz-wahl" data-feld="lagerort" data-platz-url="{% url 'regal_platz' %}" data-art="{{ art }}" data-id="{{ id }}" data-wert="{{ wert }}" aria-label="Lagerort {{ name }}" title="Lagerort {{ name }} (gilt für alles darunter)">{% platz_optionen wert %}</select>{% else %}<span data-feld="lagerort">{{ wert|default:"–" }}</span>{% endif %}

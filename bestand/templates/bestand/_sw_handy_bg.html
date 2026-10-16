@@ -1,0 +1,7 @@
+{# Baugruppe im Schweißen (Handy), aufklappbar mit Eingabefeldern. Parameter: g (Gruppe), offen #}
+<details class="bg-block" {% if offen %}open{% endif %}>
+  <summary><span class="bg-name">{{ g.bg.baugruppe }}</span><span class="klein leise">{{ g.teile|length }} Teil{{ g.teile|length|pluralize:"e" }}</span></summary>
+  <div class="bg-knoepfe sw-felder">{% with z=g.bg %}{% include "bestand/_sw_handy_felder.html" %}{% endwith %}
+    {% if darf_entnehmen %}<a class="knopf-rot knopf-klein" href="{% url 'sw_zurueck' g.bg.id %}" data-dialog>Zurück</a>{% endif %}</div>
+  {% for t in g.teile %}{% if t.zeigen %}{% include "bestand/_sw_handy_teil.html" %}{% endif %}{% endfor %}
+</details>

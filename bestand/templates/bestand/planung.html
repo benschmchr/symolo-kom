@@ -1,0 +1,29 @@
+{% extends "kern/base.html" %}{% load static bestand_extras %}
+{% block titel %}Planung{% endblock %}
+{% block kopfzusatz %}<link rel="stylesheet" href="{% static 'kern/css/listen.css' %}">{% endblock %}
+{% block inhalt %}
+<div data-planung-seite>
+<p class="label kein-rand">Planung</p><h1>Zur Planung vorgemerkte Arbeitsaufträge</h1>
+<p class="klein leise">{{ kopf.ab }} Arbeitsauftr{{ kopf.ab|pluralize:"ag,äge" }} mit Häkchen im Dashboard oder im Forecast. Hier abhaken nimmt den Auftrag aus der Planung.
+  {% if not darf_planen %}Abhaken dürfen Kommissionierung, Stahlbau und Admin.{% endif %}</p>
+
+<form class="leiste" method="get" action="{% url 'planung' %}" id="dash-filter">
+  <input type="hidden" name="ansicht" value="{{ ansicht }}">
+  <div class="feld suche"><label for="absuche">AB-Suche</label>
+    <div class="suchzeile"><input type="search" id="absuche" name="q" value="{{ q }}" placeholder="Teil der AB-Nummer" enterkeyhint="search" autocomplete="off">
+      <button class="knopf such-knopf" type="submit" title="Suchen" aria-label="Suchen">{% include "kern/_lupe.html" %}</button></div></div>
+  <div class="leiste-knoepfe">
+    <a class="knopf{% if ansicht == 'ab' %} gewaehlt{% endif %}" href="{% url 'planung' %}?ansicht=ab&amp;sort={{ sort }}&amp;neu=1">ABs</a>
+    <a class="knopf{% if ansicht == 'bg' %} gewaehlt{% endif %}" href="{% url 'planung' %}?ansicht=bg&amp;sort={{ sort }}&amp;neu=1">BGs</a>
+    <a class="knopf{% if ansicht == 'alles' %} gewaehlt{% endif %}" href="{% url 'planung' %}?ansicht=alles&amp;sort={{ sort }}&amp;neu=1">Alles</a>
+  </div>
+  <div class="feld"><label for="sortieren">Sortieren</label>
+    <select id="sortieren" name="sort" data-filter>{% for w, t in sortierungen %}<option value="{{ w }}" {% if w == sort %}selected{% endif %}>{{ t }}</option>{% endfor %}</select></div>
+  <div class="feld"><label for="kunde">Kunde</label>
+    <select id="kunde" name="kunde" data-filter>{% for k in kunden %}<option value="{{ k }}" {% if k == kunde %}selected{% endif %}>{{ k }}</option>{% endfor %}</select></div>
+</form>
+
+{% include "bestand/_dash_liste.html" %}
+</div>
+{% endblock %}
+{% block skripte %}<script src="{% static 'kern/js/klappen.js' %}" defer></script><script src="{% static 'bestand/dashboard.js' %}" defer></script><script src="{% static 'bestand/planung.js' %}" defer></script>{% endblock %}

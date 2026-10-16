@@ -1,0 +1,12 @@
+{% extends "kern/base.html" %}{% load static %}
+{% block titel %}{{ titel }}{% endblock %}
+{% block kopfzusatz %}<link rel="stylesheet" href="{% static 'kern/css/listen.css' %}">{% endblock %}
+{% block inhalt %}
+<p class="klein"><a href="{{ zurueck }}">← zurück</a></p>
+<h1>{{ titel }}</h1>
+<form method="post" action="{{ aktion }}" class="karte formular-breit loeschen-frage">{% csrf_token %}
+  <p class="gross">{{ frage }}</p>
+  {% if hinweis %}<p class="leise">{{ hinweis }}</p>{% endif %}
+  <div class="knopfzeile"><button class="knopf-haupt" type="submit">{{ knopf }}</button><a class="knopf" href="{{ zurueck }}">Nein, abbrechen</a></div>
+</form>
+{% endblock %}

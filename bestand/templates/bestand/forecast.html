@@ -1,0 +1,125 @@
+{% extends "kern/base.html" %}{% load static bestand_extras %}
+{% block titel %}Forecast{% endblock %}
+{% block kopfzusatz %}<link rel="stylesheet" href="{% static 'kern/css/listen.css' %}">{% endblock %}
+{% block inhalt %}
+<div class="seitenkopf">
+  <div><p class="label kein-rand">Forecast</p><h1>Offene Aufträge nach Liefertermin</h1></div>
+  {% if planung %}<div class="leiste-knoepfe">
+    <a class="knopf-haupt" href="{% url 'forecast_import' %}">Forecast importieren</a>
+    {% if f %}<a class="knopf" href="{% url 'forecast_daten' %}">Forecast-Daten ansehen</a>{% endif %}
+  </div>{% endif %}
+</div>
+
+{# R-F10 Kopf: Zähler über die angezeigten ABs, Forecast vom (orange, wenn älter als 8 Tage), Heute #}
+<div class="bento fc-kopf">
+  <div class="kachel fc-kachel-rot"><span class="label">Bis 14 Tage</span><span class="zahl" data-kopf="rot">{{ kopf.rot }}</span><span class="klein">rot, auch überfällige</span></div>
+  <div class="kachel fc-kachel-gelb"><span class="label">15–30 Tage</span><span class="zahl" data-kopf="gelb">{{ kopf.gelb }}</span><span class="klein">gelb</span></div>
+  <div class="kachel"><span class="label">Ohne Termin</span><span class="zahl" data-kopf="ohne">{{ kopf.ohne }}</span><span class="klein leise">nur bei Liefertermin „Alle“</span></div>
+  <div class="kachel {% if kopf.alt %}fc-alt{% endif %}" data-kopf="vom">
+    <span class="label">Forecast vom</span>
+    {% if f %}<span class="zahl">{{ kopf.vom|date:"d.m.Y" }}</span>
+      <span class="klein">{% if kopf.alt %}<b>Älter als 8 Tage, bitte neu importieren.</b> {% endif %}{{ f.datei }} · Blatt „{{ f.blatt }}“{% if f.stand %} · {{ f.stand }}{% endif %}</span>
+    {% else %}<span class="zahl">–</span><span class="klein">Noch kein Forecast importiert{% if planung %}: oben „Forecast importieren“{% else %} (macht der Stahlbau){% endif %}.</span>{% endif %}
+  </div>
+</div>
+
+{# R-F8 Filter: AB-Suche mit Lupe, Liefertermin, Anzeige-Knöpfe, Kunde (geändert 14.10.) #}
+<form class="leiste" method="get" action="{% url 'forecast' %}" id="dash-filter">
+  <input type="hidden" name="ansicht" value="{{ ansicht }}">
+  <div class="feld suche"><label for="absuche">AB-Suche</label>
+    <div class="suchzeile"><input type="search" id="absuche" name="q" value="{{ q }}" placeholder="Teil der AB-Nummer" enterkeyhint="search" autocomplete="off">
+      <button class="knopf such-knopf" type="submit" title="Suchen" aria-label="Suchen">{% include "kern/_lupe.html" %}</button></div></div>
+  <div class="feld"><label for="termin">Liefertermin</label>
+    <select id="termin" name="termin" data-filter>{% for w, t in zeitraeume %}<option value="{{ w }}" {% if w == zeitraum %}selected{% endif %}>{{ t }}</option>{% endfor %}</select></div>
+  <div class="leiste-knoepfe">
+    <a class="knopf{% if ansicht == 'ab' %} gewaehlt{% endif %}" href="{% url 'forecast' %}?ansicht=ab&amp;termin={{ zeitraum }}&amp;neu=1">ABs</a>
+    <a class="knopf{% if ansicht == 'bg' %} gewaehlt{% endif %}" href="{% url 'forecast' %}?ansicht=bg&amp;termin={{ zeitraum }}&amp;neu=1">BGs</a>
+    <a class="knopf{% if ansicht == 'alles' %} gewaehlt{% endif %}" href="{% url 'forecast' %}?ansicht=alles&amp;termin={{ zeitraum }}&amp;neu=1">Alles</a>
+  </div>
+  <div class="feld"><label for="kunde">Kunde</label>
+    <select id="kunde" name="kunde" data-filter>{% for k in kunden %}<option value="{{ k }}" {% if k == kunde %}selected{% endif %}>{{ k }}</option>{% endfor %}</select></div>
+</form>
+<p class="klein leise fc-erklaerung"><span class="fc-punkt rot"></span>Liefertermin in höchstens 14 Tagen oder überfällig · <span class="fc-punkt gelb"></span>in 15–30 Tagen · Überfällige sind bei 14 und 30 Tagen immer dabei.</p>
+
+{% if not liste %}
+  <div class="hinweis" role="status">Keine offenen Aufträge{% if zeitraum != "alle" %} mit Liefertermin in den nächsten {{ zeitraum }} Tagen{% endif %}{% if q %} für „{{ q }}“{% endif %}.
+    {% if zeitraum != "alle" or gefiltert %}<a href="{% url 'forecast' %}?ansicht={{ ansicht }}&amp;termin=alle">Alle zeigen</a>{% endif %}</div>
+{% else %}
+{# PC: eine Karte je AB wie im Dashboard; AB-Zeile kräftig, Baugruppen und Teile hell in der Ampelfarbe (R-F10) #}
+<div class="nur-pc karten-liste dash-karten" id="dash-karten" data-ansicht="{{ ansicht }}" data-url="{% url 'forecast_klappen' %}">
+  <table class="tabelle kopfzeile">{% include "bestand/_spalten_dash.html" %}
+    <thead><tr><th></th><th>Arbeitsauftrag</th><th>Baugruppe</th><th>Einzelteil</th><th>Kunde</th><th>Station</th><th class="mitte">Lagerort</th><th>Liefertermin</th><th class="zahl">Fortschritt</th><th></th><th>Stand</th><th class="mitte">Planung</th></tr></thead>
+  </table>
+  {% for d in liste %}{% with a=d.a %}
+  <section class="ab-block">
+  <table class="tabelle dash fc fc-{{ d.ampel }}">{% include "bestand/_spalten_dash.html" %}
+    <tbody>
+    <tr class="dab">
+      <td>{% if d.gruppen %}<button type="button" class="klapp" data-klapp="ab" data-zustand="{{ d.schluessel }}" aria-expanded="{{ d.offen|yesno:'true,false' }}" aria-label="{{ a.o.ab_anzeige }} auf- oder zuklappen">▾</button>{% endif %}</td>
+      <td colspan="3" title="{{ a.o.ab_anzeige }}   {{ a.o.verkaufsartikel }}">{% if d.gruppen %}<button type="button" class="ab-klapp ab-nr" data-klapp-ref="ab">{{ a.o.ab_anzeige }}</button>{% else %}<span class="ab-nr">{{ a.o.ab_anzeige }}</span>{% endif %}<span class="ab-text">{{ a.o.verkaufsartikel }}</span></td>
+      <td title="{{ a.o.kunde }}">{{ a.o.kunde }}</td><td data-feld="station">{{ d.station }}</td><td class="mitte" data-feld="ort">{{ d.ort }}</td>
+      <td data-feld="termin">{% include "bestand/_liefertermin.html" %}</td>
+      <td class="zahl">{{ a.w.prozent|prozent }}</td><td>{% include "bestand/_balken.html" with z=a %}</td><td>{{ a.w.fortschritt }}</td>
+      <td class="mitte plan-zelle">{% include "bestand/_planung_haken.html" %}</td>
+    </tr>
+    {% for g in d.gruppen %}
+    {% if g.bg %}{% with b=g.bg %}
+    <tr class="dbg unter" {% if not d.offen %}hidden{% endif %}>
+      <td>{% if g.teile %}<button type="button" class="klapp" data-klapp="{{ g.html_id }}" data-zustand="{{ g.schluessel }}" aria-expanded="{{ g.offen|yesno:'true,false' }}" aria-label="{{ b.o.name }} auf- oder zuklappen">▾</button>{% endif %}</td>
+      <td></td>
+      <td colspan="2" title="{{ b.o.name }}">{% if g.teile %}<button type="button" class="ab-klapp" data-klapp-ref="{{ g.html_id }}">{{ b.o.name }}</button>{% else %}{{ b.o.name }}{% endif %}</td>
+      <td></td><td>{{ g.station }}</td><td class="mitte">{{ g.ort }}</td><td></td>
+      <td class="zahl">{{ b.w.prozent|prozent }}</td><td>{% include "bestand/_balken.html" with z=b %}</td><td>{{ b.w.fortschritt }}</td><td class="plan-zelle"></td>
+    </tr>
+    {% endwith %}{% else %}
+    <tr class="dbg dohne unter" {% if not d.offen %}hidden{% endif %}>
+      <td><button type="button" class="klapp" data-klapp="{{ g.html_id }}" data-zustand="{{ g.schluessel }}" aria-expanded="{{ g.offen|yesno:'true,false' }}" aria-label="Teile ohne Baugruppe auf- oder zuklappen">▾</button></td>
+      <td></td>
+      <td colspan="2"><button type="button" class="ab-klapp" data-klapp-ref="{{ g.html_id }}">Teile ohne Baugruppe</button></td>
+      <td></td><td></td><td></td><td></td><td></td><td></td><td class="leise">{{ g.teile|length }} Teil{{ g.teile|length|pluralize:"e" }}</td><td class="plan-zelle"></td>
+    </tr>
+    {% endif %}
+      {% for t in g.teile %}
+    <tr class="dteil teil unter" data-bg="{{ g.html_id }}" {% if not d.offen or not g.offen %}hidden{% endif %}>
+      <td></td><td></td><td></td>
+      <td title="{{ t.o.zeichnungsnummer }}   {{ t.o.benennung }}">{{ t.o.zeichnungsnummer }}<span class="ab-text">{{ t.o.benennung }}</span></td>
+      <td></td><td></td><td class="mitte">{{ t.ort }}</td><td></td>
+      <td class="zahl">{{ t.w.prozent|prozent }}</td><td>{% include "bestand/_balken.html" with z=t %}</td><td>{{ t.w.fortschritt }}</td><td class="plan-zelle"></td>
+    </tr>
+      {% endfor %}
+    {% endfor %}
+    </tbody>
+  </table>
+  </section>
+  {% endwith %}{% endfor %}
+</div>
+
+{# Handy: eine Karte je AB, Kopf in Ampelfarbe mit Liefertermin, Baugruppen und Teile aufklappbar #}
+<div class="nur-handy dash-handy" data-ansicht="{{ ansicht }}" data-url="{% url 'forecast_klappen' %}">
+  {% for d in liste %}{% with a=d.a %}
+  <details class="dash-karte fc-karte fc-{{ d.ampel }}" data-zustand="{{ d.schluessel }}" {% if d.offen %}open{% endif %}>
+    <summary>
+      <span class="dk-zeile"><b class="ab-nr">{{ a.o.ab_anzeige }}</b><span class="fc-termin">{% include "bestand/_liefertermin.html" %}</span></span>
+      <span class="klein">{{ a.o.verkaufsartikel }}{% if a.o.kunde %} · {{ a.o.kunde }}{% endif %}</span>
+      <span class="klein">{{ d.station }}{% if d.ort %} · {{ d.ort }}{% endif %}</span>
+      <span class="dk-zeile">{% include "bestand/_balken.html" with z=a %}<span class="klein dk-zahl">{{ a.w.prozent|prozent }}</span><span class="klein dk-stand">{{ a.w.fortschritt }}</span></span>
+      <span class="klein plan-handy">{% include "bestand/_planung_haken.html" with beschriftung=True %}</span>
+    </summary>
+    {% for g in d.gruppen %}
+    <details class="bg-block" data-zustand="{{ g.schluessel }}" {% if g.offen %}open{% endif %}>
+      <summary><span class="bg-name">{% if g.bg %}{{ g.bg.o.name }}{% else %}Teile ohne Baugruppe{% endif %}</span>
+        {% if g.bg %}{% if g.ort %}<span class="klein leise">{{ g.station }} · {{ g.ort }}</span>{% endif %}<span class="klein leise">{{ g.bg.w.fortschritt }}</span>{% include "bestand/_status.html" with z=g.bg teil_url="" %}{% else %}<span class="klein leise">{{ g.teile|length }} Teil{{ g.teile|length|pluralize:"e" }}</span>{% endif %}</summary>
+      {% for t in g.teile %}
+      <div class="dash-teil">
+        <span class="dt-text"><span>{{ t.o.zeichnungsnummer }}</span><span class="klein leise">{{ t.o.benennung }}{% if t.ort %} · {{ t.ort }}{% endif %}</span></span>
+        <span class="klein dk-stand">{{ t.w.fortschritt }}</span>{% include "bestand/_status.html" with z=t teil_url="" %}
+      </div>
+      {% endfor %}
+    </details>
+    {% endfor %}
+  </details>
+  {% endwith %}{% endfor %}
+</div>
+{% endif %}
+{% endblock %}
+{% block skripte %}<script src="{% static 'kern/js/klappen.js' %}" defer></script><script src="{% static 'bestand/dashboard.js' %}" defer></script><script src="{% static 'bestand/planung.js' %}" defer></script>{% endblock %}

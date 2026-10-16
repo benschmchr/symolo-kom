@@ -1,0 +1,14 @@
+{% load bestand_extras %}<tr class="teil unter {{ t.w.css }}" data-zeile="{{ t.schluessel }}" data-statusfarbe {% if bgkey %}data-bg="{{ bgkey }}"{% endif %} {% if not a.offen or bgkey and not bg_offen %}hidden{% endif %}>
+  <td></td>
+  <td title="{{ t.o.zeichnungsnummer }}">{{ t.o.zeichnungsnummer }}</td><td title="{{ t.o.benennung }}">{{ t.o.benennung }}</td>
+  <td class="zahl">{{ t.o.lk_nummer }}</td><td class="zahl">{{ t.o.soll_anzeige }}</td>
+  <td class="zahl">{% if darf_mengen %}<input class="eingabe" id="v-pc-{{ t.o.id }}" type="text" inputmode="numeric" autocomplete="off" data-feld="vorhanden" data-soll="{{ t.o.menge_gesamt|zahl }}" data-url="{% url 'bestand_vorhanden' t.o.id %}" data-version="{{ t.o.version }}" value="{{ t.o.vorhanden|zahl }}" aria-label="Vorhanden {{ t.o.zeichnungsnummer }}">{% else %}<span data-feld="vorhanden">{{ t.o.vorhanden|zahl }}</span>{% endif %}</td>
+  <td class="mitte leise" data-feld="lagerort">{{ t.o.lagerort|default:"–" }}</td>
+  <td>{% if darf_mengen %}{% url 'bestand_umschalten' t.o.id as tu %}{% include "bestand/_status.html" with z=t teil_url=tu %}{% else %}{% include "bestand/_status.html" with z=t teil_url="" %}{% endif %}</td>
+  <td data-feld="fortschritt">{{ t.w.fortschritt }}</td>
+  <td>{% include "bestand/_balken.html" with z=t %}</td>
+  <td data-feld="eingelagert">{{ t.w.eingelagert|date:"d.m.Y" }}</td><td data-feld="komplett">{{ t.w.komplett|date:"d.m.Y" }}</td>
+  <td class="mehr zahl">{{ t.o.menge_bg }}</td><td class="mehr">{{ t.o.index }}</td><td class="mehr">{{ t.o.arbeitsgang }}</td>
+  <td class="mehr" title="{{ t.o.material }}">{{ t.o.material }}</td><td class="mehr">{{ t.o.profil }}</td><td class="mehr">{{ t.o.abmasse }}</td><td class="mehr" title="{{ t.o.bemerkung }}">{{ t.o.bemerkung }}</td>
+  <td></td>
+</tr>

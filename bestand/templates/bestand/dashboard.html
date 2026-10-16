@@ -1,0 +1,39 @@
+{% extends "kern/base.html" %}{% load static bestand_extras %}
+{% block titel %}Dashboard{% endblock %}
+{% block kopfzusatz %}<link rel="stylesheet" href="{% static 'kern/css/listen.css' %}">{% endblock %}
+{% block inhalt %}
+<p class="label kein-rand">Dashboard</p><h1>Fortschritt der Arbeitsaufträge</h1>
+{# R-DB5 Kopf: Zähler und Gesamtfortschritt über alle ABs (unabhängig vom Filter) #}
+<div class="buehne dash-kopf">
+  <div class="bento dash-reihe">
+    <div class="kachel"><span class="label">Komplett</span><span class="zahl" data-kopf="komplett">{{ kopf.komplett }}</span>
+      <span class="balken komplett" role="img" aria-label="{{ kopf.komplett_anteil }} % der Aufträge"><span style="width:{{ kopf.komplett_anteil }}%"></span></span></div>
+    <div class="kachel"><span class="label">Teilweise</span><span class="zahl" data-kopf="teilweise">{{ kopf.teilweise }}</span>
+      <span class="balken teilweise" role="img" aria-label="{{ kopf.teilweise_anteil }} % der Aufträge"><span style="width:{{ kopf.teilweise_anteil }}%"></span></span></div>
+    <div class="kachel"><span class="label">Offen</span><span class="zahl" data-kopf="offen">{{ kopf.offen }}</span>
+      <span class="balken offen" role="img" aria-label="{{ kopf.offen_anteil }} % der Aufträge"><span style="width:{{ kopf.offen_anteil }}%"></span></span></div>
+    <div class="kachel kachel-akzent"><span class="label">Aufträge</span><span class="zahl" data-kopf="ab">{{ kopf.ab }}</span><span class="label">Gesamtfortschritt</span><span class="zahl zahl-mittel" data-kopf="gesamt">{{ kopf.gesamt_txt }}</span>
+      <span class="balken" style="background:var(--surface-glass)" role="img" aria-label="{{ kopf.gesamt_txt }}"><span style="width:{% widthratio kopf.gesamt 1 100 %}%;background:var(--on-brand)"></span></span></div>
+  </div>
+</div>
+
+{# Suche ganz links, Lupe, Anzeige-Knöpfe, Sortieren (R-DB2, geändert 14.10.) #}
+<form class="leiste" method="get" action="{% url 'dashboard' %}" id="dash-filter">
+  <input type="hidden" name="ansicht" value="{{ ansicht }}">
+  <div class="feld suche"><label for="absuche">AB-Suche</label>
+    <div class="suchzeile"><input type="search" id="absuche" name="q" value="{{ q }}" placeholder="Teil der AB-Nummer" enterkeyhint="search" autocomplete="off">
+      <button class="knopf such-knopf" type="submit" title="Suchen" aria-label="Suchen">{% include "kern/_lupe.html" %}</button></div></div>
+  <div class="leiste-knoepfe">
+    <a class="knopf{% if ansicht == 'ab' %} gewaehlt{% endif %}" href="{% url 'dashboard' %}?ansicht=ab&amp;sort={{ sort }}&amp;neu=1">ABs</a>
+    <a class="knopf{% if ansicht == 'bg' %} gewaehlt{% endif %}" href="{% url 'dashboard' %}?ansicht=bg&amp;sort={{ sort }}&amp;neu=1">BGs</a>
+    <a class="knopf{% if ansicht == 'alles' %} gewaehlt{% endif %}" href="{% url 'dashboard' %}?ansicht=alles&amp;sort={{ sort }}&amp;neu=1">Alles</a>
+  </div>
+  <div class="feld"><label for="sortieren">Sortieren</label>
+    <select id="sortieren" name="sort" data-filter>{% for w, t in sortierungen %}<option value="{{ w }}" {% if w == sort %}selected{% endif %}>{{ t }}</option>{% endfor %}</select></div>
+  <div class="feld"><label for="kunde">Kunde</label>
+    <select id="kunde" name="kunde" data-filter>{% for k in kunden %}<option value="{{ k }}" {% if k == kunde %}selected{% endif %}>{{ k }}</option>{% endfor %}</select></div>
+</form>
+
+{% include "bestand/_dash_liste.html" %}
+{% endblock %}
+{% block skripte %}<script src="{% static 'kern/js/klappen.js' %}" defer></script><script src="{% static 'bestand/dashboard.js' %}" defer></script><script src="{% static 'bestand/planung.js' %}" defer></script>{% endblock %}
