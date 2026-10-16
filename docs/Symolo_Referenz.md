@@ -181,6 +181,7 @@ Tabelle `fwm.stamm_prozesse` (BEKANNT), Ergebnis von `select * from fwm.stamm_pr
 | `symolo/quelle/47_bestand.js` | ABs mit Baugruppen und Teilen laden, Suche, Filter, Sortierung |
 | `symolo/quelle/48_eintragen.js` | Vorhanden, Vorhanden = Soll, alles ✓, Soll ändern (mit Datum nach R-T1) |
 | `symolo/quelle/49_lagerort.js` | Lagerort an AB und BG, Abgleich, Regal, aufsplitten und zusammenführen |
+| `symolo/quelle/4A_dashboard.js` | Dashboard: Sortierung wie Excel (DASH), Filter, Kopf, Klappzustand |
 | `symolo/quelle/50_benutzer.js` | Platzhalter für Benutzer und Rollen (vorerst ohne) |
 | `symolo/ansichten/<bereich>/` | eine Ansicht je Bereich |
 | `symolo/fertig/<bereich>.js` | fertiges Hook-Objekt zum Einfügen in Symolo (gebaut mit `tools/symolo_bauen.py`) |
@@ -205,6 +206,7 @@ Im Code steht **OFFEN (Symolo)** an jeder ungeklärten Stelle und **VERMUTET** a
 | SQL-Sprache, `where`/`order by`/`in`, Zeilengrenze | einfache Abfragen ohne `limit` und `join` |
 | Länge einer Abfrage | `in (…)` in Stücken zu 500 IDs |
 | Mengen als Zahl oder als Text (`21.000`) | beides wird gelesen; Text, der keine Zahl ist, zählt 0 |
+| Klappzustand des Dashboards je Benutzer speichern | vorerst nur solange das Fenster offen ist; später eine Tabelle (Benutzer, Ansicht, Schlüssel) |
 | Datumsformat beim Schreiben | wie beim Lesen: `2026-10-16T00:00:00.0000000Z` |
 | Sammel-Update (z. B. Lagerort für alle Teile eines AB) | einzeln, je 8 gleichzeitig |
 | Gleichzeitiges Ändern | `udate` vor dem Speichern vergleichen |
