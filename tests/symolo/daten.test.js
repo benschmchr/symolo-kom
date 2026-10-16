@@ -4,24 +4,7 @@
 
 const test = require("node:test");
 const assert = require("node:assert/strict");
-const fs = require("node:fs");
-const path = require("node:path");
-const vm = require("node:vm");
-
-const SYMOLO = path.join(__dirname, "..", "..", "symolo");
-
-/* Frische Umgebung je Test: Beispieldaten, Nachbau, alle Ansichten. */
-function umgebung(zusatz) {
-    const ctx = { console: { warn() {}, log: console.log }, setTimeout, clearTimeout, Promise, JSON };
-    ctx.window = ctx;
-    vm.createContext(ctx);
-    for (const datei of ["lokal/beispieldaten.js", "lokal/symolo-nachbau.js", "fertig/lokal_ansichten.js"]) {
-        vm.runInContext(fs.readFileSync(path.join(SYMOLO, datei), "utf8"), ctx, { filename: datei });
-    }
-    const v = ctx.KOM_ANSICHTEN.verbindungstest();
-    if (zusatz) zusatz(ctx, v);
-    return { ctx, v, db: ctx.symolo._nachbau.daten() };
-}
+const { umgebung } = require("./umgebung");
 
 test("Lesen: Namen statt IDs, Verweis zu Gruppennamen aufgelöst", async () => {
     const { v } = umgebung();

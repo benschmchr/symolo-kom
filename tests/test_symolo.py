@@ -3,13 +3,17 @@
 Die Datenschicht selbst wird mit Node getestet (tests/symolo/*.test.js) und hier mit aufgerufen.
 """
 
+import json
+import os
 import re
 import shutil
 import subprocess
+from decimal import Decimal
 from pathlib import Path
 
 import pytest
 
+from bestand import rechnen
 from tools import symolo_bauen
 
 BASIS = Path(__file__).resolve().parent.parent
@@ -77,8 +81,50 @@ def test_symolo_ansichten_sind_gueltiges_javascript():
         subprocess.run([NODE, "-e", js, pfad], check=True)
 
 
+NODE_TESTS = sorted((BASIS / "tests" / "symolo").glob("*.test.js"))
+
+
 @pytest.mark.skipif(NODE is None, reason="Node fehlt")
-def test_symolo_datenschicht_mit_node():
-    dateien = sorted(str(p) for p in (BASIS / "tests" / "symolo").glob("*.test.js"))
-    erg = subprocess.run([NODE, "--test", *dateien], capture_output=True, text=True)
+@pytest.mark.parametrize("datei", NODE_TESTS, ids=lambda p: p.name)
+def test_symolo_node(datei):
+    """Datenschicht, Bestandsliste und Prüffall 9.1 (pruef_status_9_1.test.js) mit Node gegen den Nachbau."""
+    erg = subprocess.run([NODE, "--test", str(datei)], capture_output=True, text=True)
     assert erg.returncode == 0, erg.stdout[-4000:] + erg.stderr[-2000:]
+
+
+@pytest.mark.skipif(NODE is None, reason="Node fehlt")
+def test_symolo_rechnet_wie_die_bisherige_app(tmp_path):
+    """Alle Beispieldaten: Status, Fortschritt und Prozent aus 45_rechnen.js gleich wie bestand/rechnen.py."""
+    ausgabe = tmp_path / "vergleich.json"
+    datei = BASIS / "tests" / "symolo" / "bestand.test.js"
+    env = {**os.environ, "KOM_VERGLEICH_AUSGABE": str(ausgabe)}
+    erg = subprocess.run([NODE, "--test", str(datei)], capture_output=True, text=True, env=env)
+    assert erg.returncode == 0, erg.stdout[-4000:]
+    j = json.loads(ausgabe.read_text(encoding="utf-8"))
+
+    def dec(x):
+        return None if x is None else Decimal(str(x))
+
+    teile = {t["id"]: rechnen.teil(dec(t["vorhanden"]), dec(t["menge_gesamt"])) for t in j["daten"]["teil"]}
+    je_bg, je_ab = {}, {}
+    for t in j["daten"]["teil"]:
+        je_ab.setdefault(t["auftrag_id_auftrag"], []).append(teile[t["id"]])
+        if t["baugruppe_id_baugruppe"] is not None:
+            je_bg.setdefault(t["baugruppe_id_baugruppe"], []).append(teile[t["id"]])
+
+    geprueft = 0
+    for a in j["abs"]:
+        for z in a["zeilen"]:
+            if z["art"] == "teil":
+                w = teile[z["id"]]
+            elif z["art"] == "bg":
+                w = rechnen.sammel(je_bg.get(z["id"], []))
+            else:
+                w = rechnen.sammel(je_ab.get(z["id"], []))
+            assert (z["status"], z["fortschritt"], round(z["prozent"], 6)) == (
+                w.status,
+                w.fortschritt,
+                round(w.prozent, 6),
+            ), a["ab"]
+            geprueft += 1
+    assert geprueft > 100

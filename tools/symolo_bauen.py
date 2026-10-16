@@ -30,6 +30,7 @@ FERTIG = SYMOLO / "fertig"
 # Je Bereich eine Ansicht (Ben, 16.10.2026: „mach wie es übersichtlicher ist“).
 # klasse: Wrapper-Klasse (jede CSS-Regel beginnt damit), praefix: für IDs, css_id: für injector.css/rmcss.
 ANSICHTEN = [
+    {"name": "bestandsliste", "titel": "Bestandsliste", "klasse": "kom-bl", "praefix": "komBl", "css_id": "KOMBLCSS"},
     {"name": "verbindungstest", "titel": "Verbindungstest", "klasse": "kom-vt", "praefix": "komVt", "css_id": "KOMVTCSS"},
 ]  # fmt: skip
 

@@ -630,6 +630,23 @@ datenLesen: async function (name, optionen) {
     return liste;
 },
 
+/* Wie datenLesen mit "feld in (werte)", aber in Stücken zu 500 Werten,
+   damit die Abfrage nicht zu lang wird.
+   OFFEN (Symolo): Gibt es eine Grenze für die Länge einer Abfrage? */
+datenLesenIn: async function (name, feld, werte, optionen) {
+
+    const o = Object.assign({ aufloesen: false }, optionen || {});
+    let liste = [];
+
+    for (let i = 0; i < werte.length; i += 500) {
+        const wo = Object.assign({}, o.wo || {});
+        wo[feld] = werte.slice(i, i + 500);
+        liste = liste.concat(await this.datenLesen(name, Object.assign({}, o, { wo: wo })));
+    }
+
+    return liste;
+},
+
 /* OFFEN (Symolo): Typ von ja/nein. Wir verstehen alle üblichen Formen. */
 istJa: function (wert) {
 
@@ -790,6 +807,361 @@ datenArchivieren: async function (name, zeile) {
     const werte = {};
     werte[feld] = true;
     return this.datenAendern(name, zeile, werte);
+},
+
+
+/* ===========================================================================
+   RECHNEN: Status, Prozent, Fortschritt (R-S1 bis R-S7)
+   Nachbau von bestand/rechnen.py (dort die Excel-Formeln). Nichts davon
+   wird gespeichert, alles wird beim Anzeigen berechnet.
+
+   Mengen werden in Tausendsteln als ganze Zahl gerechnet (21 -> 21000),
+   damit 0,06 + 0,02 genau 0,08 bleibt (Mengen haben 3 Nachkommastellen).
+   =========================================================================== */
+
+/* Menge -> Tausendstel. Leer oder Text zählt 0 (Excel-Funktion N).
+   OFFEN (Symolo): Kommen Zahlen als Zahl oder als Text ("21.000")?
+   Wir verstehen beides; Text, der keine Zahl ist, zählt 0. */
+mengeMilli: function (wert) {
+
+    if (typeof wert === "number") return Number.isFinite(wert) ? Math.round(wert * 1000) : 0;
+    if (typeof wert !== "string") return 0;
+
+    const t = wert.trim();
+    if (!/^-?\d+([.,]\d+)?$/.test(t)) return 0;
+
+    return Math.round(Number(t.replace(",", ".")) * 1000);
+},
+
+/* Tausendstel -> Text wie Excel (deutsch): 21000 -> "21", 60 -> "0,06". */
+zahlText: function (milli) {
+
+    const minus = milli < 0 ? "-" : "";
+    const m = Math.abs(milli);
+    const ganz = Math.floor(m / 1000);
+    const rest = m % 1000;
+
+    if (rest === 0) return minus + ganz;
+    return minus + ganz + "," + String(rest).padStart(3, "0").replace(/0+$/, "");
+},
+
+/* Soll wie in der Liste: Zahl, sonst der Text aus der Kommissionierliste. */
+sollText: function (o) {
+
+    const w = o.menge_gesamt;
+    if (w === null || w === undefined || w === "") return this.text(o.menge_gesamt_text);
+    return this.zahlText(this.mengeMilli(w));
+},
+
+/* Werte eines Teils (R-S1, R-S3, R-S5).
+   code: 0 offen, 1 teilweise, 2 komplett */
+teilWerte: function (vorhanden, soll, eingelagert, komplett) {
+
+    const v = this.mengeMilli(vorhanden);
+    const s = this.mengeMilli(soll);
+    const code = v <= 0 ? 0 : (v >= s ? 2 : 1);
+
+    let prozent = 0;
+    if (code === 2) prozent = 1;
+    if (code === 1) prozent = Math.min(0.99, Math.max(0.01, v / s));
+
+    let fortschritt = this.zahlText(v) + " / " + this.zahlText(s);
+    if (v > s) fortschritt += "  (+" + this.zahlText(v - s) + " zu viel)";
+
+    return {
+        status: ["Offen", "Teilweise", "Komplett"][code],
+        prozent: prozent,
+        fortschritt: fortschritt,
+        code: code,
+        ist: Math.min(Math.max(v, 0), s),
+        soll: s,
+        eingelagert: this.text(eingelagert),
+        komplett: this.text(komplett),
+        istTeil: true
+    };
+},
+
+/* Werte einer BG oder eines AB direkt aus allen Teilen darunter
+   (R-S2, R-S4, R-S5, R-T2). Ohne Teile ist der Status "-". */
+sammelWerte: function (teile) {
+
+    const anz = teile.length;
+    const summe = teile.reduce((a, t) => a + t.code, 0);
+    const anzKomplett = teile.filter(t => t.code === 2).length;
+
+    let status = "Teilweise";
+    if (anz === 0) status = "-";
+    else if (summe === 2 * anz) status = "Komplett";
+    else if (summe === 0) status = "Offen";
+
+    let prozent = 0;
+    if (status === "Komplett") prozent = 1;
+    if (status === "Teilweise") {
+        const soll = teile.reduce((a, t) => a + t.soll, 0);
+        const roh = soll ? teile.reduce((a, t) => a + t.ist, 0) / soll : 0;
+        prozent = Math.min(0.99, Math.max(0.01, roh));
+    }
+
+    /* Datum: frühestes Eingelagert, spätestes Komplett (nur wenn komplett).
+       ISO-Text lässt sich direkt vergleichen. */
+    const ein = teile.map(t => t.eingelagert).filter(Boolean).sort();
+    const fertig = teile.map(t => t.komplett).filter(Boolean).sort();
+
+    return {
+        status: status,
+        prozent: prozent,
+        fortschritt: anzKomplett + " von " + anz,
+        code: null,
+        anzTeile: anz,
+        anzKomplett: anzKomplett,
+        eingelagert: ein.length ? ein[0] : "",
+        komplett: fertig.length && status === "Komplett" ? fertig[fertig.length - 1] : "",
+        istTeil: false
+    };
+},
+
+/* R-S7 Sortierschlüssel: Komplett 0, Teilweise 2, sonst 4, minus Prozent. */
+sortWert: function (w) {
+
+    const basis = w.status === "Komplett" ? 0 : (w.status === "Teilweise" ? 2 : 4);
+    return basis - w.prozent;
+},
+
+/* R-W1: "» entnehmen" nur bei AB/BG mit Status Komplett, nie bei Teilen. */
+entnehmenMoeglich: function (w) {
+
+    return !w.istTeil && w.status === "Komplett";
+},
+
+/* CSS-Klasse für die Statusfarbe. */
+statusKlasse: function (w) {
+
+    return { Komplett: "kom-komplett", Teilweise: "kom-teilweise", Offen: "kom-offen" }[w.status] || "kom-leer-status";
+},
+
+
+/* ===========================================================================
+   BESTAND: ABs mit Baugruppen und Teilen laden, Baum bauen, suchen,
+   filtern, sortieren (R-A1 bis R-A4, R-S9)
+   Nachbau von bestand/ansicht.py. Gebraucht von der Bestandsliste und
+   später von Dashboard, Regal und Forecast.
+
+   Ein Knoten im Baum:
+     AB:   { art: "ab",   o: Zeile aus kom_auftrag,   w: Werte, ohne: [Teile ohne BG], bgs: [BGs] }
+     BG:   { art: "bg",   o: Zeile aus kom_baugruppe, w: Werte, teile: [Teile] }
+     Teil: { art: "teil", o: Zeile aus kom_teil,      w: Werte }
+   Dazu je Knoten zeigen (Treffer der Suche/des Filters) und offen (aufgeklappt).
+   =========================================================================== */
+
+/* Knöpfe "ABs", "BGs", "Alles" (Ben, 14.10.2026) */
+bestandAnzeigen: [["ab", "ABs"], ["bg", "BGs"], ["alles", "Alles"]],
+
+/* R-A4: ohne Auswahl bleibt die Reihenfolge wie importiert. */
+bestandSortierungen: [
+    ["import", "Wie importiert"],
+    ["az", "A-Z"],
+    ["za", "Z-A"],
+    ["auf", "Fortschritt aufsteigend"],
+    ["ab", "Fortschritt absteigend"]
+],
+
+/* R-A3 Status-Filter */
+bestandStatusWahl: [
+    ["alle", "Alle"],
+    ["offene", "Offene (Teilweise + Offen)"],
+    ["teilweise", "Nur Teilweise"],
+    ["offen", "Nur Offen"],
+    ["komplett", "Nur Komplett"]
+],
+
+bestandStatusListe: {
+    offene: ["Teilweise", "Offen"],
+    teilweise: ["Teilweise"],
+    offen: ["Offen"],
+    komplett: ["Komplett"]
+},
+
+/* IDs nur zum Zuordnen und Sortieren, nie zur Anzeige.
+   OFFEN (Symolo): ID als Zahl oder Text? Beides geht. */
+idVergleich: function (a, b) {
+
+    const x = Number(a), y = Number(b);
+    if (Number.isFinite(x) && Number.isFinite(y)) return x - y;
+    return String(a) < String(b) ? -1 : (String(a) > String(b) ? 1 : 0);
+},
+
+/* Alle ABs der Bestandsliste (nicht archiviert) mit BGs und Teilen.
+   Drei Abfragen; BGs und Teile in Stücken über die AB-IDs. */
+bestandLaden: async function () {
+
+    const auftraege = await this.datenLesen("auftrag", { wo: { bereich: "bestand" }, aufloesen: false });
+
+    auftraege.sort((a, b) =>
+        (this.mengeMilli(a.reihenfolge) - this.mengeMilli(b.reihenfolge)) || this.idVergleich(a._id, b._id));
+
+    const ids = auftraege.map(a => a._id);
+    const baugruppen = await this.datenLesenIn("baugruppe", "auftrag", ids, { sortierung: ["zeile"] });
+    const teile = await this.datenLesenIn("teil", "auftrag", ids, { sortierung: ["zeile"] });
+
+    return this.bestandBaum(auftraege, baugruppen, teile);
+},
+
+/* Baum aus den drei Listen. Reihenfolge der BGs und Teile wie importiert
+   (Feld zeile). Teile ohne BG stehen vorn, wie in Excel. */
+bestandBaum: function (auftraege, baugruppen, teile) {
+
+    const nachZeile = (a, b) => (this.mengeMilli(a.zeile) - this.mengeMilli(b.zeile)) || this.idVergleich(a._id, b._id);
+    const leer = v => v === null || v === undefined || v === "";
+
+    const teileJeAb = {};
+    const teileJeBg = {};
+
+    teile.slice().sort(nachZeile).forEach(t => {
+        const knoten = {
+            art: "teil",
+            o: t,
+            w: this.teilWerte(t.vorhanden, t.menge_gesamt, t.datum_eingelagert, t.datum_komplett),
+            zeigen: true
+        };
+        if (leer(t._baugruppe_id)) {
+            (teileJeAb[String(t._auftrag_id)] = teileJeAb[String(t._auftrag_id)] || []).push(knoten);
+        } else {
+            (teileJeBg[String(t._baugruppe_id)] = teileJeBg[String(t._baugruppe_id)] || []).push(knoten);
+        }
+    });
+
+    const bgsJeAb = {};
+
+    baugruppen.slice().sort(nachZeile).forEach(b => {
+        const unter = teileJeBg[String(b._id)] || [];
+        const knoten = { art: "bg", o: b, w: this.sammelWerte(unter.map(t => t.w)), teile: unter, zeigen: true, offen: true };
+        (bgsJeAb[String(b._auftrag_id)] = bgsJeAb[String(b._auftrag_id)] || []).push(knoten);
+    });
+
+    return auftraege.map(a => {
+        const ohne = teileJeAb[String(a._id)] || [];
+        const bgs = bgsJeAb[String(a._id)] || [];
+        const alle = ohne.concat(...bgs.map(b => b.teile));
+        return { art: "ab", o: a, w: this.sammelWerte(alle.map(t => t.w)), ohne: ohne, bgs: bgs, zeigen: true, offen: true };
+    });
+},
+
+/* Alle Teile eines AB (ohne BG zuerst). */
+bestandTeile: function (ab) {
+
+    return ab.ohne.concat(...ab.bgs.map(b => b.teile));
+},
+
+/* Alle Zeilen eines AB in der Reihenfolge wie importiert. */
+bestandZeilen: function (ab) {
+
+    const z = [ab].concat(ab.ohne);
+    ab.bgs.forEach(b => { z.push(b); z.push(...b.teile); });
+    return z;
+},
+
+/* R-S9: ABs gesamt, komplett, teilweise, offen. */
+bestandZaehler: function (abs) {
+
+    return {
+        ab: abs.length,
+        komplett: abs.filter(a => a.w.status === "Komplett").length,
+        teilweise: abs.filter(a => a.w.status === "Teilweise").length,
+        offen: abs.filter(a => a.w.status === "Offen").length
+    };
+},
+
+/* Ben, 14.10.2026: nach Nummer A-Z / Z-A oder nach Fortschritt;
+   gleiche Werte nach AB-Nummer. "import" lässt die Reihenfolge. */
+bestandSortieren: function (abs, wie) {
+
+    const nummer = a => this.text(a.o.ab_anzeige).toLowerCase();
+    const vergleich = (x, y) => (x < y ? -1 : (x > y ? 1 : 0));
+    const liste = abs.slice();
+
+    if (wie === "az") liste.sort((a, b) => vergleich(nummer(a), nummer(b)));
+    if (wie === "za") liste.sort((a, b) => vergleich(nummer(b), nummer(a)));
+    if (wie === "auf") liste.sort((a, b) => (a.w.prozent - b.w.prozent) || vergleich(nummer(a), nummer(b)));
+    if (wie === "ab") liste.sort((a, b) => (b.w.prozent - a.w.prozent) || vergleich(nummer(a), nummer(b)));
+
+    return liste;
+},
+
+/* R-A1 Suche: setzt zeigen und gibt die Zahl der Treffer zurück.
+   AB-Nummer -> ganzer AB; BG -> mit allen Teilen; Teil -> mit AB- und BG-Kopf.
+   Gesucht wird in Zeichnungsnummer, Benennung, LK-Nummer und Lagerort. */
+bestandSuchen: function (abs, begriff) {
+
+    const q = this.text(begriff).toLowerCase();
+    const trifft = o => ["zeichnungsnummer", "benennung", "lk_nummer", "lagerort"]
+        .some(f => this.text(o[f]).toLowerCase().indexOf(q) > -1);
+    let treffer = 0;
+
+    abs.forEach(a => {
+        const zeilen = this.bestandZeilen(a);
+        zeilen.forEach(z => { z.zeigen = false; });
+
+        if (this.text(a.o.ab_anzeige).toLowerCase().indexOf(q) > -1) {
+            zeilen.forEach(z => { z.zeigen = true; });
+            treffer++;
+            return;
+        }
+
+        a.ohne.forEach(t => {
+            if (trifft(t.o)) { t.zeigen = a.zeigen = true; treffer++; }
+        });
+
+        a.bgs.forEach(b => {
+            if (trifft(b.o)) {
+                b.zeigen = a.zeigen = true;
+                b.teile.forEach(t => { t.zeigen = true; });
+                treffer++;
+            }
+            b.teile.forEach(t => {
+                if (trifft(t.o)) { t.zeigen = b.zeigen = a.zeigen = true; treffer++; }
+            });
+        });
+    });
+
+    return treffer;
+},
+
+/* R-A2/R-A3: Anzeige (Ebene) und Status der jeweiligen Zeile, mit ihren
+   Kopfzeilen. Gibt die Zahl der Treffer zurück. */
+bestandFiltern: function (abs, anzeige, status) {
+
+    const stl = this.bestandStatusListe[status] || null;
+    let treffer = 0;
+
+    const passt = (z, ebene) => {
+        const ok = anzeige === "ab" ? ebene === "ab" : (anzeige === "bg" ? ebene !== "teil" : true);
+        return ok && (stl === null || stl.indexOf(z.w.status) > -1);
+    };
+
+    abs.forEach(a => {
+        const zeilen = this.bestandZeilen(a);
+        zeilen.forEach(z => { z.zeigen = false; });
+
+        if (passt(a, "ab")) { a.zeigen = true; treffer++; }
+
+        a.ohne.forEach(t => {
+            if (passt(t, "teil")) { t.zeigen = a.zeigen = true; treffer++; }
+        });
+
+        a.bgs.forEach(b => {
+            if (passt(b, "bg")) { b.zeigen = a.zeigen = true; treffer++; }
+            b.teile.forEach(t => {
+                if (passt(t, "teil")) { t.zeigen = b.zeigen = a.zeigen = true; treffer++; }
+            });
+        });
+
+        /* Ben, 14.10.2026: bei "ABs"/"BGs" bleibt alles darunter aufklappbar. */
+        if ((anzeige === "ab" || anzeige === "bg") && status === "alle" && a.zeigen) {
+            zeilen.forEach(z => { z.zeigen = true; });
+        }
+    });
+
+    return treffer;
 },
 
 

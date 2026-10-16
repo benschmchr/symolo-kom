@@ -72,7 +72,7 @@ Das schreibt `symolo/fertig/<bereich>.js` neu und prüft dabei die Regeln aus de
 3. Der Netzweg stellt sich selbst um: Ist `window.symolo.internal.connection` vorhanden, nutzt die App `internal.connection.websocket.request`, sonst `network.websocket.request` (Methode `netzweg` in `40_daten.js`). Das ist die einzige Stelle dafür.
 4. Nicht einfügen: `symolo/lokal/` (Nachbau, Beispieldaten, Testleiste), `symolo/test.html` und `fertig/lokal_ansichten.js`.
 
-Jede Ansicht hat eine eigene Wrapper-Klasse (`kom-vt` …), eine eigene CSS-ID (`KOMVTCSS` …) und ein eigenes ID-Präfix. So können auch mehrere Ansichten im selben Formular liegen.
+Jede Ansicht hat eine eigene Wrapper-Klasse (`kom-bl`, `kom-vt` …), eine eigene CSS-ID (`KOMBLCSS`, `KOMVTCSS` …) und ein eigenes ID-Präfix. So können auch mehrere Ansichten im selben Formular liegen.
 
 ## 4. Regeln, an die sich die App hält
 
@@ -96,6 +96,8 @@ Jede Ansicht hat eine eigene Wrapper-Klasse (`kom-vt` …), eine eigene CSS-ID (
 | Reihenfolge von `par`, Form der `idList`, ID als Text oder Zahl | `40_daten.js` | wie der Pfad; `idList` als Text mit Kommas; ID als Text |
 | Schreibweise der Felder (Get gegenüber Select) | nichts | egal, die App liest tolerant |
 | SQL-Sprache, Zeilengrenze | `sqlBauen` | einfache Abfragen; einige tausend Zeilen |
+| Länge einer Abfrage | `datenLesenIn` in `40_daten.js` | `in (…)` in Stücken zu 500 IDs |
+| Mengen als Zahl oder Text | `mengeMilli` in `45_rechnen.js` | beides geht; Text, der keine Zahl ist, zählt 0 |
 | Endpunkt im Fenster | `10_einstellungen.js` | setzt `internal.connection` selbst |
 | Benutzer, Rollen, Rechte | `50_benutzer.js`, Rechte in Symolo | vorerst keine |
 | Schrift und Farben im Fenster | `symolo/quelle/gemeinsam.css` | FWM-Variablen an der Ansicht, Thema light |
@@ -104,9 +106,10 @@ Jede Ansicht hat eine eigene Wrapper-Klasse (`kom-vt` …), eine eigene CSS-ID (
 ## 6. Abnahme (in dieser Reihenfolge)
 
 1. **Verbindungstest** (`fertig/verbindungstest.js`): Die Ansicht zeigt `fwm.stamm_prozesse` mit Gruppennamen und ohne IDs. Das ist die erste Ansicht, die Sie einbinden. Sie braucht nur `prozess` und `gruppe` in `20_tabellen.js`.
-2. Mit einer Testtabelle `schreibenErlaubtInSymolo` einschalten und anlegen und ändern prüfen. Die ID darf beim Anlegen nicht gesetzt werden, und beim Ändern muss das Komplettobjekt ankommen.
-3. Die Bereiche der Reihe nach, sobald sie gebaut sind.
-4. Tests: `python -m pytest tests/test_symolo.py`. Das umfasst die Skill-Prüfungen und die Datenschicht gegen den Nachbau.
+2. **Bestandsliste** (`fertig/bestandsliste.js`, nur lesen): braucht `auftrag`, `baugruppe` und `teil` in `20_tabellen.js`. Sie liest drei Abfragen (ABs mit `bereich = 'bestand'`, dann Baugruppen und Teile dieser ABs) und zeigt Status und Fortschritt wie die Excel-Liste.
+3. Mit einer Testtabelle `schreibenErlaubtInSymolo` einschalten und anlegen und ändern prüfen. Die ID darf beim Anlegen nicht gesetzt werden, und beim Ändern muss das Komplettobjekt ankommen.
+4. Die Bereiche der Reihe nach, sobald sie gebaut sind.
+5. Tests: `python -m pytest tests/test_symolo.py`. Das umfasst die Skill-Prüfungen und die Datenschicht gegen den Nachbau.
 
 ## 7. Lokal testen (ohne Symolo)
 

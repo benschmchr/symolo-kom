@@ -180,3 +180,9 @@ Offen (werden vor ihrer Phase gefragt): W4 Morgenmail, W5 Datenübernahme, W7 Ä
 - **Reihenfolge:** Schritt für Schritt (Phase 0 Grundlage, dann Bestandsliste, dann Bereich für Bereich).
 - **Testen:** Nachbau von `window.symolo` mit den Beispiel- und Demo-Daten (`symolo/lokal/`), Testseite `symolo/test.html` per Doppelklick. In Symolo ist Schreiben gesperrt, bis der Entwickler die Tabellennamen geprüft hat (`schreibenErlaubtInSymolo`).
 - **Tabellen:** eigene Annahmen `fwm.kom_…` (Felder 1:1 aus der Django-App), kommentiert mit VERMUTET/OFFEN; die Tabellenliste aus Symolo gibt es noch nicht.
+
+## Umbau für Symolo, Phase 1: Bestandsliste lesend (16.10.2026)
+- **Ansicht `bestandsliste`** wie die bisherige Liste (Entwurf D, Stand nach Bens Test vom 14.10.): Zähler, Suche, Status, Sortierung, Knöpfe ABs/BGs/Alles, „Weitere Spalten“, Klick auf AB/BG klappt, Doppelklick zeigt nur diesen AB. Startzustand der Klappen wie bisher (nur der erste AB offen, komplette BGs zu).
+- **Nur lesen:** Vorhanden, Lagerort, „alles ✓“ und AB bearbeiten folgen in Phase 2, Entnehmen und „Befinden sich im Schweißen“ in Phase 6, Import in Phase 7. Handy-Karten entfallen vorerst; im Fenster scrollt die Liste waagerecht.
+- **Rechnen in JS** (`symolo/quelle/45_rechnen.js`) wie `bestand/rechnen.py`; Mengen in Tausendsteln, damit Kommazahlen genau bleiben. Prüffall 9.1 läuft auch gegen den JS-Code, und ein Vergleichstest prüft alle Beispieldaten gegen `rechnen.py`.
+- **Schnell bei vielen ABs:** Zeilen unter einem zugeklappten AB werden nicht gebaut; Karten außerhalb des Bildes rechnet der Browser erst beim Hinscrollen. Gemessen mit 313 ABs und gut 5.000 Teilen im Nachbau: Laden 0,4 s, Suche mit allen ABs offen 0,7 s.
