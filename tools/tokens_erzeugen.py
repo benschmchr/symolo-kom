@@ -22,6 +22,25 @@ def _wert(v):
 
 
 def css_erzeugen(tokens: dict) -> str:
+    themen, gemeinsam, je_thema = variablen(tokens)
+    zeilen = [
+        f"/* {tokens['name']} – automatisch erzeugt aus design/tokens.json "
+        f"(Version {tokens['version']}) mit tools/tokens_erzeugen.py. Nicht von Hand ändern. */",
+        ":root {",
+        *gemeinsam,
+        "}",
+    ]
+    # Grundwert wie im Designsystem: dark; Arbeitsseiten setzen data-theme="light"
+    erstes = themen[0]
+    zeilen += [f':root, [data-theme="{erstes}"] {{', *je_thema[erstes], "}"]
+    for t in themen[1:]:
+        zeilen += [f'[data-theme="{t}"] {{', *je_thema[t], "}"]
+    return "\n".join(zeilen) + "\n"
+
+
+def variablen(tokens: dict):
+    """Alle CSS-Variablen als Zeilen „  --name: wert;“: (Themen, gemeinsame Zeilen, Zeilen je Thema).
+    Wird auch von tools/symolo_bauen.py benutzt (Variablen innerhalb der Ansicht statt auf :root)."""
     themen = [t["id"] for t in tokens["color"]["themes"]]
     je_thema = {t: [] for t in themen}
     gemeinsam = []
@@ -50,20 +69,7 @@ def css_erzeugen(tokens: dict) -> str:
             gemeinsam.append(f"  --fw-{n}: {s['fontWeight']};")
             if "letterSpacing" in s:
                 gemeinsam.append(f"  --ls-{n}: {s['letterSpacing']};")
-
-    zeilen = [
-        f"/* {tokens['name']} – automatisch erzeugt aus design/tokens.json "
-        f"(Version {tokens['version']}) mit tools/tokens_erzeugen.py. Nicht von Hand ändern. */",
-        ":root {",
-        *gemeinsam,
-        "}",
-    ]
-    # Grundwert wie im Designsystem: dark; Arbeitsseiten setzen data-theme="light"
-    erstes = themen[0]
-    zeilen += [f':root, [data-theme="{erstes}"] {{', *je_thema[erstes], "}"]
-    for t in themen[1:]:
-        zeilen += [f'[data-theme="{t}"] {{', *je_thema[t], "}"]
-    return "\n".join(zeilen) + "\n"
+    return themen, gemeinsam, je_thema
 
 
 def main():

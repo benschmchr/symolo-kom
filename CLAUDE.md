@@ -4,6 +4,14 @@ Interne Web-App (löst `bestand_kom_stahlbau.xlsm` ab). Ersteller-Vermerk „Ers
 
 ## Stack
 Python 3.12, Django 5.2, SQLite, Vorlagen (Templates) mit eigenem CSS aus dem FWM-Design und einfachem JavaScript. Kein React, Astro oder WordPress.
+Umbau für Symolo (ab 16.10.2026): Die App läuft künftig nur als Fenster in Symolo. Je Bereich eine Ansicht in JavaScript als Symolo-Hook-Objekt unter `symolo/`; Daten per WebSocket aus Symolo. Die Django-App bleibt bis zur Ablösung als Vergleich.
+
+## Symolo (Pflicht, Ben 16.10.2026)
+- Für jede Arbeit am Umbau gelten der Skill `.claude/skills/symolo-barebone-framework/` und alles in `docs/Symolo_Referenz.md` (Vorgaben, Befehlsliste, test.html-Ablauf, Entscheidungen, offene Punkte). Entwickler-Anleitung: `docs/Symolo_Anbindung.md`.
+- Nie auf Symolo, `wss://fwm.symolo.biz` oder Symolo-Datenbanken zugreifen; Zugangsdaten aus test.html nirgends übernehmen. Getestet wird nur mit dem Nachbau (`symolo/lokal/`).
+- Nur WebSocket, kein `fetch`. IDs nie anzeigen, beim Anlegen nie eine ID setzen, Verknüpfungen als Namen auflösen, beim Ändern das komplette Objekt senden, archivieren statt löschen.
+- Datenbankzugriff nur über `symolo/quelle/40_daten.js`; Tabellen- und Spaltennamen nur in `symolo/quelle/20_tabellen.js`. Unklares mit `OFFEN (Symolo)`, Annahmen mit `VERMUTET` kommentieren.
+- Vorerst ohne Anmeldung und Rechte. Excel einlesen macht die App selbst (Lesebibliothek erlaubt).
 
 ## Ordner
 - `config/` Einstellungen, Adressen
@@ -12,10 +20,12 @@ Python 3.12, Django 5.2, SQLite, Vorlagen (Templates) mit eigenem CSS aus dem FW
 - `design/tokens.json` Designwerte; `tools/tokens_erzeugen.py` erzeugt daraus `kern/static/kern/design/tokens.css`
 - `tests/` automatische Tests, `tests/daten/pruef_status.csv` ist der Prüffall
 - `docs/Entscheidungen.md` Entscheidungen (W…, D…) nach Phase
+- `symolo/` Umbau für Symolo: `quelle/` gemeinsamer Code (Einstellungen, Tabellen, Datenschicht, Anzeige), `ansichten/<bereich>/` je Bereich, `fertig/` gebaute Hook-Objekte (nicht von Hand ändern), `lokal/` Nachbau und Beispieldaten, `test.html` Testseite; Tests in `tests/test_symolo.py` und `tests/symolo/*.test.js`
 
 ## Befehle
 - Tests: `python -m pytest` (gezielt: `python -m pytest tests/test_schweissen.py -k R_W3`)
 - Prüfen: `ruff check .` und `ruff format --check .`; Formatieren: `ruff format .`
+- Symolo: bauen `python tools/symolo_bauen.py` (nach jeder Änderung in `symolo/quelle` oder `symolo/ansichten`), Beispieldaten neu `python tools/symolo_beispieldaten.py`, testen `symolo/test.html` im Browser öffnen
 - Starten: `KOM_DEBUG=1 KOM_DATENBANK=db.sqlite3 python manage.py runserver` (ohne `KOM_DATENBANK` bricht der Start ab)
 
 ## Konventionen

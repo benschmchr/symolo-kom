@@ -1,0 +1,49 @@
+<!DOCTYPE html>
+<html lang="de" data-theme="light">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="author" content="Ben Schumacher">
+<title>Bestandsliste – lokaler Test ohne Symolo</title>
+
+<!-- ==== NUR STANDALONE – geht NICHT ins Symolo-Formular. ====
+     Seite, Schrift und Testleiste gehören im Fenster dem Framework. -->
+<link rel="stylesheet" href="../kern/static/kern/design/tokens.css">
+<style>
+@font-face { font-family: "Open Sans"; font-weight: 400; src: url("../kern/static/kern/fonts/open-sans-latin-400-normal.woff2") format("woff2"); }
+@font-face { font-family: "Open Sans"; font-weight: 600; src: url("../kern/static/kern/fonts/open-sans-latin-600-normal.woff2") format("woff2"); }
+@font-face { font-family: "Open Sans"; font-weight: 700; src: url("../kern/static/kern/fonts/open-sans-latin-700-normal.woff2") format("woff2"); }
+html, body { height: 100%; }
+body { margin: 0; display: flex; flex-direction: column; background: var(--surface-0); color: var(--ink);
+  font-family: var(--font-sans); font-size: var(--fs-small); }
+.testleiste { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-3);
+  padding: var(--space-2) var(--space-4); background: var(--brand-gray); color: var(--on-brand); }
+.testleiste strong { font-weight: 700; }
+.testleiste select, .testleiste button { font: inherit; min-height: 32px; border-radius: var(--radius-sm);
+  border: 1px solid var(--line-strong); padding: 0 var(--space-2); }
+.testleiste label { display: inline-flex; align-items: center; gap: var(--space-1); }
+.testleiste .hinweis { flex-basis: 100%; opacity: .85; }
+#_output { flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column; }
+#_output > * { flex: 1 1 auto; }
+</style>
+<!-- ==== ENDE NUR STANDALONE ==== -->
+</head>
+<body>
+
+<div class="testleiste" id="testleiste"></div>
+
+<!-- POLYFILL 1: der Container. Im Framework: this.ctrlbyBind("_output").SelfElement -->
+<div id="_output"></div>
+
+<!-- POLYFILL 2: statt der Symolo-Bibliotheken der Nachbau mit Beispieldaten.
+     Keine Verbindung zu Symolo. -->
+<script src="lokal/beispieldaten.js"></script>
+<script src="lokal/symolo-nachbau.js"></script>
+
+<!-- POLYFILL 3: die fertigen Ansichten, derselbe Text wie für Symolo -->
+<script src="fertig/lokal_ansichten.js"></script>
+
+<!-- POLYFILL 4: Testleiste; ruft die drei Hooks wie das Framework -->
+<script src="lokal/testseite.js"></script>
+</body>
+</html>
