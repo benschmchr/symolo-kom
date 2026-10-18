@@ -42,6 +42,17 @@ test("R_M4 Punkt-Schreibweise abgelehnt, zu groß abgelehnt, Dezimalkomma beim S
     }
 });
 
+test("R_M4 Soll: höchstens drei Nachkommastellen, keine Sonderschreibweisen", () => {
+    const { v } = umgebung(null, "bestandsliste");
+    assert.match(v.mengeEingabe("0,0004", false).fehler, /drei Stellen/);
+    assert.match(v.mengeEingabe("1,2345", false).fehler, /drei Stellen/);
+    assert.equal(v.mengeEingabe("1234,567", false).milli, 1234567);
+    for (const ein of ["1e5", "+5", ",5", "1 000"]) {
+        assert.match(v.mengeEingabe(ein, false).fehler, /Zahl ab 0/, ein);
+        assert.match(v.mengeEingabe(ein, true).fehler, /ganze Zahl/, ein);
+    }
+});
+
 test("R_T1 Daten je Teil", () => {
     const { v } = umgebung(null, "bestandsliste");
     const T1 = "2026-10-01T00:00:00.0000000Z", T2 = "2026-10-02T00:00:00.0000000Z";

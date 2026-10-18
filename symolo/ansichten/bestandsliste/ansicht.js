@@ -41,8 +41,8 @@ before_set_values: async function (form, { data }) {
     this.leisteBauen();
     const start = this.startOptionen();
     if (start.suche) this.suche = this.sucheEl.value = this.text(start.suche);   /* Sprung aus einem anderen Bereich */
-    this.knopf(this.fuss, "Neu laden", () => this.laden());
-    this.knopf(this.fuss, "AB archivieren …", () => this.abEingabeDialog());
+    this.fussKnopf("Neu laden", "Laden", () => this.laden());
+    this.fussKnopf("AB archivieren …", "Archivieren …", () => this.abEingabeDialog());
 
     await this.laden();
 },
@@ -271,7 +271,7 @@ bestandSpalten: [
     ["vh", "Vorhanden"], ["lager", "Lagerort"], ["status", "Status"], ["fort", "Fortschritt"], ["balken", ""],
     ["datum", "Eingelagert"], ["datum", "Komplett"],
     ["mbg", "Menge / BG", true], ["idx", "Index", true], ["text", "Arbeitsgang", true], ["text", "Material", true],
-    ["text", "Profil", true], ["text", "Abmaße", true], ["text", "Bemerkung", true], ["aktion", ""]
+    ["text", "Profil", true], ["text", "Abmaße", true], ["text", "Bemerkung", true], ["aktion", "Entnehmen"]
 ],
 
 tabelleNeu: function (parent, klasse) {
@@ -288,7 +288,7 @@ kopfzeileBauen: function (parent) {
     const tr = this.el(this.el(tab, "thead"), "tr");
     this.bestandSpalten.forEach(([art, titel, mehr]) => {
         const zahl = art === "lk" || art === "soll" || art === "vh" || art === "mbg";
-        this.el(tr, "th", (zahl ? "kom-zahl" : "") + (mehr ? " kom-mehr" : ""), titel);
+        this.el(tr, "th", (zahl ? "kom-zahl" : "") + (mehr ? " kom-mehr" : "") + (art === "aktion" ? " kom-aktion" : ""), titel);
     });
 },
 
@@ -521,7 +521,7 @@ teilZeile: function (parent, t, a) {
     this.zelle(tr, this.datumText(t.w.eingelagert));
     this.zelle(tr, this.datumText(t.w.komplett));
     this.mehrZellen(tr, o);
-    this.zelle(tr, "");
+    this.zelle(tr, "", "kom-aktion");
 },
 
 /* Vorhanden eintragen (R-M1): gespeichert wird beim Verlassen oder mit Enter.
@@ -540,12 +540,11 @@ vorhandenZelle: function (tr, t, a, vh) {
         if (this.text(f.value) === vh) return;
         const e = this.mengeEingabe(f.value, true);
         if (e.fehler) {
-            f.classList.add("kom-ungueltig");
-            f.title = e.fehler;
+            /* Meldung bleibt stehen, das Feld zeigt wieder den gespeicherten Wert (Prüfbericht B5). */
+            f.value = vh;
             this.statusZeigen(e.fehler, "fehler");
             return;
         }
-        f.classList.remove("kom-ungueltig");
         this.abAendern(a, () => this.vorhandenSetzen(t, e.milli));
     };
 

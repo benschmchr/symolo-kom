@@ -9,8 +9,9 @@
 
    Zustand, den die Ansicht führt: abs, suche, kunde, ansichtWahl, sortierung,
    gemerkt (R-DB4), markenZeilen/marken (Planung), listeHeute (Tageszahl).
-   OFFEN (Symolo): Der Klappzustand wird bisher nur solange gemerkt, wie das
-   Fenster offen ist. Je Benutzer dauerhaft geht erst mit einer Tabelle
+   Der Klappzustand (Ansicht und Auf-/Zuklappen) bleibt im Browser dieses
+   Geräts gespeichert (localStorage, laut Skill für solche Zustände erlaubt).
+   OFFEN (Symolo): Je Benutzer auf jedem Gerät geht erst mit einer Tabelle
    (Benutzer, Ansicht, Schlüssel) und der Benutzer-Anbindung.
    =========================================================================== */
 
@@ -46,6 +47,7 @@ ansichtKnoepfe: {},
 
 listeLeisteBauen: function (felder) {
 
+    this.klappenLaden();
     const leiste = this.el(this.koerper, "div", "kom-leiste");
 
     felder.forEach(f => {
@@ -58,6 +60,7 @@ listeLeisteBauen: function (felder) {
                     /* R-DB4: Ansicht umstellen = Startzustand der neuen Ansicht */
                     this.ansichtWahl = wert;
                     this.gemerkt = {};
+                    this.klappenMerken();
                     this.zeichnen();
                 });
             });
@@ -273,6 +276,34 @@ planungHaken: async function (d, box) {
     this.zeichnen();
 },
 
+/* R-DB4: Ansicht und Klappzustand im Browser merken. Ohne Speicher (privates Fenster, gesperrt) gilt
+   der Startzustand, wie bisher nur solange das Fenster offen ist. */
+klappenSchluessel: function () {
+
+    return "kom." + this.ansicht.name + ".klappen";
+},
+
+klappenLaden: function () {
+
+    try {
+        const z = JSON.parse(window.localStorage.getItem(this.klappenSchluessel()) || "null");
+        if (!z || typeof z !== "object") return;
+        if (this.dashAnsichten.some(a => a[0] === z.ansicht)) this.ansichtWahl = z.ansicht;
+        this.gemerkt = z.gemerkt && typeof z.gemerkt === "object" ? z.gemerkt : {};
+    } catch (fehler) {
+        /* kein Speicher: Startzustand */
+    }
+},
+
+klappenMerken: function () {
+
+    try {
+        window.localStorage.setItem(this.klappenSchluessel(), JSON.stringify({ ansicht: this.ansichtWahl, gemerkt: this.gemerkt }));
+    } catch (fehler) {
+        /* kein Speicher: nur solange das Fenster offen ist */
+    }
+},
+
 /* Klappen merken (R-DB4) und diese Karte neu zeichnen. */
 klappKnopf: function (td, offen, name, umschalten) {
 
@@ -390,7 +421,7 @@ karteZeichnen: function (karte, d) {
     const neu = () => this.karteZeichnen(karte, d);
     /* Baugruppen dieses AB, die einzeln im Schweißen liegen */
     const imSw = this.imSwJeAb[this.text(a.o.ab_schluessel)] || [];
-    const abUmschalten = () => { d.offen = !d.offen; this.gemerkt[d.schluessel] = d.offen; neu(); };
+    const abUmschalten = () => { d.offen = !d.offen; this.gemerkt[d.schluessel] = d.offen; this.klappenMerken(); neu(); };
 
     /* AB-Zeile: Nummer, Verkaufsartikel, Kunde */
     const tr = this.el(koerper, "tr", "kom-dab " + this.statusKlasse(a.w));
@@ -402,7 +433,7 @@ karteZeichnen: function (karte, d) {
     if (!d.offen) return;
 
     d.gruppen.forEach(g => {
-        const gUmschalten = () => { g.offen = !g.offen; this.gemerkt[g.schluessel] = g.offen; neu(); };
+        const gUmschalten = () => { g.offen = !g.offen; this.gemerkt[g.schluessel] = g.offen; this.klappenMerken(); neu(); };
 
         if (g.bg) {
             const btr = this.el(koerper, "tr", "kom-dbg");

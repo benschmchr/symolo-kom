@@ -107,6 +107,27 @@ test("R_W2 ganzer AB: alle Zeilen im Schweißen, in der Bestandsliste ausgeblend
     assert.equal(p[0].ab, "AB2515902");
 });
 
+test("R_W2 Abbruch mitten im Entnehmen: die Meldung sagt, dass schon etwas gespeichert ist", async () => {
+    const u = await frisch();
+    await u.voll("AB2515902");
+    const a = await u.ab("AB2515902");
+    const meldungen = [];
+    u.v.statusZeigen = (m, art) => meldungen.push([m, art]);
+    u.v.datenAendern = async () => { throw new Error("Keine Antwort nach 15 Sekunden."); };   /* Leitung weg nach dem Anlegen */
+
+    assert.equal(await u.v.sicher(() => u.v.swEntnehmen(a.o._id)), null);
+    assert.equal(meldungen.length, 1);
+    assert.match(meldungen[0][0], /^Keine Antwort nach 15 Sekunden\. Ein Teil davon ist schon gespeichert\. Bitte „Neu laden“/);
+    assert.equal(meldungen[0][1], "fehler");
+    assert.ok((await u.sw("AB2515902")).length > 0, "die neuen Zeilen stehen schon im Schweißen");
+    assert.ok(await u.ab("AB2515902"), "das Original ist noch da: nichts fehlt, höchstens doppelt");
+
+    /* Scheitert schon der erste Schritt, kommt nur die Meldung. */
+    meldungen.length = 0;
+    await u.v.sicher(async () => { throw new Error("Nicht gefunden."); });
+    gleich(meldungen, [["Nicht gefunden.", "fehler"]]);
+});
+
 test("R_W2 die Werte der Teile werden mitgenommen", async () => {
     const u = await frisch();
     await u.voll("AB2515902");
@@ -210,7 +231,8 @@ test("R_I10 der Import erkennt einen AB im Schweißen (swHatAb, auch in anderer 
 test("R_W5 Spalten in der Reihenfolge des Blatts Schweißen", () => {
     const { v } = umgebung(null, "schweissen");
     const titel = v.swSpalten.map(s => s[1]).filter(Boolean);
-    gleich(titel.slice(4, 11), ["Mitarbeiter", "Arbeitsplatz", "Eingelagert", "Entnommen", "Liefertermin Stahlbau", "Termin Versand", "DLZ"]);
+    assert.equal(v.swSpalten[v.swSpalten.length - 1][0], "aktion", "Aktionsspalte ganz rechts wie bisher");
+    gleich(titel.slice(4, 11), ["Mitarbeiter", "Arbeitsplatz", "Eingelagert", "Entnommen", "Liefertermin Stahlbau", "Termin Versand", "DLZ (Tage)"]);
 });
 
 test("R_W5 DLZ ist Termin Versand minus Eingelagert in Tagen (leer, solange eins fehlt)", async () => {

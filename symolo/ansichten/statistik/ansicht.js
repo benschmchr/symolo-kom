@@ -34,7 +34,7 @@ before_set_values: async function (form, { data }) {
     this.el(leiste, "span", "kom-klein kom-leise", "gilt für beide Liefertreue-Kacheln");
 
     this.inhaltEl = this.el(this.koerper, "div", "kom-st-gitter");
-    this.knopf(this.fuss, "Neu laden", () => this.laden());
+    this.fussKnopf("Neu laden", "Laden", () => this.laden());
 
     await this.laden();
 },

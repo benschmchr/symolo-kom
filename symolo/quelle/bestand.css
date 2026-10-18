@@ -30,13 +30,13 @@
 
 /* Breite Liste scrollt waagerecht; die Kopfzeile scrollt mit. */
 .ANSICHT .kom-liste { overflow-x: auto; }
-.ANSICHT .kom-karte { min-width: 1510px; margin-bottom: var(--space-4); background: var(--surface-100);
-  border: 1px solid var(--line); border-radius: var(--radius-lg); overflow: hidden; }
+.ANSICHT .kom-karte { min-width: 1400px; margin-bottom: var(--space-4); background: var(--surface-100);
+  border: 1px solid var(--line); border-radius: var(--radius-lg); overflow: clip; }
 .ANSICHT .kom-mehr-an .kom-karte { min-width: 2520px; }
 /* Karten außerhalb des sichtbaren Bereichs rechnet der Browser erst beim Hinscrollen (schnell bei vielen ABs). */
 .ANSICHT .kom-karte { content-visibility: auto; contain-intrinsic-size: auto 120px; }
 
-.ANSICHT .kom-bestand { width: 100%; min-width: 1510px; table-layout: fixed; border-collapse: collapse;
+.ANSICHT .kom-bestand { width: 100%; min-width: 1400px; table-layout: fixed; border-collapse: collapse;
   font-size: var(--fs-small); line-height: var(--lh-small); }
 .ANSICHT .kom-mehr-an .kom-bestand { min-width: 2520px; }
 .ANSICHT .kom-bestand th { padding: var(--space-1) var(--space-2); text-align: left; font-weight: var(--fw-label);
@@ -47,6 +47,12 @@
 .ANSICHT .kom-bestand .kom-zahl { text-align: right; font-variant-numeric: tabular-nums; }
 .ANSICHT .kom-bestand .kom-mitte { text-align: center; }
 .ANSICHT .kom-bestand .kom-leise { color: var(--ink-muted); }
+/* Aktionsspalte bleibt beim waagerechten Scrollen rechts sichtbar (Prüfbericht P3). overflow: clip an der
+   Karte statt hidden, sonst klebt sie an der Karte statt am Fenster. Zeilenfarben unten überschreiben den Grund. */
+.ANSICHT .kom-bestand .kom-aktion { position: sticky; right: 0; z-index: 1; background: var(--surface-100);
+  box-shadow: inset 1px 0 0 var(--line); }
+/* Klapp-Pfeil ohne Innenabstand rechts, sonst zeigt die schmale Zelle Auslassungspunkte neben dem Pfeil. */
+.ANSICHT .kom-bestand td.kom-klappzelle { padding-right: 0; text-overflow: clip; }
 
 /* Spaltenbreiten wie bisher; weitere Spalten nur mit dem Schalter. */
 .ANSICHT .kom-c-klapp { width: 40px; }
@@ -69,7 +75,7 @@
 .ANSICHT .kom-mehr-an col.kom-mehr { display: table-column; }
 
 /* Zeilen: AB kräftig, Baugruppe hell mit Balken links, Teil zart. */
-.ANSICHT .kom-ab td { font-weight: var(--fw-label); }
+.ANSICHT .kom-ab td { font-weight: 700; }   /* wie bisher (listen.css) */
 .ANSICHT .kom-ab.kom-komplett td { background: var(--status-komplett); color: var(--on-status); }
 .ANSICHT .kom-ab.kom-teilweise td { background: var(--status-teilweise); color: var(--on-status); }
 .ANSICHT .kom-bg.kom-komplett td { background: color-mix(in srgb, var(--status-komplett) 55%, var(--surface-100)); }
@@ -84,7 +90,7 @@
 .ANSICHT .kom-klapp, .ANSICHT .kom-name { padding: 0; border: none; background: none; color: inherit;
   font: inherit; cursor: pointer; text-align: left; }
 .ANSICHT .kom-klapp { width: 28px; min-height: 28px; font-size: var(--fs-body); }
-.ANSICHT .kom-name { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; text-decoration: underline dotted; }
+.ANSICHT .kom-name { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .ANSICHT .kom-klapp:focus-visible, .ANSICHT .kom-name:focus-visible { outline: 2px solid var(--focus); outline-offset: 1px; }
 
 .ANSICHT .kom-statusmarke { display: inline-block; padding: 0 var(--space-2); border: 1px solid var(--line-strong);

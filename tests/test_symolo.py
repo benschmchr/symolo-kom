@@ -225,3 +225,59 @@ def test_symolo_statistik_wie_die_bisherige_app(tmp_path):
     for name in py:
         assert json.loads(json.dumps(py[name])) == js[name], name
     assert py["ueberfaellig"] and any(x[1] is not None for x in py["monat_ab"] + py["ia_ab"])
+
+
+@pytest.mark.skipif(NODE is None, reason="Node fehlt")
+def test_R_S1_R_S2_R_M1_symolo_zufallsvergleich_rechnen_und_eingabe(tmp_path):
+    """Status, Fortschritt und Prozent (R-S1 bis R-S5) und die Vorhanden-Eingabe (R-M1, R-M4) für viele Zufallsfälle:
+    45_rechnen.js gleich wie bestand/rechnen.py und die bisherige Eingabe (Prüfbericht E1).
+    Bewusst strenger als bisher und deshalb nicht im Vergleich: „1e3“, „+5“, „.5“ (Prüfbericht B2)."""
+    import random
+
+    from bestand.views import _menge_eingabe
+
+    zufall = random.Random(20261018)
+
+    def menge():
+        r = zufall.random()
+        if r < 0.1:
+            return None
+        if r < 0.5:
+            return Decimal(zufall.randint(0, 40))
+        return Decimal(zufall.randint(0, 40000)) / 1000
+
+    gruppen = [[(menge(), menge()) for _ in range(zufall.randint(1, 6))] for _ in range(600)]
+
+    zeichen = "0123456789,. -a"
+    eingaben = ["", "0", "5", " 7 ", "8,0", "2,5", "1.000", "1,000", "12.500", "-1", "abc", "999999999", "1000000000"]
+    eingaben += ["".join(zufall.choice(zeichen) for _ in range(zufall.randint(1, 7))) for _ in range(600)]
+    eingaben = [t for t in eingaben if not re.search(r"[eE+]|(^|[^0-9])[.,]", t.strip())]
+
+    def zahl(d):
+        return None if d is None else float(d)
+
+    eingabe, ausgabe = tmp_path / "eingabe.json", tmp_path / "ausgabe.json"
+    eingabe.write_text(
+        json.dumps({"gruppen": [[[zahl(v), zahl(s)] for v, s in g] for g in gruppen], "eingaben": eingaben}),
+        encoding="utf-8",
+    )
+    env = {**os.environ, "KOM_RECHNEN_EINGABE": str(eingabe), "KOM_RECHNEN_AUSGABE": str(ausgabe)}
+    erg = subprocess.run(
+        [NODE, "--test", str(BASIS / "tests" / "symolo" / "bestand.test.js")], capture_output=True, text=True, env=env
+    )
+    assert erg.returncode == 0, erg.stdout[-4000:]
+    js = json.loads(ausgabe.read_text(encoding="utf-8"))
+
+    def w(x):
+        return [x.status, x.fortschritt, round(x.prozent, 9)]
+
+    for g, j in zip(gruppen, js["gruppen"], strict=True):
+        teile = [rechnen.teil(v, s) for v, s in g]
+        assert [w(t) for t in teile] == [[a, b, round(c, 9)] for a, b, c in j["teile"]], g
+        a, b, c = j["sammel"]
+        assert w(rechnen.sammel(teile)) == [a, b, round(c, 9)], g
+
+    for t, (milli, fehler) in zip(eingaben, js["eingaben"], strict=True):
+        wert, py_fehler = _menge_eingabe(t)
+        assert bool(fehler) == bool(py_fehler), t
+        assert (None if wert is None else int(wert) * 1000) == milli, t

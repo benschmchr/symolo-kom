@@ -25,7 +25,7 @@ Umbau für Symolo (ab 16.10.2026): Die App läuft künftig nur als Fenster in Sy
 ## Befehle
 - Tests: `python -m pytest` (gezielt: `python -m pytest tests/test_schweissen.py -k R_W3`)
 - Prüfen: `ruff check .` und `ruff format --check .`; Formatieren: `ruff format .`
-- Symolo: bauen `python tools/symolo_bauen.py` (nach jeder Änderung in `symolo/quelle` oder `symolo/ansichten`), Beispieldaten neu `python tools/symolo_beispieldaten.py`, testen `symolo/test.html` im Browser öffnen
+- Symolo: bauen `python tools/symolo_bauen.py` (nach jeder Änderung in `symolo/quelle` oder `symolo/ansichten`, und nach jedem Merge oder Konflikt: `symolo/fertig/` nie von Hand lösen, immer neu bauen), Beispieldaten neu `python tools/symolo_beispieldaten.py`, testen `symolo/test.html` im Browser öffnen
 - Starten: `KOM_DEBUG=1 KOM_DATENBANK=db.sqlite3 python manage.py runserver` (ohne `KOM_DATENBANK` bricht der Start ab)
 
 ## Konventionen

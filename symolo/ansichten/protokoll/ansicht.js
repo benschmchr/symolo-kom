@@ -35,7 +35,7 @@ before_set_values: async function (form, { data }) {
     this.einstEl = this.el(this.koerper, "div", "kom-einstellungen");
     this.leisteEl = this.el(this.koerper, "div", "kom-leiste");
     this.inhaltEl = this.el(this.koerper, "div", "kom-inhalt");
-    this.knopf(this.fuss, "Neu laden", () => this.laden());
+    this.fussKnopf("Neu laden", "Laden", () => this.laden());
 
     await this.laden();
 },

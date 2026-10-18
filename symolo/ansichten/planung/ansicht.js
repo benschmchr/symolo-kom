@@ -34,7 +34,7 @@ before_set_values: async function (form, { data }) {
     this.listeLeisteBauen(["suche", "knoepfe", "sort", "kunde"]);
     this.meldungEl = this.el(this.koerper, "div", "kom-hinweis");
     this.listeEl = this.el(this.koerper, "div", "kom-liste");
-    this.knopf(this.fuss, "Neu laden", () => this.laden());
+    this.fussKnopf("Neu laden", "Laden", () => this.laden());
 
     await this.laden();
 },

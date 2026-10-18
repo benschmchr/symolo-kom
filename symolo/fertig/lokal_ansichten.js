@@ -11,7 +11,7 @@ window.KOM_ANSICHTEN_TITEL["bestandsliste"] = "Bestandsliste";
 window.KOM_ANSICHTEN["bestandsliste"] = function () { return {
 
 /* Kenndaten dieser Ansicht (aus tools/symolo_bauen.py). */
-ansicht: { name: "bestandsliste", titel: "Bestandsliste", klasse: "kom-bl", praefix: "komBl", cssId: "KOMBLCSS" },
+ansicht: { name: "bestandsliste", titel: "Bestandsliste", klasse: "kom-bl", praefix: "komBl", cssId: "KOMBLCSS", satz: "" },
 
 
 /* ===========================================================================
@@ -447,6 +447,11 @@ datumZeitText: function (value) {
 
 datenHinweise: [],
 
+/* Zahl der gelungenen Schreibvorgänge in diesem Fenster. sicher() vergleicht sie vor und nach einer
+   Aufgabe: Bricht eine Aufgabe mit mehreren Schritten mittendrin ab, sagt die Meldung, dass schon
+   etwas gespeichert ist (Prüfbericht D3). OFFEN (Symolo): Gibt es eine Transaktion? */
+geschrieben: 0,
+
 /* "symolo", "symolo-test" oder "lokal" (siehe einstellungen.quelle). */
 datenQuelle: function () {
 
@@ -820,6 +825,7 @@ schreiben: async function (art, name, id, werte, stand, optionen) {
         const neu = this.antwortObjekt(
             await this.anfrage("dsf.dbo.CreateObjectJson", [tabelle, JSON.stringify(roh)])
         );
+        this.geschrieben += 1;
 
         return this.zeileLesen(name, neu || {});
     }
@@ -849,6 +855,7 @@ schreiben: async function (art, name, id, werte, stand, optionen) {
         const neu = this.antwortObjekt(
             await this.anfrage("dsf.dbo.UpdateObjectJson", [tabelle, JSON.stringify(roh)])
         );
+        this.geschrieben += 1;
 
         /* OFFEN (Symolo): Was liefert UpdateObjectJson zurück? Ist es kein
            Objekt, gilt das gesendete. */
@@ -915,16 +922,46 @@ datenArchivieren: async function (name, zeile) {
 
 /* Menge -> Tausendstel. Leer oder Text zählt 0 (Excel-Funktion N).
    OFFEN (Symolo): Kommen Zahlen als Zahl oder als Text ("21.000")?
-   Wir verstehen beides; Text, der keine Zahl ist, zählt 0. */
+   VERMUTET: Text kommt aus der Datenbank, also mit Punkt als Komma und ohne
+   Tausenderpunkt ("21.000" = 21). Alles andere (z. B. "1.234.567", "1e5",
+   über 999.999.999) zählt 0 und steht oben als Hinweis, statt still falsch
+   zu rechnen (Prüfbericht B1, B3). */
 mengeMilli: function (wert) {
 
-    if (typeof wert === "number") return Number.isFinite(wert) ? Math.round(wert * 1000) : 0;
+    if (wert === null || wert === undefined) return 0;
+    if (typeof wert === "number") {
+        if (Number.isFinite(wert) && Math.abs(wert) <= this.mengeGrenze) return Math.round(wert * 1000);
+        this.mengeUnklar(wert);
+        return 0;
+    }
     if (typeof wert !== "string") return 0;
 
     const t = wert.trim();
-    if (!/^-?\d+([.,]\d+)?$/.test(t)) return 0;
+    if (t === "") return 0;
+    if (!/^-?\d+([.,]\d+)?$/.test(t)) {
+        if (/\d/.test(t)) this.mengeUnklar(t);   /* reiner Text wie "Rest" zählt 0 wie in Excel, ohne Hinweis */
+        return 0;
+    }
 
-    return Math.round(Number(t.replace(",", ".")) * 1000);
+    const zahl = Number(t.replace(",", "."));
+    if (Math.abs(zahl) > this.mengeGrenze) {
+        this.mengeUnklar(t);
+        return 0;
+    }
+    return Math.round(zahl * 1000);
+},
+
+/* Größte Menge, wie bei der Eingabe (R-M4, Mengenfeld mit 12 Stellen). */
+mengeGrenze: 999999999,
+
+/* Unklare Menge einmal als Hinweis oben vormerken (höchstens drei Beispiele). */
+mengeUnklar: function (wert) {
+
+    if (!Array.isArray(this.datenHinweise)) return;
+    const hinweis = "Menge „" + String(wert) + "“ ist unklar und zählt 0.";
+    const schon = this.datenHinweise.filter(h => h.indexOf("Menge „") === 0);
+    if (schon.length >= 3 || schon.indexOf(hinweis) >= 0) return;
+    this.datenHinweise.push(hinweis);
 },
 
 /* Tausendstel -> Text wie Excel (deutsch): 21000 -> "21", 60 -> "0,06". */
@@ -1042,7 +1079,8 @@ mengeMeldungen: {
     ganz: "Bitte eine ganze Zahl eintragen (0 oder mehr).",
     zahl: "Bitte eine Zahl ab 0 eintragen.",
     punkt: "Bitte ohne Punkt eintragen (1000 statt 1.000).",
-    gross: "Bitte eine Zahl bis 999.999.999 eintragen."
+    gross: "Bitte eine Zahl bis 999.999.999 eintragen.",
+    stellen: "Bitte höchstens drei Stellen nach dem Komma eintragen."
 },
 
 /* R-M4: "1.000" oder "1,000" kann 1 oder 1000 heißen; wird nicht geraten, sondern abgelehnt. */
@@ -1061,12 +1099,14 @@ mengeEingabe: function (text, ganz) {
 
     if (t === "") return { milli: null, fehler: "" };
     if (this.punktMehrdeutig(roh)) return { milli: null, fehler: this.mengeMeldungen.punkt };
-    if (!/^\+?(\d+\.?\d*|\.\d+)([eE][+-]?\d+)?$/.test(t)) return falsch;
+    /* Nur Ziffern mit höchstens einem Komma; kein "1e5", "+5" oder ".5" (Prüfbericht B2). */
+    if (!/^\d+(\.\d*)?$/.test(t)) return falsch;
+    if (!ganz && /\.\d{4,}$/.test(t)) return { milli: null, fehler: this.mengeMeldungen.stellen };
 
     const zahl = Number(t);
     if (!Number.isFinite(zahl) || zahl < 0) return falsch;
     if (ganz && !Number.isInteger(zahl)) return falsch;
-    if (zahl > 999999999) return { milli: null, fehler: this.mengeMeldungen.gross };
+    if (zahl > this.mengeGrenze) return { milli: null, fehler: this.mengeMeldungen.gross };
 
     return { milli: Math.round(zahl * 1000), fehler: "" };
 },
@@ -3422,8 +3462,9 @@ statVerspaetung: function (eintraege, heute) {
 
    Zustand, den die Ansicht führt: abs, suche, kunde, ansichtWahl, sortierung,
    gemerkt (R-DB4), markenZeilen/marken (Planung), listeHeute (Tageszahl).
-   OFFEN (Symolo): Der Klappzustand wird bisher nur solange gemerkt, wie das
-   Fenster offen ist. Je Benutzer dauerhaft geht erst mit einer Tabelle
+   Der Klappzustand (Ansicht und Auf-/Zuklappen) bleibt im Browser dieses
+   Geräts gespeichert (localStorage, laut Skill für solche Zustände erlaubt).
+   OFFEN (Symolo): Je Benutzer auf jedem Gerät geht erst mit einer Tabelle
    (Benutzer, Ansicht, Schlüssel) und der Benutzer-Anbindung.
    =========================================================================== */
 
@@ -3459,6 +3500,7 @@ ansichtKnoepfe: {},
 
 listeLeisteBauen: function (felder) {
 
+    this.klappenLaden();
     const leiste = this.el(this.koerper, "div", "kom-leiste");
 
     felder.forEach(f => {
@@ -3471,6 +3513,7 @@ listeLeisteBauen: function (felder) {
                     /* R-DB4: Ansicht umstellen = Startzustand der neuen Ansicht */
                     this.ansichtWahl = wert;
                     this.gemerkt = {};
+                    this.klappenMerken();
                     this.zeichnen();
                 });
             });
@@ -3686,6 +3729,34 @@ planungHaken: async function (d, box) {
     this.zeichnen();
 },
 
+/* R-DB4: Ansicht und Klappzustand im Browser merken. Ohne Speicher (privates Fenster, gesperrt) gilt
+   der Startzustand, wie bisher nur solange das Fenster offen ist. */
+klappenSchluessel: function () {
+
+    return "kom." + this.ansicht.name + ".klappen";
+},
+
+klappenLaden: function () {
+
+    try {
+        const z = JSON.parse(window.localStorage.getItem(this.klappenSchluessel()) || "null");
+        if (!z || typeof z !== "object") return;
+        if (this.dashAnsichten.some(a => a[0] === z.ansicht)) this.ansichtWahl = z.ansicht;
+        this.gemerkt = z.gemerkt && typeof z.gemerkt === "object" ? z.gemerkt : {};
+    } catch (fehler) {
+        /* kein Speicher: Startzustand */
+    }
+},
+
+klappenMerken: function () {
+
+    try {
+        window.localStorage.setItem(this.klappenSchluessel(), JSON.stringify({ ansicht: this.ansichtWahl, gemerkt: this.gemerkt }));
+    } catch (fehler) {
+        /* kein Speicher: nur solange das Fenster offen ist */
+    }
+},
+
 /* Klappen merken (R-DB4) und diese Karte neu zeichnen. */
 klappKnopf: function (td, offen, name, umschalten) {
 
@@ -3803,7 +3874,7 @@ karteZeichnen: function (karte, d) {
     const neu = () => this.karteZeichnen(karte, d);
     /* Baugruppen dieses AB, die einzeln im Schweißen liegen */
     const imSw = this.imSwJeAb[this.text(a.o.ab_schluessel)] || [];
-    const abUmschalten = () => { d.offen = !d.offen; this.gemerkt[d.schluessel] = d.offen; neu(); };
+    const abUmschalten = () => { d.offen = !d.offen; this.gemerkt[d.schluessel] = d.offen; this.klappenMerken(); neu(); };
 
     /* AB-Zeile: Nummer, Verkaufsartikel, Kunde */
     const tr = this.el(koerper, "tr", "kom-dab " + this.statusKlasse(a.w));
@@ -3815,7 +3886,7 @@ karteZeichnen: function (karte, d) {
     if (!d.offen) return;
 
     d.gruppen.forEach(g => {
-        const gUmschalten = () => { g.offen = !g.offen; this.gemerkt[g.schluessel] = g.offen; neu(); };
+        const gUmschalten = () => { g.offen = !g.offen; this.gemerkt[g.schluessel] = g.offen; this.klappenMerken(); neu(); };
 
         if (g.bg) {
             const btr = this.el(koerper, "tr", "kom-dbg");
@@ -5234,6 +5305,18 @@ el: function (parent, type, klasse, text) {
     return window.symolo.tools.layout.create(o);
 },
 
+/* Knopf in der Fußzeile mit kurzem Text für schmale Fenster (Handy). Die Fußzeile bleibt eine Zeile
+   (Skill, Abnahme), deshalb kürzer statt umbrechen. */
+fussKnopf: function (lang, kurz, klick, art) {
+
+    const b = this.knopf(this.fuss, "", klick, art);
+    this.el(b, "span", "kom-lang", lang);
+    this.el(b, "span", "kom-kurz", kurz);
+    b.setAttribute("aria-label", lang);
+    b.title = lang;
+    return b;
+},
+
 /* Ein Knopf. layout.create kann keine Events: Handler danach setzen. */
 knopf: function (parent, text, klick, art) {
 
@@ -5253,6 +5336,7 @@ geruestBauen: function (parent) {
 
     const kopf = this.el(view, "div", "kom-kopf");
     this.el(kopf, "h2", "kom-titel", this.ansicht.titel);
+    if (this.ansicht.satz) this.el(kopf, "span", "kom-satz", this.ansicht.satz);
     this.infoZeile = this.el(kopf, "div", "kom-info");
     this.bereichsleisteBauen(view);
 
@@ -5353,14 +5437,21 @@ statusZeigen: function (meldung, art) {
    Gibt null zurück, wenn es nicht geklappt hat. */
 sicher: async function (aufgabe) {
 
+    const vorher = this.geschrieben;
     try {
         return await aufgabe();
     } catch (fehler) {
         console.warn(this.ansicht.name + ":", fehler);
-        this.statusZeigen(fehler && fehler.message ? fehler.message : "Unbekannter Fehler.", "fehler");
+        let meldung = fehler && fehler.message ? fehler.message : "Unbekannter Fehler.";
+        if (this.geschrieben > vorher) meldung += " " + this.teilweiseGespeichert;
+        this.statusZeigen(meldung, "fehler");
         return null;
     }
 },
+
+/* Abbruch nach einem ersten Schreibschritt (Entnehmen, Archivieren, Zurückholen …): ohne Transaktion
+   kann dann etwas doppelt stehen. Neue Zeilen werden immer zuerst angelegt, Originale zuletzt ausgeblendet. */
+teilweiseGespeichert: "Ein Teil davon ist schon gespeichert. Bitte „Neu laden“ und prüfen, ob etwas doppelt steht.",
 
 /* Tabelle aus Zeilen von datenLesen.
    spalten: [{ feld, titel, art }]  art: "text" | "zahl" | "datum" | "datumzeit"
@@ -5405,7 +5496,7 @@ tabelleBauen: function (parent, spalten, zeilen, leerText, aktionen) {
 /* Klapp-Knopf (▾/▸) und Name als Knopf: Einfachklick klappt. */
 klappZellen: function (tr, name, offen, klappen, doppel) {
 
-    const td1 = this.el(tr, "td");
+    const td1 = this.el(tr, "td", "kom-klappzelle");
     const td2 = this.el(tr, "td");
     td2.title = this.text(name);
 
@@ -5517,8 +5608,8 @@ before_set_values: async function (form, { data }) {
     this.leisteBauen();
     const start = this.startOptionen();
     if (start.suche) this.suche = this.sucheEl.value = this.text(start.suche);   /* Sprung aus einem anderen Bereich */
-    this.knopf(this.fuss, "Neu laden", () => this.laden());
-    this.knopf(this.fuss, "AB archivieren …", () => this.abEingabeDialog());
+    this.fussKnopf("Neu laden", "Laden", () => this.laden());
+    this.fussKnopf("AB archivieren …", "Archivieren …", () => this.abEingabeDialog());
 
     await this.laden();
 },
@@ -5747,7 +5838,7 @@ bestandSpalten: [
     ["vh", "Vorhanden"], ["lager", "Lagerort"], ["status", "Status"], ["fort", "Fortschritt"], ["balken", ""],
     ["datum", "Eingelagert"], ["datum", "Komplett"],
     ["mbg", "Menge / BG", true], ["idx", "Index", true], ["text", "Arbeitsgang", true], ["text", "Material", true],
-    ["text", "Profil", true], ["text", "Abmaße", true], ["text", "Bemerkung", true], ["aktion", ""]
+    ["text", "Profil", true], ["text", "Abmaße", true], ["text", "Bemerkung", true], ["aktion", "Entnehmen"]
 ],
 
 tabelleNeu: function (parent, klasse) {
@@ -5764,7 +5855,7 @@ kopfzeileBauen: function (parent) {
     const tr = this.el(this.el(tab, "thead"), "tr");
     this.bestandSpalten.forEach(([art, titel, mehr]) => {
         const zahl = art === "lk" || art === "soll" || art === "vh" || art === "mbg";
-        this.el(tr, "th", (zahl ? "kom-zahl" : "") + (mehr ? " kom-mehr" : ""), titel);
+        this.el(tr, "th", (zahl ? "kom-zahl" : "") + (mehr ? " kom-mehr" : "") + (art === "aktion" ? " kom-aktion" : ""), titel);
     });
 },
 
@@ -5997,7 +6088,7 @@ teilZeile: function (parent, t, a) {
     this.zelle(tr, this.datumText(t.w.eingelagert));
     this.zelle(tr, this.datumText(t.w.komplett));
     this.mehrZellen(tr, o);
-    this.zelle(tr, "");
+    this.zelle(tr, "", "kom-aktion");
 },
 
 /* Vorhanden eintragen (R-M1): gespeichert wird beim Verlassen oder mit Enter.
@@ -6016,12 +6107,11 @@ vorhandenZelle: function (tr, t, a, vh) {
         if (this.text(f.value) === vh) return;
         const e = this.mengeEingabe(f.value, true);
         if (e.fehler) {
-            f.classList.add("kom-ungueltig");
-            f.title = e.fehler;
+            /* Meldung bleibt stehen, das Feld zeigt wieder den gespeicherten Wert (Prüfbericht B5). */
+            f.value = vh;
             this.statusZeigen(e.fehler, "fehler");
             return;
         }
-        f.classList.remove("kom-ungueltig");
         this.abAendern(a, () => this.vorhandenSetzen(t, e.milli));
     };
 
@@ -6310,6 +6400,7 @@ form_on_load: function (FORM) {
 .kom-bl .kom-kopf { flex: 0 0 auto; display: flex; flex-wrap: wrap; align-items: baseline; gap: var(--space-3);
   padding: var(--space-3) var(--space-4); background: var(--surface-100); border-bottom: 1px solid var(--line); }
 .kom-bl .kom-titel { margin: 0; font-size: var(--fs-h3); line-height: var(--lh-h3); font-weight: var(--fw-h3); }
+.kom-bl .kom-satz { font-size: var(--fs-small); line-height: var(--lh-small); color: var(--ink); }
 .kom-bl .kom-info { font-size: var(--fs-small); line-height: var(--lh-small); color: var(--ink-muted); }
 
 .kom-bl .kom-bl .kom-kacheln { white-space: normal; }
@@ -6331,7 +6422,13 @@ form_on_load: function (FORM) {
 .kom-bl .kom-fuss { flex: 0 0 auto; display: flex; align-items: center; gap: var(--space-2);
   padding: var(--space-2) var(--space-4); background: var(--surface-100); border-top: 1px solid var(--line);
   white-space: nowrap; overflow-x: auto; }
-.kom-bl .kom-vermerk { margin-left: auto; font-size: var(--fs-label); color: var(--ink-muted); }
+.kom-bl .kom-vermerk { order: 1; margin-left: auto; font-size: var(--fs-label); color: var(--ink-muted); }   /* Knöpfe zuerst, Vermerk am Ende */
+.kom-bl .kom-kurz { display: none; }
+@media (max-width: 600px) {
+  .kom-bl .kom-fuss .kom-lang { display: none; }
+  .kom-bl .kom-fuss .kom-kurz { display: inline; }
+  .kom-bl .kom-fuss { padding: var(--space-2); }
+}
 
 .kom-bl .kom-knopf { min-height: 36px; padding: 0 var(--space-3); border: 1px solid var(--line-strong);
   border-radius: var(--radius-sm); background: var(--surface-100); color: var(--ink); cursor: pointer;
@@ -6351,8 +6448,8 @@ form_on_load: function (FORM) {
 
 .kom-bl .kom-leer { padding: var(--space-3); color: var(--ink-muted); }
 
-/* Die Meldung blendet ein und aus, Fehler bleiben stehen. */
-.kom-bl .kom-status { position: fixed; bottom: var(--space-4); left: 50%; transform: translateX(-50%);
+/* Die Meldung blendet ein und aus, Fehler bleiben stehen. Sie steht über der Fußzeile, nicht mitten im Inhalt. */
+.kom-bl .kom-status { position: fixed; bottom: 64px; left: 50%; transform: translateX(-50%);
   max-width: 90%; padding: var(--space-2) var(--space-3); border-radius: var(--radius-sm);
   background: var(--brand-gray); color: var(--on-brand); font-size: var(--fs-small);
   opacity: 0; pointer-events: none; transition: opacity .2s; z-index: 20; }
@@ -6413,13 +6510,13 @@ form_on_load: function (FORM) {
 
 /* Breite Liste scrollt waagerecht; die Kopfzeile scrollt mit. */
 .kom-bl .kom-liste { overflow-x: auto; }
-.kom-bl .kom-karte { min-width: 1510px; margin-bottom: var(--space-4); background: var(--surface-100);
-  border: 1px solid var(--line); border-radius: var(--radius-lg); overflow: hidden; }
+.kom-bl .kom-karte { min-width: 1400px; margin-bottom: var(--space-4); background: var(--surface-100);
+  border: 1px solid var(--line); border-radius: var(--radius-lg); overflow: clip; }
 .kom-bl .kom-mehr-an .kom-karte { min-width: 2520px; }
 /* Karten außerhalb des sichtbaren Bereichs rechnet der Browser erst beim Hinscrollen (schnell bei vielen ABs). */
 .kom-bl .kom-karte { content-visibility: auto; contain-intrinsic-size: auto 120px; }
 
-.kom-bl .kom-bestand { width: 100%; min-width: 1510px; table-layout: fixed; border-collapse: collapse;
+.kom-bl .kom-bestand { width: 100%; min-width: 1400px; table-layout: fixed; border-collapse: collapse;
   font-size: var(--fs-small); line-height: var(--lh-small); }
 .kom-bl .kom-mehr-an .kom-bestand { min-width: 2520px; }
 .kom-bl .kom-bestand th { padding: var(--space-1) var(--space-2); text-align: left; font-weight: var(--fw-label);
@@ -6430,6 +6527,12 @@ form_on_load: function (FORM) {
 .kom-bl .kom-bestand .kom-zahl { text-align: right; font-variant-numeric: tabular-nums; }
 .kom-bl .kom-bestand .kom-mitte { text-align: center; }
 .kom-bl .kom-bestand .kom-leise { color: var(--ink-muted); }
+/* Aktionsspalte bleibt beim waagerechten Scrollen rechts sichtbar (Prüfbericht P3). overflow: clip an der
+   Karte statt hidden, sonst klebt sie an der Karte statt am Fenster. Zeilenfarben unten überschreiben den Grund. */
+.kom-bl .kom-bestand .kom-aktion { position: sticky; right: 0; z-index: 1; background: var(--surface-100);
+  box-shadow: inset 1px 0 0 var(--line); }
+/* Klapp-Pfeil ohne Innenabstand rechts, sonst zeigt die schmale Zelle Auslassungspunkte neben dem Pfeil. */
+.kom-bl .kom-bestand td.kom-klappzelle { padding-right: 0; text-overflow: clip; }
 
 /* Spaltenbreiten wie bisher; weitere Spalten nur mit dem Schalter. */
 .kom-bl .kom-c-klapp { width: 40px; }
@@ -6452,7 +6555,7 @@ form_on_load: function (FORM) {
 .kom-bl .kom-mehr-an col.kom-mehr { display: table-column; }
 
 /* Zeilen: AB kräftig, Baugruppe hell mit Balken links, Teil zart. */
-.kom-bl .kom-ab td { font-weight: var(--fw-label); }
+.kom-bl .kom-ab td { font-weight: 700; }   /* wie bisher (listen.css) */
 .kom-bl .kom-ab.kom-komplett td { background: var(--status-komplett); color: var(--on-status); }
 .kom-bl .kom-ab.kom-teilweise td { background: var(--status-teilweise); color: var(--on-status); }
 .kom-bl .kom-bg.kom-komplett td { background: color-mix(in srgb, var(--status-komplett) 55%, var(--surface-100)); }
@@ -6467,7 +6570,7 @@ form_on_load: function (FORM) {
 .kom-bl .kom-klapp, .kom-bl .kom-name { padding: 0; border: none; background: none; color: inherit;
   font: inherit; cursor: pointer; text-align: left; }
 .kom-bl .kom-klapp { width: 28px; min-height: 28px; font-size: var(--fs-body); }
-.kom-bl .kom-name { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; text-decoration: underline dotted; }
+.kom-bl .kom-name { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .kom-bl .kom-klapp:focus-visible, .kom-bl .kom-name:focus-visible { outline: 2px solid var(--focus); outline-offset: 1px; }
 
 .kom-bl .kom-statusmarke { display: inline-block; padding: 0 var(--space-2); border: 1px solid var(--line-strong);
@@ -6526,7 +6629,7 @@ window.KOM_ANSICHTEN_TITEL["dashboard"] = "Dashboard";
 window.KOM_ANSICHTEN["dashboard"] = function () { return {
 
 /* Kenndaten dieser Ansicht (aus tools/symolo_bauen.py). */
-ansicht: { name: "dashboard", titel: "Dashboard", klasse: "kom-db", praefix: "komDb", cssId: "KOMDBCSS" },
+ansicht: { name: "dashboard", titel: "Dashboard", klasse: "kom-db", praefix: "komDb", cssId: "KOMDBCSS", satz: "Fortschritt der Arbeitsaufträge" },
 
 
 /* ===========================================================================
@@ -6962,6 +7065,11 @@ datumZeitText: function (value) {
 
 datenHinweise: [],
 
+/* Zahl der gelungenen Schreibvorgänge in diesem Fenster. sicher() vergleicht sie vor und nach einer
+   Aufgabe: Bricht eine Aufgabe mit mehreren Schritten mittendrin ab, sagt die Meldung, dass schon
+   etwas gespeichert ist (Prüfbericht D3). OFFEN (Symolo): Gibt es eine Transaktion? */
+geschrieben: 0,
+
 /* "symolo", "symolo-test" oder "lokal" (siehe einstellungen.quelle). */
 datenQuelle: function () {
 
@@ -7335,6 +7443,7 @@ schreiben: async function (art, name, id, werte, stand, optionen) {
         const neu = this.antwortObjekt(
             await this.anfrage("dsf.dbo.CreateObjectJson", [tabelle, JSON.stringify(roh)])
         );
+        this.geschrieben += 1;
 
         return this.zeileLesen(name, neu || {});
     }
@@ -7364,6 +7473,7 @@ schreiben: async function (art, name, id, werte, stand, optionen) {
         const neu = this.antwortObjekt(
             await this.anfrage("dsf.dbo.UpdateObjectJson", [tabelle, JSON.stringify(roh)])
         );
+        this.geschrieben += 1;
 
         /* OFFEN (Symolo): Was liefert UpdateObjectJson zurück? Ist es kein
            Objekt, gilt das gesendete. */
@@ -7430,16 +7540,46 @@ datenArchivieren: async function (name, zeile) {
 
 /* Menge -> Tausendstel. Leer oder Text zählt 0 (Excel-Funktion N).
    OFFEN (Symolo): Kommen Zahlen als Zahl oder als Text ("21.000")?
-   Wir verstehen beides; Text, der keine Zahl ist, zählt 0. */
+   VERMUTET: Text kommt aus der Datenbank, also mit Punkt als Komma und ohne
+   Tausenderpunkt ("21.000" = 21). Alles andere (z. B. "1.234.567", "1e5",
+   über 999.999.999) zählt 0 und steht oben als Hinweis, statt still falsch
+   zu rechnen (Prüfbericht B1, B3). */
 mengeMilli: function (wert) {
 
-    if (typeof wert === "number") return Number.isFinite(wert) ? Math.round(wert * 1000) : 0;
+    if (wert === null || wert === undefined) return 0;
+    if (typeof wert === "number") {
+        if (Number.isFinite(wert) && Math.abs(wert) <= this.mengeGrenze) return Math.round(wert * 1000);
+        this.mengeUnklar(wert);
+        return 0;
+    }
     if (typeof wert !== "string") return 0;
 
     const t = wert.trim();
-    if (!/^-?\d+([.,]\d+)?$/.test(t)) return 0;
+    if (t === "") return 0;
+    if (!/^-?\d+([.,]\d+)?$/.test(t)) {
+        if (/\d/.test(t)) this.mengeUnklar(t);   /* reiner Text wie "Rest" zählt 0 wie in Excel, ohne Hinweis */
+        return 0;
+    }
 
-    return Math.round(Number(t.replace(",", ".")) * 1000);
+    const zahl = Number(t.replace(",", "."));
+    if (Math.abs(zahl) > this.mengeGrenze) {
+        this.mengeUnklar(t);
+        return 0;
+    }
+    return Math.round(zahl * 1000);
+},
+
+/* Größte Menge, wie bei der Eingabe (R-M4, Mengenfeld mit 12 Stellen). */
+mengeGrenze: 999999999,
+
+/* Unklare Menge einmal als Hinweis oben vormerken (höchstens drei Beispiele). */
+mengeUnklar: function (wert) {
+
+    if (!Array.isArray(this.datenHinweise)) return;
+    const hinweis = "Menge „" + String(wert) + "“ ist unklar und zählt 0.";
+    const schon = this.datenHinweise.filter(h => h.indexOf("Menge „") === 0);
+    if (schon.length >= 3 || schon.indexOf(hinweis) >= 0) return;
+    this.datenHinweise.push(hinweis);
 },
 
 /* Tausendstel -> Text wie Excel (deutsch): 21000 -> "21", 60 -> "0,06". */
@@ -7557,7 +7697,8 @@ mengeMeldungen: {
     ganz: "Bitte eine ganze Zahl eintragen (0 oder mehr).",
     zahl: "Bitte eine Zahl ab 0 eintragen.",
     punkt: "Bitte ohne Punkt eintragen (1000 statt 1.000).",
-    gross: "Bitte eine Zahl bis 999.999.999 eintragen."
+    gross: "Bitte eine Zahl bis 999.999.999 eintragen.",
+    stellen: "Bitte höchstens drei Stellen nach dem Komma eintragen."
 },
 
 /* R-M4: "1.000" oder "1,000" kann 1 oder 1000 heißen; wird nicht geraten, sondern abgelehnt. */
@@ -7576,12 +7717,14 @@ mengeEingabe: function (text, ganz) {
 
     if (t === "") return { milli: null, fehler: "" };
     if (this.punktMehrdeutig(roh)) return { milli: null, fehler: this.mengeMeldungen.punkt };
-    if (!/^\+?(\d+\.?\d*|\.\d+)([eE][+-]?\d+)?$/.test(t)) return falsch;
+    /* Nur Ziffern mit höchstens einem Komma; kein "1e5", "+5" oder ".5" (Prüfbericht B2). */
+    if (!/^\d+(\.\d*)?$/.test(t)) return falsch;
+    if (!ganz && /\.\d{4,}$/.test(t)) return { milli: null, fehler: this.mengeMeldungen.stellen };
 
     const zahl = Number(t);
     if (!Number.isFinite(zahl) || zahl < 0) return falsch;
     if (ganz && !Number.isInteger(zahl)) return falsch;
-    if (zahl > 999999999) return { milli: null, fehler: this.mengeMeldungen.gross };
+    if (zahl > this.mengeGrenze) return { milli: null, fehler: this.mengeMeldungen.gross };
 
     return { milli: Math.round(zahl * 1000), fehler: "" };
 },
@@ -9937,8 +10080,9 @@ statVerspaetung: function (eintraege, heute) {
 
    Zustand, den die Ansicht führt: abs, suche, kunde, ansichtWahl, sortierung,
    gemerkt (R-DB4), markenZeilen/marken (Planung), listeHeute (Tageszahl).
-   OFFEN (Symolo): Der Klappzustand wird bisher nur solange gemerkt, wie das
-   Fenster offen ist. Je Benutzer dauerhaft geht erst mit einer Tabelle
+   Der Klappzustand (Ansicht und Auf-/Zuklappen) bleibt im Browser dieses
+   Geräts gespeichert (localStorage, laut Skill für solche Zustände erlaubt).
+   OFFEN (Symolo): Je Benutzer auf jedem Gerät geht erst mit einer Tabelle
    (Benutzer, Ansicht, Schlüssel) und der Benutzer-Anbindung.
    =========================================================================== */
 
@@ -9974,6 +10118,7 @@ ansichtKnoepfe: {},
 
 listeLeisteBauen: function (felder) {
 
+    this.klappenLaden();
     const leiste = this.el(this.koerper, "div", "kom-leiste");
 
     felder.forEach(f => {
@@ -9986,6 +10131,7 @@ listeLeisteBauen: function (felder) {
                     /* R-DB4: Ansicht umstellen = Startzustand der neuen Ansicht */
                     this.ansichtWahl = wert;
                     this.gemerkt = {};
+                    this.klappenMerken();
                     this.zeichnen();
                 });
             });
@@ -10201,6 +10347,34 @@ planungHaken: async function (d, box) {
     this.zeichnen();
 },
 
+/* R-DB4: Ansicht und Klappzustand im Browser merken. Ohne Speicher (privates Fenster, gesperrt) gilt
+   der Startzustand, wie bisher nur solange das Fenster offen ist. */
+klappenSchluessel: function () {
+
+    return "kom." + this.ansicht.name + ".klappen";
+},
+
+klappenLaden: function () {
+
+    try {
+        const z = JSON.parse(window.localStorage.getItem(this.klappenSchluessel()) || "null");
+        if (!z || typeof z !== "object") return;
+        if (this.dashAnsichten.some(a => a[0] === z.ansicht)) this.ansichtWahl = z.ansicht;
+        this.gemerkt = z.gemerkt && typeof z.gemerkt === "object" ? z.gemerkt : {};
+    } catch (fehler) {
+        /* kein Speicher: Startzustand */
+    }
+},
+
+klappenMerken: function () {
+
+    try {
+        window.localStorage.setItem(this.klappenSchluessel(), JSON.stringify({ ansicht: this.ansichtWahl, gemerkt: this.gemerkt }));
+    } catch (fehler) {
+        /* kein Speicher: nur solange das Fenster offen ist */
+    }
+},
+
 /* Klappen merken (R-DB4) und diese Karte neu zeichnen. */
 klappKnopf: function (td, offen, name, umschalten) {
 
@@ -10318,7 +10492,7 @@ karteZeichnen: function (karte, d) {
     const neu = () => this.karteZeichnen(karte, d);
     /* Baugruppen dieses AB, die einzeln im Schweißen liegen */
     const imSw = this.imSwJeAb[this.text(a.o.ab_schluessel)] || [];
-    const abUmschalten = () => { d.offen = !d.offen; this.gemerkt[d.schluessel] = d.offen; neu(); };
+    const abUmschalten = () => { d.offen = !d.offen; this.gemerkt[d.schluessel] = d.offen; this.klappenMerken(); neu(); };
 
     /* AB-Zeile: Nummer, Verkaufsartikel, Kunde */
     const tr = this.el(koerper, "tr", "kom-dab " + this.statusKlasse(a.w));
@@ -10330,7 +10504,7 @@ karteZeichnen: function (karte, d) {
     if (!d.offen) return;
 
     d.gruppen.forEach(g => {
-        const gUmschalten = () => { g.offen = !g.offen; this.gemerkt[g.schluessel] = g.offen; neu(); };
+        const gUmschalten = () => { g.offen = !g.offen; this.gemerkt[g.schluessel] = g.offen; this.klappenMerken(); neu(); };
 
         if (g.bg) {
             const btr = this.el(koerper, "tr", "kom-dbg");
@@ -11749,6 +11923,18 @@ el: function (parent, type, klasse, text) {
     return window.symolo.tools.layout.create(o);
 },
 
+/* Knopf in der Fußzeile mit kurzem Text für schmale Fenster (Handy). Die Fußzeile bleibt eine Zeile
+   (Skill, Abnahme), deshalb kürzer statt umbrechen. */
+fussKnopf: function (lang, kurz, klick, art) {
+
+    const b = this.knopf(this.fuss, "", klick, art);
+    this.el(b, "span", "kom-lang", lang);
+    this.el(b, "span", "kom-kurz", kurz);
+    b.setAttribute("aria-label", lang);
+    b.title = lang;
+    return b;
+},
+
 /* Ein Knopf. layout.create kann keine Events: Handler danach setzen. */
 knopf: function (parent, text, klick, art) {
 
@@ -11768,6 +11954,7 @@ geruestBauen: function (parent) {
 
     const kopf = this.el(view, "div", "kom-kopf");
     this.el(kopf, "h2", "kom-titel", this.ansicht.titel);
+    if (this.ansicht.satz) this.el(kopf, "span", "kom-satz", this.ansicht.satz);
     this.infoZeile = this.el(kopf, "div", "kom-info");
     this.bereichsleisteBauen(view);
 
@@ -11868,14 +12055,21 @@ statusZeigen: function (meldung, art) {
    Gibt null zurück, wenn es nicht geklappt hat. */
 sicher: async function (aufgabe) {
 
+    const vorher = this.geschrieben;
     try {
         return await aufgabe();
     } catch (fehler) {
         console.warn(this.ansicht.name + ":", fehler);
-        this.statusZeigen(fehler && fehler.message ? fehler.message : "Unbekannter Fehler.", "fehler");
+        let meldung = fehler && fehler.message ? fehler.message : "Unbekannter Fehler.";
+        if (this.geschrieben > vorher) meldung += " " + this.teilweiseGespeichert;
+        this.statusZeigen(meldung, "fehler");
         return null;
     }
 },
+
+/* Abbruch nach einem ersten Schreibschritt (Entnehmen, Archivieren, Zurückholen …): ohne Transaktion
+   kann dann etwas doppelt stehen. Neue Zeilen werden immer zuerst angelegt, Originale zuletzt ausgeblendet. */
+teilweiseGespeichert: "Ein Teil davon ist schon gespeichert. Bitte „Neu laden“ und prüfen, ob etwas doppelt steht.",
 
 /* Tabelle aus Zeilen von datenLesen.
    spalten: [{ feld, titel, art }]  art: "text" | "zahl" | "datum" | "datumzeit"
@@ -11920,7 +12114,7 @@ tabelleBauen: function (parent, spalten, zeilen, leerText, aktionen) {
 /* Klapp-Knopf (▾/▸) und Name als Knopf: Einfachklick klappt. */
 klappZellen: function (tr, name, offen, klappen, doppel) {
 
-    const td1 = this.el(tr, "td");
+    const td1 = this.el(tr, "td", "kom-klappzelle");
     const td2 = this.el(tr, "td");
     td2.title = this.text(name);
 
@@ -12025,7 +12219,7 @@ before_set_values: async function (form, { data }) {
     this.listeLeisteBauen(["suche", "knoepfe", "sort", "kunde"]);
     this.meldungEl = this.el(this.koerper, "div", "kom-hinweis");
     this.listeEl = this.el(this.koerper, "div", "kom-liste");
-    this.knopf(this.fuss, "Neu laden", () => this.laden());
+    this.fussKnopf("Neu laden", "Laden", () => this.laden());
 
     await this.laden();
 },
@@ -12232,6 +12426,7 @@ form_on_load: function (FORM) {
 .kom-db .kom-kopf { flex: 0 0 auto; display: flex; flex-wrap: wrap; align-items: baseline; gap: var(--space-3);
   padding: var(--space-3) var(--space-4); background: var(--surface-100); border-bottom: 1px solid var(--line); }
 .kom-db .kom-titel { margin: 0; font-size: var(--fs-h3); line-height: var(--lh-h3); font-weight: var(--fw-h3); }
+.kom-db .kom-satz { font-size: var(--fs-small); line-height: var(--lh-small); color: var(--ink); }
 .kom-db .kom-info { font-size: var(--fs-small); line-height: var(--lh-small); color: var(--ink-muted); }
 
 .kom-db .kom-db .kom-kacheln { white-space: normal; }
@@ -12253,7 +12448,13 @@ form_on_load: function (FORM) {
 .kom-db .kom-fuss { flex: 0 0 auto; display: flex; align-items: center; gap: var(--space-2);
   padding: var(--space-2) var(--space-4); background: var(--surface-100); border-top: 1px solid var(--line);
   white-space: nowrap; overflow-x: auto; }
-.kom-db .kom-vermerk { margin-left: auto; font-size: var(--fs-label); color: var(--ink-muted); }
+.kom-db .kom-vermerk { order: 1; margin-left: auto; font-size: var(--fs-label); color: var(--ink-muted); }   /* Knöpfe zuerst, Vermerk am Ende */
+.kom-db .kom-kurz { display: none; }
+@media (max-width: 600px) {
+  .kom-db .kom-fuss .kom-lang { display: none; }
+  .kom-db .kom-fuss .kom-kurz { display: inline; }
+  .kom-db .kom-fuss { padding: var(--space-2); }
+}
 
 .kom-db .kom-knopf { min-height: 36px; padding: 0 var(--space-3); border: 1px solid var(--line-strong);
   border-radius: var(--radius-sm); background: var(--surface-100); color: var(--ink); cursor: pointer;
@@ -12273,8 +12474,8 @@ form_on_load: function (FORM) {
 
 .kom-db .kom-leer { padding: var(--space-3); color: var(--ink-muted); }
 
-/* Die Meldung blendet ein und aus, Fehler bleiben stehen. */
-.kom-db .kom-status { position: fixed; bottom: var(--space-4); left: 50%; transform: translateX(-50%);
+/* Die Meldung blendet ein und aus, Fehler bleiben stehen. Sie steht über der Fußzeile, nicht mitten im Inhalt. */
+.kom-db .kom-status { position: fixed; bottom: 64px; left: 50%; transform: translateX(-50%);
   max-width: 90%; padding: var(--space-2) var(--space-3); border-radius: var(--radius-sm);
   background: var(--brand-gray); color: var(--on-brand); font-size: var(--fs-small);
   opacity: 0; pointer-events: none; transition: opacity .2s; z-index: 20; }
@@ -12354,6 +12555,7 @@ form_on_load: function (FORM) {
 .kom-db .kom-dash td { padding: var(--space-1) var(--space-2); border-bottom: 1px solid var(--line);
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .kom-db .kom-dash tbody tr:last-child td { border-bottom: none; }
+.kom-db .kom-dash td.kom-klappzelle { padding-right: 0; text-overflow: clip; }
 .kom-db .kom-dash .kom-zahl { text-align: right; font-variant-numeric: tabular-nums; }
 .kom-db .kom-dash .kom-mitte { text-align: center; }
 .kom-db .kom-kopfzeile { margin: 0; }
@@ -12447,7 +12649,7 @@ window.KOM_ANSICHTEN_TITEL["forecast"] = "Forecast";
 window.KOM_ANSICHTEN["forecast"] = function () { return {
 
 /* Kenndaten dieser Ansicht (aus tools/symolo_bauen.py). */
-ansicht: { name: "forecast", titel: "Forecast", klasse: "kom-fc", praefix: "komFc", cssId: "KOMFCCSS" },
+ansicht: { name: "forecast", titel: "Forecast", klasse: "kom-fc", praefix: "komFc", cssId: "KOMFCCSS", satz: "Offene Aufträge nach Liefertermin" },
 
 
 /* ===========================================================================
@@ -12883,6 +13085,11 @@ datumZeitText: function (value) {
 
 datenHinweise: [],
 
+/* Zahl der gelungenen Schreibvorgänge in diesem Fenster. sicher() vergleicht sie vor und nach einer
+   Aufgabe: Bricht eine Aufgabe mit mehreren Schritten mittendrin ab, sagt die Meldung, dass schon
+   etwas gespeichert ist (Prüfbericht D3). OFFEN (Symolo): Gibt es eine Transaktion? */
+geschrieben: 0,
+
 /* "symolo", "symolo-test" oder "lokal" (siehe einstellungen.quelle). */
 datenQuelle: function () {
 
@@ -13256,6 +13463,7 @@ schreiben: async function (art, name, id, werte, stand, optionen) {
         const neu = this.antwortObjekt(
             await this.anfrage("dsf.dbo.CreateObjectJson", [tabelle, JSON.stringify(roh)])
         );
+        this.geschrieben += 1;
 
         return this.zeileLesen(name, neu || {});
     }
@@ -13285,6 +13493,7 @@ schreiben: async function (art, name, id, werte, stand, optionen) {
         const neu = this.antwortObjekt(
             await this.anfrage("dsf.dbo.UpdateObjectJson", [tabelle, JSON.stringify(roh)])
         );
+        this.geschrieben += 1;
 
         /* OFFEN (Symolo): Was liefert UpdateObjectJson zurück? Ist es kein
            Objekt, gilt das gesendete. */
@@ -13351,16 +13560,46 @@ datenArchivieren: async function (name, zeile) {
 
 /* Menge -> Tausendstel. Leer oder Text zählt 0 (Excel-Funktion N).
    OFFEN (Symolo): Kommen Zahlen als Zahl oder als Text ("21.000")?
-   Wir verstehen beides; Text, der keine Zahl ist, zählt 0. */
+   VERMUTET: Text kommt aus der Datenbank, also mit Punkt als Komma und ohne
+   Tausenderpunkt ("21.000" = 21). Alles andere (z. B. "1.234.567", "1e5",
+   über 999.999.999) zählt 0 und steht oben als Hinweis, statt still falsch
+   zu rechnen (Prüfbericht B1, B3). */
 mengeMilli: function (wert) {
 
-    if (typeof wert === "number") return Number.isFinite(wert) ? Math.round(wert * 1000) : 0;
+    if (wert === null || wert === undefined) return 0;
+    if (typeof wert === "number") {
+        if (Number.isFinite(wert) && Math.abs(wert) <= this.mengeGrenze) return Math.round(wert * 1000);
+        this.mengeUnklar(wert);
+        return 0;
+    }
     if (typeof wert !== "string") return 0;
 
     const t = wert.trim();
-    if (!/^-?\d+([.,]\d+)?$/.test(t)) return 0;
+    if (t === "") return 0;
+    if (!/^-?\d+([.,]\d+)?$/.test(t)) {
+        if (/\d/.test(t)) this.mengeUnklar(t);   /* reiner Text wie "Rest" zählt 0 wie in Excel, ohne Hinweis */
+        return 0;
+    }
 
-    return Math.round(Number(t.replace(",", ".")) * 1000);
+    const zahl = Number(t.replace(",", "."));
+    if (Math.abs(zahl) > this.mengeGrenze) {
+        this.mengeUnklar(t);
+        return 0;
+    }
+    return Math.round(zahl * 1000);
+},
+
+/* Größte Menge, wie bei der Eingabe (R-M4, Mengenfeld mit 12 Stellen). */
+mengeGrenze: 999999999,
+
+/* Unklare Menge einmal als Hinweis oben vormerken (höchstens drei Beispiele). */
+mengeUnklar: function (wert) {
+
+    if (!Array.isArray(this.datenHinweise)) return;
+    const hinweis = "Menge „" + String(wert) + "“ ist unklar und zählt 0.";
+    const schon = this.datenHinweise.filter(h => h.indexOf("Menge „") === 0);
+    if (schon.length >= 3 || schon.indexOf(hinweis) >= 0) return;
+    this.datenHinweise.push(hinweis);
 },
 
 /* Tausendstel -> Text wie Excel (deutsch): 21000 -> "21", 60 -> "0,06". */
@@ -13478,7 +13717,8 @@ mengeMeldungen: {
     ganz: "Bitte eine ganze Zahl eintragen (0 oder mehr).",
     zahl: "Bitte eine Zahl ab 0 eintragen.",
     punkt: "Bitte ohne Punkt eintragen (1000 statt 1.000).",
-    gross: "Bitte eine Zahl bis 999.999.999 eintragen."
+    gross: "Bitte eine Zahl bis 999.999.999 eintragen.",
+    stellen: "Bitte höchstens drei Stellen nach dem Komma eintragen."
 },
 
 /* R-M4: "1.000" oder "1,000" kann 1 oder 1000 heißen; wird nicht geraten, sondern abgelehnt. */
@@ -13497,12 +13737,14 @@ mengeEingabe: function (text, ganz) {
 
     if (t === "") return { milli: null, fehler: "" };
     if (this.punktMehrdeutig(roh)) return { milli: null, fehler: this.mengeMeldungen.punkt };
-    if (!/^\+?(\d+\.?\d*|\.\d+)([eE][+-]?\d+)?$/.test(t)) return falsch;
+    /* Nur Ziffern mit höchstens einem Komma; kein "1e5", "+5" oder ".5" (Prüfbericht B2). */
+    if (!/^\d+(\.\d*)?$/.test(t)) return falsch;
+    if (!ganz && /\.\d{4,}$/.test(t)) return { milli: null, fehler: this.mengeMeldungen.stellen };
 
     const zahl = Number(t);
     if (!Number.isFinite(zahl) || zahl < 0) return falsch;
     if (ganz && !Number.isInteger(zahl)) return falsch;
-    if (zahl > 999999999) return { milli: null, fehler: this.mengeMeldungen.gross };
+    if (zahl > this.mengeGrenze) return { milli: null, fehler: this.mengeMeldungen.gross };
 
     return { milli: Math.round(zahl * 1000), fehler: "" };
 },
@@ -15858,8 +16100,9 @@ statVerspaetung: function (eintraege, heute) {
 
    Zustand, den die Ansicht führt: abs, suche, kunde, ansichtWahl, sortierung,
    gemerkt (R-DB4), markenZeilen/marken (Planung), listeHeute (Tageszahl).
-   OFFEN (Symolo): Der Klappzustand wird bisher nur solange gemerkt, wie das
-   Fenster offen ist. Je Benutzer dauerhaft geht erst mit einer Tabelle
+   Der Klappzustand (Ansicht und Auf-/Zuklappen) bleibt im Browser dieses
+   Geräts gespeichert (localStorage, laut Skill für solche Zustände erlaubt).
+   OFFEN (Symolo): Je Benutzer auf jedem Gerät geht erst mit einer Tabelle
    (Benutzer, Ansicht, Schlüssel) und der Benutzer-Anbindung.
    =========================================================================== */
 
@@ -15895,6 +16138,7 @@ ansichtKnoepfe: {},
 
 listeLeisteBauen: function (felder) {
 
+    this.klappenLaden();
     const leiste = this.el(this.koerper, "div", "kom-leiste");
 
     felder.forEach(f => {
@@ -15907,6 +16151,7 @@ listeLeisteBauen: function (felder) {
                     /* R-DB4: Ansicht umstellen = Startzustand der neuen Ansicht */
                     this.ansichtWahl = wert;
                     this.gemerkt = {};
+                    this.klappenMerken();
                     this.zeichnen();
                 });
             });
@@ -16122,6 +16367,34 @@ planungHaken: async function (d, box) {
     this.zeichnen();
 },
 
+/* R-DB4: Ansicht und Klappzustand im Browser merken. Ohne Speicher (privates Fenster, gesperrt) gilt
+   der Startzustand, wie bisher nur solange das Fenster offen ist. */
+klappenSchluessel: function () {
+
+    return "kom." + this.ansicht.name + ".klappen";
+},
+
+klappenLaden: function () {
+
+    try {
+        const z = JSON.parse(window.localStorage.getItem(this.klappenSchluessel()) || "null");
+        if (!z || typeof z !== "object") return;
+        if (this.dashAnsichten.some(a => a[0] === z.ansicht)) this.ansichtWahl = z.ansicht;
+        this.gemerkt = z.gemerkt && typeof z.gemerkt === "object" ? z.gemerkt : {};
+    } catch (fehler) {
+        /* kein Speicher: Startzustand */
+    }
+},
+
+klappenMerken: function () {
+
+    try {
+        window.localStorage.setItem(this.klappenSchluessel(), JSON.stringify({ ansicht: this.ansichtWahl, gemerkt: this.gemerkt }));
+    } catch (fehler) {
+        /* kein Speicher: nur solange das Fenster offen ist */
+    }
+},
+
 /* Klappen merken (R-DB4) und diese Karte neu zeichnen. */
 klappKnopf: function (td, offen, name, umschalten) {
 
@@ -16239,7 +16512,7 @@ karteZeichnen: function (karte, d) {
     const neu = () => this.karteZeichnen(karte, d);
     /* Baugruppen dieses AB, die einzeln im Schweißen liegen */
     const imSw = this.imSwJeAb[this.text(a.o.ab_schluessel)] || [];
-    const abUmschalten = () => { d.offen = !d.offen; this.gemerkt[d.schluessel] = d.offen; neu(); };
+    const abUmschalten = () => { d.offen = !d.offen; this.gemerkt[d.schluessel] = d.offen; this.klappenMerken(); neu(); };
 
     /* AB-Zeile: Nummer, Verkaufsartikel, Kunde */
     const tr = this.el(koerper, "tr", "kom-dab " + this.statusKlasse(a.w));
@@ -16251,7 +16524,7 @@ karteZeichnen: function (karte, d) {
     if (!d.offen) return;
 
     d.gruppen.forEach(g => {
-        const gUmschalten = () => { g.offen = !g.offen; this.gemerkt[g.schluessel] = g.offen; neu(); };
+        const gUmschalten = () => { g.offen = !g.offen; this.gemerkt[g.schluessel] = g.offen; this.klappenMerken(); neu(); };
 
         if (g.bg) {
             const btr = this.el(koerper, "tr", "kom-dbg");
@@ -17670,6 +17943,18 @@ el: function (parent, type, klasse, text) {
     return window.symolo.tools.layout.create(o);
 },
 
+/* Knopf in der Fußzeile mit kurzem Text für schmale Fenster (Handy). Die Fußzeile bleibt eine Zeile
+   (Skill, Abnahme), deshalb kürzer statt umbrechen. */
+fussKnopf: function (lang, kurz, klick, art) {
+
+    const b = this.knopf(this.fuss, "", klick, art);
+    this.el(b, "span", "kom-lang", lang);
+    this.el(b, "span", "kom-kurz", kurz);
+    b.setAttribute("aria-label", lang);
+    b.title = lang;
+    return b;
+},
+
 /* Ein Knopf. layout.create kann keine Events: Handler danach setzen. */
 knopf: function (parent, text, klick, art) {
 
@@ -17689,6 +17974,7 @@ geruestBauen: function (parent) {
 
     const kopf = this.el(view, "div", "kom-kopf");
     this.el(kopf, "h2", "kom-titel", this.ansicht.titel);
+    if (this.ansicht.satz) this.el(kopf, "span", "kom-satz", this.ansicht.satz);
     this.infoZeile = this.el(kopf, "div", "kom-info");
     this.bereichsleisteBauen(view);
 
@@ -17789,14 +18075,21 @@ statusZeigen: function (meldung, art) {
    Gibt null zurück, wenn es nicht geklappt hat. */
 sicher: async function (aufgabe) {
 
+    const vorher = this.geschrieben;
     try {
         return await aufgabe();
     } catch (fehler) {
         console.warn(this.ansicht.name + ":", fehler);
-        this.statusZeigen(fehler && fehler.message ? fehler.message : "Unbekannter Fehler.", "fehler");
+        let meldung = fehler && fehler.message ? fehler.message : "Unbekannter Fehler.";
+        if (this.geschrieben > vorher) meldung += " " + this.teilweiseGespeichert;
+        this.statusZeigen(meldung, "fehler");
         return null;
     }
 },
+
+/* Abbruch nach einem ersten Schreibschritt (Entnehmen, Archivieren, Zurückholen …): ohne Transaktion
+   kann dann etwas doppelt stehen. Neue Zeilen werden immer zuerst angelegt, Originale zuletzt ausgeblendet. */
+teilweiseGespeichert: "Ein Teil davon ist schon gespeichert. Bitte „Neu laden“ und prüfen, ob etwas doppelt steht.",
 
 /* Tabelle aus Zeilen von datenLesen.
    spalten: [{ feld, titel, art }]  art: "text" | "zahl" | "datum" | "datumzeit"
@@ -17841,7 +18134,7 @@ tabelleBauen: function (parent, spalten, zeilen, leerText, aktionen) {
 /* Klapp-Knopf (▾/▸) und Name als Knopf: Einfachklick klappt. */
 klappZellen: function (tr, name, offen, klappen, doppel) {
 
-    const td1 = this.el(tr, "td");
+    const td1 = this.el(tr, "td", "kom-klappzelle");
     const td2 = this.el(tr, "td");
     td2.title = this.text(name);
 
@@ -17954,7 +18247,7 @@ before_set_values: async function (form, { data }) {
 
     this.meldungEl = this.el(this.koerper, "div", "kom-hinweis");
     this.listeEl = this.el(this.koerper, "div", "kom-liste");
-    this.knopf(this.fuss, "Neu laden", () => this.laden());
+    this.fussKnopf("Neu laden", "Laden", () => this.laden());
 
     await this.laden();
 },
@@ -18142,6 +18435,7 @@ form_on_load: function (FORM) {
 .kom-fc .kom-kopf { flex: 0 0 auto; display: flex; flex-wrap: wrap; align-items: baseline; gap: var(--space-3);
   padding: var(--space-3) var(--space-4); background: var(--surface-100); border-bottom: 1px solid var(--line); }
 .kom-fc .kom-titel { margin: 0; font-size: var(--fs-h3); line-height: var(--lh-h3); font-weight: var(--fw-h3); }
+.kom-fc .kom-satz { font-size: var(--fs-small); line-height: var(--lh-small); color: var(--ink); }
 .kom-fc .kom-info { font-size: var(--fs-small); line-height: var(--lh-small); color: var(--ink-muted); }
 
 .kom-fc .kom-fc .kom-kacheln { white-space: normal; }
@@ -18163,7 +18457,13 @@ form_on_load: function (FORM) {
 .kom-fc .kom-fuss { flex: 0 0 auto; display: flex; align-items: center; gap: var(--space-2);
   padding: var(--space-2) var(--space-4); background: var(--surface-100); border-top: 1px solid var(--line);
   white-space: nowrap; overflow-x: auto; }
-.kom-fc .kom-vermerk { margin-left: auto; font-size: var(--fs-label); color: var(--ink-muted); }
+.kom-fc .kom-vermerk { order: 1; margin-left: auto; font-size: var(--fs-label); color: var(--ink-muted); }   /* Knöpfe zuerst, Vermerk am Ende */
+.kom-fc .kom-kurz { display: none; }
+@media (max-width: 600px) {
+  .kom-fc .kom-fuss .kom-lang { display: none; }
+  .kom-fc .kom-fuss .kom-kurz { display: inline; }
+  .kom-fc .kom-fuss { padding: var(--space-2); }
+}
 
 .kom-fc .kom-knopf { min-height: 36px; padding: 0 var(--space-3); border: 1px solid var(--line-strong);
   border-radius: var(--radius-sm); background: var(--surface-100); color: var(--ink); cursor: pointer;
@@ -18183,8 +18483,8 @@ form_on_load: function (FORM) {
 
 .kom-fc .kom-leer { padding: var(--space-3); color: var(--ink-muted); }
 
-/* Die Meldung blendet ein und aus, Fehler bleiben stehen. */
-.kom-fc .kom-status { position: fixed; bottom: var(--space-4); left: 50%; transform: translateX(-50%);
+/* Die Meldung blendet ein und aus, Fehler bleiben stehen. Sie steht über der Fußzeile, nicht mitten im Inhalt. */
+.kom-fc .kom-status { position: fixed; bottom: 64px; left: 50%; transform: translateX(-50%);
   max-width: 90%; padding: var(--space-2) var(--space-3); border-radius: var(--radius-sm);
   background: var(--brand-gray); color: var(--on-brand); font-size: var(--fs-small);
   opacity: 0; pointer-events: none; transition: opacity .2s; z-index: 20; }
@@ -18264,6 +18564,7 @@ form_on_load: function (FORM) {
 .kom-fc .kom-dash td { padding: var(--space-1) var(--space-2); border-bottom: 1px solid var(--line);
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .kom-fc .kom-dash tbody tr:last-child td { border-bottom: none; }
+.kom-fc .kom-dash td.kom-klappzelle { padding-right: 0; text-overflow: clip; }
 .kom-fc .kom-dash .kom-zahl { text-align: right; font-variant-numeric: tabular-nums; }
 .kom-fc .kom-dash .kom-mitte { text-align: center; }
 .kom-fc .kom-kopfzeile { margin: 0; }
@@ -18357,7 +18658,7 @@ window.KOM_ANSICHTEN_TITEL["planung"] = "Planung";
 window.KOM_ANSICHTEN["planung"] = function () { return {
 
 /* Kenndaten dieser Ansicht (aus tools/symolo_bauen.py). */
-ansicht: { name: "planung", titel: "Planung", klasse: "kom-pl", praefix: "komPl", cssId: "KOMPLCSS" },
+ansicht: { name: "planung", titel: "Planung", klasse: "kom-pl", praefix: "komPl", cssId: "KOMPLCSS", satz: "Zur Planung vorgemerkte Arbeitsaufträge" },
 
 
 /* ===========================================================================
@@ -18793,6 +19094,11 @@ datumZeitText: function (value) {
 
 datenHinweise: [],
 
+/* Zahl der gelungenen Schreibvorgänge in diesem Fenster. sicher() vergleicht sie vor und nach einer
+   Aufgabe: Bricht eine Aufgabe mit mehreren Schritten mittendrin ab, sagt die Meldung, dass schon
+   etwas gespeichert ist (Prüfbericht D3). OFFEN (Symolo): Gibt es eine Transaktion? */
+geschrieben: 0,
+
 /* "symolo", "symolo-test" oder "lokal" (siehe einstellungen.quelle). */
 datenQuelle: function () {
 
@@ -19166,6 +19472,7 @@ schreiben: async function (art, name, id, werte, stand, optionen) {
         const neu = this.antwortObjekt(
             await this.anfrage("dsf.dbo.CreateObjectJson", [tabelle, JSON.stringify(roh)])
         );
+        this.geschrieben += 1;
 
         return this.zeileLesen(name, neu || {});
     }
@@ -19195,6 +19502,7 @@ schreiben: async function (art, name, id, werte, stand, optionen) {
         const neu = this.antwortObjekt(
             await this.anfrage("dsf.dbo.UpdateObjectJson", [tabelle, JSON.stringify(roh)])
         );
+        this.geschrieben += 1;
 
         /* OFFEN (Symolo): Was liefert UpdateObjectJson zurück? Ist es kein
            Objekt, gilt das gesendete. */
@@ -19261,16 +19569,46 @@ datenArchivieren: async function (name, zeile) {
 
 /* Menge -> Tausendstel. Leer oder Text zählt 0 (Excel-Funktion N).
    OFFEN (Symolo): Kommen Zahlen als Zahl oder als Text ("21.000")?
-   Wir verstehen beides; Text, der keine Zahl ist, zählt 0. */
+   VERMUTET: Text kommt aus der Datenbank, also mit Punkt als Komma und ohne
+   Tausenderpunkt ("21.000" = 21). Alles andere (z. B. "1.234.567", "1e5",
+   über 999.999.999) zählt 0 und steht oben als Hinweis, statt still falsch
+   zu rechnen (Prüfbericht B1, B3). */
 mengeMilli: function (wert) {
 
-    if (typeof wert === "number") return Number.isFinite(wert) ? Math.round(wert * 1000) : 0;
+    if (wert === null || wert === undefined) return 0;
+    if (typeof wert === "number") {
+        if (Number.isFinite(wert) && Math.abs(wert) <= this.mengeGrenze) return Math.round(wert * 1000);
+        this.mengeUnklar(wert);
+        return 0;
+    }
     if (typeof wert !== "string") return 0;
 
     const t = wert.trim();
-    if (!/^-?\d+([.,]\d+)?$/.test(t)) return 0;
+    if (t === "") return 0;
+    if (!/^-?\d+([.,]\d+)?$/.test(t)) {
+        if (/\d/.test(t)) this.mengeUnklar(t);   /* reiner Text wie "Rest" zählt 0 wie in Excel, ohne Hinweis */
+        return 0;
+    }
 
-    return Math.round(Number(t.replace(",", ".")) * 1000);
+    const zahl = Number(t.replace(",", "."));
+    if (Math.abs(zahl) > this.mengeGrenze) {
+        this.mengeUnklar(t);
+        return 0;
+    }
+    return Math.round(zahl * 1000);
+},
+
+/* Größte Menge, wie bei der Eingabe (R-M4, Mengenfeld mit 12 Stellen). */
+mengeGrenze: 999999999,
+
+/* Unklare Menge einmal als Hinweis oben vormerken (höchstens drei Beispiele). */
+mengeUnklar: function (wert) {
+
+    if (!Array.isArray(this.datenHinweise)) return;
+    const hinweis = "Menge „" + String(wert) + "“ ist unklar und zählt 0.";
+    const schon = this.datenHinweise.filter(h => h.indexOf("Menge „") === 0);
+    if (schon.length >= 3 || schon.indexOf(hinweis) >= 0) return;
+    this.datenHinweise.push(hinweis);
 },
 
 /* Tausendstel -> Text wie Excel (deutsch): 21000 -> "21", 60 -> "0,06". */
@@ -19388,7 +19726,8 @@ mengeMeldungen: {
     ganz: "Bitte eine ganze Zahl eintragen (0 oder mehr).",
     zahl: "Bitte eine Zahl ab 0 eintragen.",
     punkt: "Bitte ohne Punkt eintragen (1000 statt 1.000).",
-    gross: "Bitte eine Zahl bis 999.999.999 eintragen."
+    gross: "Bitte eine Zahl bis 999.999.999 eintragen.",
+    stellen: "Bitte höchstens drei Stellen nach dem Komma eintragen."
 },
 
 /* R-M4: "1.000" oder "1,000" kann 1 oder 1000 heißen; wird nicht geraten, sondern abgelehnt. */
@@ -19407,12 +19746,14 @@ mengeEingabe: function (text, ganz) {
 
     if (t === "") return { milli: null, fehler: "" };
     if (this.punktMehrdeutig(roh)) return { milli: null, fehler: this.mengeMeldungen.punkt };
-    if (!/^\+?(\d+\.?\d*|\.\d+)([eE][+-]?\d+)?$/.test(t)) return falsch;
+    /* Nur Ziffern mit höchstens einem Komma; kein "1e5", "+5" oder ".5" (Prüfbericht B2). */
+    if (!/^\d+(\.\d*)?$/.test(t)) return falsch;
+    if (!ganz && /\.\d{4,}$/.test(t)) return { milli: null, fehler: this.mengeMeldungen.stellen };
 
     const zahl = Number(t);
     if (!Number.isFinite(zahl) || zahl < 0) return falsch;
     if (ganz && !Number.isInteger(zahl)) return falsch;
-    if (zahl > 999999999) return { milli: null, fehler: this.mengeMeldungen.gross };
+    if (zahl > this.mengeGrenze) return { milli: null, fehler: this.mengeMeldungen.gross };
 
     return { milli: Math.round(zahl * 1000), fehler: "" };
 },
@@ -21768,8 +22109,9 @@ statVerspaetung: function (eintraege, heute) {
 
    Zustand, den die Ansicht führt: abs, suche, kunde, ansichtWahl, sortierung,
    gemerkt (R-DB4), markenZeilen/marken (Planung), listeHeute (Tageszahl).
-   OFFEN (Symolo): Der Klappzustand wird bisher nur solange gemerkt, wie das
-   Fenster offen ist. Je Benutzer dauerhaft geht erst mit einer Tabelle
+   Der Klappzustand (Ansicht und Auf-/Zuklappen) bleibt im Browser dieses
+   Geräts gespeichert (localStorage, laut Skill für solche Zustände erlaubt).
+   OFFEN (Symolo): Je Benutzer auf jedem Gerät geht erst mit einer Tabelle
    (Benutzer, Ansicht, Schlüssel) und der Benutzer-Anbindung.
    =========================================================================== */
 
@@ -21805,6 +22147,7 @@ ansichtKnoepfe: {},
 
 listeLeisteBauen: function (felder) {
 
+    this.klappenLaden();
     const leiste = this.el(this.koerper, "div", "kom-leiste");
 
     felder.forEach(f => {
@@ -21817,6 +22160,7 @@ listeLeisteBauen: function (felder) {
                     /* R-DB4: Ansicht umstellen = Startzustand der neuen Ansicht */
                     this.ansichtWahl = wert;
                     this.gemerkt = {};
+                    this.klappenMerken();
                     this.zeichnen();
                 });
             });
@@ -22032,6 +22376,34 @@ planungHaken: async function (d, box) {
     this.zeichnen();
 },
 
+/* R-DB4: Ansicht und Klappzustand im Browser merken. Ohne Speicher (privates Fenster, gesperrt) gilt
+   der Startzustand, wie bisher nur solange das Fenster offen ist. */
+klappenSchluessel: function () {
+
+    return "kom." + this.ansicht.name + ".klappen";
+},
+
+klappenLaden: function () {
+
+    try {
+        const z = JSON.parse(window.localStorage.getItem(this.klappenSchluessel()) || "null");
+        if (!z || typeof z !== "object") return;
+        if (this.dashAnsichten.some(a => a[0] === z.ansicht)) this.ansichtWahl = z.ansicht;
+        this.gemerkt = z.gemerkt && typeof z.gemerkt === "object" ? z.gemerkt : {};
+    } catch (fehler) {
+        /* kein Speicher: Startzustand */
+    }
+},
+
+klappenMerken: function () {
+
+    try {
+        window.localStorage.setItem(this.klappenSchluessel(), JSON.stringify({ ansicht: this.ansichtWahl, gemerkt: this.gemerkt }));
+    } catch (fehler) {
+        /* kein Speicher: nur solange das Fenster offen ist */
+    }
+},
+
 /* Klappen merken (R-DB4) und diese Karte neu zeichnen. */
 klappKnopf: function (td, offen, name, umschalten) {
 
@@ -22149,7 +22521,7 @@ karteZeichnen: function (karte, d) {
     const neu = () => this.karteZeichnen(karte, d);
     /* Baugruppen dieses AB, die einzeln im Schweißen liegen */
     const imSw = this.imSwJeAb[this.text(a.o.ab_schluessel)] || [];
-    const abUmschalten = () => { d.offen = !d.offen; this.gemerkt[d.schluessel] = d.offen; neu(); };
+    const abUmschalten = () => { d.offen = !d.offen; this.gemerkt[d.schluessel] = d.offen; this.klappenMerken(); neu(); };
 
     /* AB-Zeile: Nummer, Verkaufsartikel, Kunde */
     const tr = this.el(koerper, "tr", "kom-dab " + this.statusKlasse(a.w));
@@ -22161,7 +22533,7 @@ karteZeichnen: function (karte, d) {
     if (!d.offen) return;
 
     d.gruppen.forEach(g => {
-        const gUmschalten = () => { g.offen = !g.offen; this.gemerkt[g.schluessel] = g.offen; neu(); };
+        const gUmschalten = () => { g.offen = !g.offen; this.gemerkt[g.schluessel] = g.offen; this.klappenMerken(); neu(); };
 
         if (g.bg) {
             const btr = this.el(koerper, "tr", "kom-dbg");
@@ -23580,6 +23952,18 @@ el: function (parent, type, klasse, text) {
     return window.symolo.tools.layout.create(o);
 },
 
+/* Knopf in der Fußzeile mit kurzem Text für schmale Fenster (Handy). Die Fußzeile bleibt eine Zeile
+   (Skill, Abnahme), deshalb kürzer statt umbrechen. */
+fussKnopf: function (lang, kurz, klick, art) {
+
+    const b = this.knopf(this.fuss, "", klick, art);
+    this.el(b, "span", "kom-lang", lang);
+    this.el(b, "span", "kom-kurz", kurz);
+    b.setAttribute("aria-label", lang);
+    b.title = lang;
+    return b;
+},
+
 /* Ein Knopf. layout.create kann keine Events: Handler danach setzen. */
 knopf: function (parent, text, klick, art) {
 
@@ -23599,6 +23983,7 @@ geruestBauen: function (parent) {
 
     const kopf = this.el(view, "div", "kom-kopf");
     this.el(kopf, "h2", "kom-titel", this.ansicht.titel);
+    if (this.ansicht.satz) this.el(kopf, "span", "kom-satz", this.ansicht.satz);
     this.infoZeile = this.el(kopf, "div", "kom-info");
     this.bereichsleisteBauen(view);
 
@@ -23699,14 +24084,21 @@ statusZeigen: function (meldung, art) {
    Gibt null zurück, wenn es nicht geklappt hat. */
 sicher: async function (aufgabe) {
 
+    const vorher = this.geschrieben;
     try {
         return await aufgabe();
     } catch (fehler) {
         console.warn(this.ansicht.name + ":", fehler);
-        this.statusZeigen(fehler && fehler.message ? fehler.message : "Unbekannter Fehler.", "fehler");
+        let meldung = fehler && fehler.message ? fehler.message : "Unbekannter Fehler.";
+        if (this.geschrieben > vorher) meldung += " " + this.teilweiseGespeichert;
+        this.statusZeigen(meldung, "fehler");
         return null;
     }
 },
+
+/* Abbruch nach einem ersten Schreibschritt (Entnehmen, Archivieren, Zurückholen …): ohne Transaktion
+   kann dann etwas doppelt stehen. Neue Zeilen werden immer zuerst angelegt, Originale zuletzt ausgeblendet. */
+teilweiseGespeichert: "Ein Teil davon ist schon gespeichert. Bitte „Neu laden“ und prüfen, ob etwas doppelt steht.",
 
 /* Tabelle aus Zeilen von datenLesen.
    spalten: [{ feld, titel, art }]  art: "text" | "zahl" | "datum" | "datumzeit"
@@ -23751,7 +24143,7 @@ tabelleBauen: function (parent, spalten, zeilen, leerText, aktionen) {
 /* Klapp-Knopf (▾/▸) und Name als Knopf: Einfachklick klappt. */
 klappZellen: function (tr, name, offen, klappen, doppel) {
 
-    const td1 = this.el(tr, "td");
+    const td1 = this.el(tr, "td", "kom-klappzelle");
     const td2 = this.el(tr, "td");
     td2.title = this.text(name);
 
@@ -23856,7 +24248,7 @@ before_set_values: async function (form, { data }) {
     this.listeLeisteBauen(["suche", "knoepfe", "sort", "kunde"]);
     this.meldungEl = this.el(this.koerper, "div", "kom-hinweis");
     this.listeEl = this.el(this.koerper, "div", "kom-liste");
-    this.knopf(this.fuss, "Neu laden", () => this.laden());
+    this.fussKnopf("Neu laden", "Laden", () => this.laden());
 
     await this.laden();
 },
@@ -24005,6 +24397,7 @@ form_on_load: function (FORM) {
 .kom-pl .kom-kopf { flex: 0 0 auto; display: flex; flex-wrap: wrap; align-items: baseline; gap: var(--space-3);
   padding: var(--space-3) var(--space-4); background: var(--surface-100); border-bottom: 1px solid var(--line); }
 .kom-pl .kom-titel { margin: 0; font-size: var(--fs-h3); line-height: var(--lh-h3); font-weight: var(--fw-h3); }
+.kom-pl .kom-satz { font-size: var(--fs-small); line-height: var(--lh-small); color: var(--ink); }
 .kom-pl .kom-info { font-size: var(--fs-small); line-height: var(--lh-small); color: var(--ink-muted); }
 
 .kom-pl .kom-pl .kom-kacheln { white-space: normal; }
@@ -24026,7 +24419,13 @@ form_on_load: function (FORM) {
 .kom-pl .kom-fuss { flex: 0 0 auto; display: flex; align-items: center; gap: var(--space-2);
   padding: var(--space-2) var(--space-4); background: var(--surface-100); border-top: 1px solid var(--line);
   white-space: nowrap; overflow-x: auto; }
-.kom-pl .kom-vermerk { margin-left: auto; font-size: var(--fs-label); color: var(--ink-muted); }
+.kom-pl .kom-vermerk { order: 1; margin-left: auto; font-size: var(--fs-label); color: var(--ink-muted); }   /* Knöpfe zuerst, Vermerk am Ende */
+.kom-pl .kom-kurz { display: none; }
+@media (max-width: 600px) {
+  .kom-pl .kom-fuss .kom-lang { display: none; }
+  .kom-pl .kom-fuss .kom-kurz { display: inline; }
+  .kom-pl .kom-fuss { padding: var(--space-2); }
+}
 
 .kom-pl .kom-knopf { min-height: 36px; padding: 0 var(--space-3); border: 1px solid var(--line-strong);
   border-radius: var(--radius-sm); background: var(--surface-100); color: var(--ink); cursor: pointer;
@@ -24046,8 +24445,8 @@ form_on_load: function (FORM) {
 
 .kom-pl .kom-leer { padding: var(--space-3); color: var(--ink-muted); }
 
-/* Die Meldung blendet ein und aus, Fehler bleiben stehen. */
-.kom-pl .kom-status { position: fixed; bottom: var(--space-4); left: 50%; transform: translateX(-50%);
+/* Die Meldung blendet ein und aus, Fehler bleiben stehen. Sie steht über der Fußzeile, nicht mitten im Inhalt. */
+.kom-pl .kom-status { position: fixed; bottom: 64px; left: 50%; transform: translateX(-50%);
   max-width: 90%; padding: var(--space-2) var(--space-3); border-radius: var(--radius-sm);
   background: var(--brand-gray); color: var(--on-brand); font-size: var(--fs-small);
   opacity: 0; pointer-events: none; transition: opacity .2s; z-index: 20; }
@@ -24127,6 +24526,7 @@ form_on_load: function (FORM) {
 .kom-pl .kom-dash td { padding: var(--space-1) var(--space-2); border-bottom: 1px solid var(--line);
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .kom-pl .kom-dash tbody tr:last-child td { border-bottom: none; }
+.kom-pl .kom-dash td.kom-klappzelle { padding-right: 0; text-overflow: clip; }
 .kom-pl .kom-dash .kom-zahl { text-align: right; font-variant-numeric: tabular-nums; }
 .kom-pl .kom-dash .kom-mitte { text-align: center; }
 .kom-pl .kom-kopfzeile { margin: 0; }
@@ -24220,7 +24620,7 @@ window.KOM_ANSICHTEN_TITEL["statistik"] = "Statistik";
 window.KOM_ANSICHTEN["statistik"] = function () { return {
 
 /* Kenndaten dieser Ansicht (aus tools/symolo_bauen.py). */
-ansicht: { name: "statistik", titel: "Statistik", klasse: "kom-st", praefix: "komSt", cssId: "KOMSTCSS" },
+ansicht: { name: "statistik", titel: "Statistik", klasse: "kom-st", praefix: "komSt", cssId: "KOMSTCSS", satz: "" },
 
 
 /* ===========================================================================
@@ -24656,6 +25056,11 @@ datumZeitText: function (value) {
 
 datenHinweise: [],
 
+/* Zahl der gelungenen Schreibvorgänge in diesem Fenster. sicher() vergleicht sie vor und nach einer
+   Aufgabe: Bricht eine Aufgabe mit mehreren Schritten mittendrin ab, sagt die Meldung, dass schon
+   etwas gespeichert ist (Prüfbericht D3). OFFEN (Symolo): Gibt es eine Transaktion? */
+geschrieben: 0,
+
 /* "symolo", "symolo-test" oder "lokal" (siehe einstellungen.quelle). */
 datenQuelle: function () {
 
@@ -25029,6 +25434,7 @@ schreiben: async function (art, name, id, werte, stand, optionen) {
         const neu = this.antwortObjekt(
             await this.anfrage("dsf.dbo.CreateObjectJson", [tabelle, JSON.stringify(roh)])
         );
+        this.geschrieben += 1;
 
         return this.zeileLesen(name, neu || {});
     }
@@ -25058,6 +25464,7 @@ schreiben: async function (art, name, id, werte, stand, optionen) {
         const neu = this.antwortObjekt(
             await this.anfrage("dsf.dbo.UpdateObjectJson", [tabelle, JSON.stringify(roh)])
         );
+        this.geschrieben += 1;
 
         /* OFFEN (Symolo): Was liefert UpdateObjectJson zurück? Ist es kein
            Objekt, gilt das gesendete. */
@@ -25124,16 +25531,46 @@ datenArchivieren: async function (name, zeile) {
 
 /* Menge -> Tausendstel. Leer oder Text zählt 0 (Excel-Funktion N).
    OFFEN (Symolo): Kommen Zahlen als Zahl oder als Text ("21.000")?
-   Wir verstehen beides; Text, der keine Zahl ist, zählt 0. */
+   VERMUTET: Text kommt aus der Datenbank, also mit Punkt als Komma und ohne
+   Tausenderpunkt ("21.000" = 21). Alles andere (z. B. "1.234.567", "1e5",
+   über 999.999.999) zählt 0 und steht oben als Hinweis, statt still falsch
+   zu rechnen (Prüfbericht B1, B3). */
 mengeMilli: function (wert) {
 
-    if (typeof wert === "number") return Number.isFinite(wert) ? Math.round(wert * 1000) : 0;
+    if (wert === null || wert === undefined) return 0;
+    if (typeof wert === "number") {
+        if (Number.isFinite(wert) && Math.abs(wert) <= this.mengeGrenze) return Math.round(wert * 1000);
+        this.mengeUnklar(wert);
+        return 0;
+    }
     if (typeof wert !== "string") return 0;
 
     const t = wert.trim();
-    if (!/^-?\d+([.,]\d+)?$/.test(t)) return 0;
+    if (t === "") return 0;
+    if (!/^-?\d+([.,]\d+)?$/.test(t)) {
+        if (/\d/.test(t)) this.mengeUnklar(t);   /* reiner Text wie "Rest" zählt 0 wie in Excel, ohne Hinweis */
+        return 0;
+    }
 
-    return Math.round(Number(t.replace(",", ".")) * 1000);
+    const zahl = Number(t.replace(",", "."));
+    if (Math.abs(zahl) > this.mengeGrenze) {
+        this.mengeUnklar(t);
+        return 0;
+    }
+    return Math.round(zahl * 1000);
+},
+
+/* Größte Menge, wie bei der Eingabe (R-M4, Mengenfeld mit 12 Stellen). */
+mengeGrenze: 999999999,
+
+/* Unklare Menge einmal als Hinweis oben vormerken (höchstens drei Beispiele). */
+mengeUnklar: function (wert) {
+
+    if (!Array.isArray(this.datenHinweise)) return;
+    const hinweis = "Menge „" + String(wert) + "“ ist unklar und zählt 0.";
+    const schon = this.datenHinweise.filter(h => h.indexOf("Menge „") === 0);
+    if (schon.length >= 3 || schon.indexOf(hinweis) >= 0) return;
+    this.datenHinweise.push(hinweis);
 },
 
 /* Tausendstel -> Text wie Excel (deutsch): 21000 -> "21", 60 -> "0,06". */
@@ -25251,7 +25688,8 @@ mengeMeldungen: {
     ganz: "Bitte eine ganze Zahl eintragen (0 oder mehr).",
     zahl: "Bitte eine Zahl ab 0 eintragen.",
     punkt: "Bitte ohne Punkt eintragen (1000 statt 1.000).",
-    gross: "Bitte eine Zahl bis 999.999.999 eintragen."
+    gross: "Bitte eine Zahl bis 999.999.999 eintragen.",
+    stellen: "Bitte höchstens drei Stellen nach dem Komma eintragen."
 },
 
 /* R-M4: "1.000" oder "1,000" kann 1 oder 1000 heißen; wird nicht geraten, sondern abgelehnt. */
@@ -25270,12 +25708,14 @@ mengeEingabe: function (text, ganz) {
 
     if (t === "") return { milli: null, fehler: "" };
     if (this.punktMehrdeutig(roh)) return { milli: null, fehler: this.mengeMeldungen.punkt };
-    if (!/^\+?(\d+\.?\d*|\.\d+)([eE][+-]?\d+)?$/.test(t)) return falsch;
+    /* Nur Ziffern mit höchstens einem Komma; kein "1e5", "+5" oder ".5" (Prüfbericht B2). */
+    if (!/^\d+(\.\d*)?$/.test(t)) return falsch;
+    if (!ganz && /\.\d{4,}$/.test(t)) return { milli: null, fehler: this.mengeMeldungen.stellen };
 
     const zahl = Number(t);
     if (!Number.isFinite(zahl) || zahl < 0) return falsch;
     if (ganz && !Number.isInteger(zahl)) return falsch;
-    if (zahl > 999999999) return { milli: null, fehler: this.mengeMeldungen.gross };
+    if (zahl > this.mengeGrenze) return { milli: null, fehler: this.mengeMeldungen.gross };
 
     return { milli: Math.round(zahl * 1000), fehler: "" };
 },
@@ -27631,8 +28071,9 @@ statVerspaetung: function (eintraege, heute) {
 
    Zustand, den die Ansicht führt: abs, suche, kunde, ansichtWahl, sortierung,
    gemerkt (R-DB4), markenZeilen/marken (Planung), listeHeute (Tageszahl).
-   OFFEN (Symolo): Der Klappzustand wird bisher nur solange gemerkt, wie das
-   Fenster offen ist. Je Benutzer dauerhaft geht erst mit einer Tabelle
+   Der Klappzustand (Ansicht und Auf-/Zuklappen) bleibt im Browser dieses
+   Geräts gespeichert (localStorage, laut Skill für solche Zustände erlaubt).
+   OFFEN (Symolo): Je Benutzer auf jedem Gerät geht erst mit einer Tabelle
    (Benutzer, Ansicht, Schlüssel) und der Benutzer-Anbindung.
    =========================================================================== */
 
@@ -27668,6 +28109,7 @@ ansichtKnoepfe: {},
 
 listeLeisteBauen: function (felder) {
 
+    this.klappenLaden();
     const leiste = this.el(this.koerper, "div", "kom-leiste");
 
     felder.forEach(f => {
@@ -27680,6 +28122,7 @@ listeLeisteBauen: function (felder) {
                     /* R-DB4: Ansicht umstellen = Startzustand der neuen Ansicht */
                     this.ansichtWahl = wert;
                     this.gemerkt = {};
+                    this.klappenMerken();
                     this.zeichnen();
                 });
             });
@@ -27895,6 +28338,34 @@ planungHaken: async function (d, box) {
     this.zeichnen();
 },
 
+/* R-DB4: Ansicht und Klappzustand im Browser merken. Ohne Speicher (privates Fenster, gesperrt) gilt
+   der Startzustand, wie bisher nur solange das Fenster offen ist. */
+klappenSchluessel: function () {
+
+    return "kom." + this.ansicht.name + ".klappen";
+},
+
+klappenLaden: function () {
+
+    try {
+        const z = JSON.parse(window.localStorage.getItem(this.klappenSchluessel()) || "null");
+        if (!z || typeof z !== "object") return;
+        if (this.dashAnsichten.some(a => a[0] === z.ansicht)) this.ansichtWahl = z.ansicht;
+        this.gemerkt = z.gemerkt && typeof z.gemerkt === "object" ? z.gemerkt : {};
+    } catch (fehler) {
+        /* kein Speicher: Startzustand */
+    }
+},
+
+klappenMerken: function () {
+
+    try {
+        window.localStorage.setItem(this.klappenSchluessel(), JSON.stringify({ ansicht: this.ansichtWahl, gemerkt: this.gemerkt }));
+    } catch (fehler) {
+        /* kein Speicher: nur solange das Fenster offen ist */
+    }
+},
+
 /* Klappen merken (R-DB4) und diese Karte neu zeichnen. */
 klappKnopf: function (td, offen, name, umschalten) {
 
@@ -28012,7 +28483,7 @@ karteZeichnen: function (karte, d) {
     const neu = () => this.karteZeichnen(karte, d);
     /* Baugruppen dieses AB, die einzeln im Schweißen liegen */
     const imSw = this.imSwJeAb[this.text(a.o.ab_schluessel)] || [];
-    const abUmschalten = () => { d.offen = !d.offen; this.gemerkt[d.schluessel] = d.offen; neu(); };
+    const abUmschalten = () => { d.offen = !d.offen; this.gemerkt[d.schluessel] = d.offen; this.klappenMerken(); neu(); };
 
     /* AB-Zeile: Nummer, Verkaufsartikel, Kunde */
     const tr = this.el(koerper, "tr", "kom-dab " + this.statusKlasse(a.w));
@@ -28024,7 +28495,7 @@ karteZeichnen: function (karte, d) {
     if (!d.offen) return;
 
     d.gruppen.forEach(g => {
-        const gUmschalten = () => { g.offen = !g.offen; this.gemerkt[g.schluessel] = g.offen; neu(); };
+        const gUmschalten = () => { g.offen = !g.offen; this.gemerkt[g.schluessel] = g.offen; this.klappenMerken(); neu(); };
 
         if (g.bg) {
             const btr = this.el(koerper, "tr", "kom-dbg");
@@ -29443,6 +29914,18 @@ el: function (parent, type, klasse, text) {
     return window.symolo.tools.layout.create(o);
 },
 
+/* Knopf in der Fußzeile mit kurzem Text für schmale Fenster (Handy). Die Fußzeile bleibt eine Zeile
+   (Skill, Abnahme), deshalb kürzer statt umbrechen. */
+fussKnopf: function (lang, kurz, klick, art) {
+
+    const b = this.knopf(this.fuss, "", klick, art);
+    this.el(b, "span", "kom-lang", lang);
+    this.el(b, "span", "kom-kurz", kurz);
+    b.setAttribute("aria-label", lang);
+    b.title = lang;
+    return b;
+},
+
 /* Ein Knopf. layout.create kann keine Events: Handler danach setzen. */
 knopf: function (parent, text, klick, art) {
 
@@ -29462,6 +29945,7 @@ geruestBauen: function (parent) {
 
     const kopf = this.el(view, "div", "kom-kopf");
     this.el(kopf, "h2", "kom-titel", this.ansicht.titel);
+    if (this.ansicht.satz) this.el(kopf, "span", "kom-satz", this.ansicht.satz);
     this.infoZeile = this.el(kopf, "div", "kom-info");
     this.bereichsleisteBauen(view);
 
@@ -29562,14 +30046,21 @@ statusZeigen: function (meldung, art) {
    Gibt null zurück, wenn es nicht geklappt hat. */
 sicher: async function (aufgabe) {
 
+    const vorher = this.geschrieben;
     try {
         return await aufgabe();
     } catch (fehler) {
         console.warn(this.ansicht.name + ":", fehler);
-        this.statusZeigen(fehler && fehler.message ? fehler.message : "Unbekannter Fehler.", "fehler");
+        let meldung = fehler && fehler.message ? fehler.message : "Unbekannter Fehler.";
+        if (this.geschrieben > vorher) meldung += " " + this.teilweiseGespeichert;
+        this.statusZeigen(meldung, "fehler");
         return null;
     }
 },
+
+/* Abbruch nach einem ersten Schreibschritt (Entnehmen, Archivieren, Zurückholen …): ohne Transaktion
+   kann dann etwas doppelt stehen. Neue Zeilen werden immer zuerst angelegt, Originale zuletzt ausgeblendet. */
+teilweiseGespeichert: "Ein Teil davon ist schon gespeichert. Bitte „Neu laden“ und prüfen, ob etwas doppelt steht.",
 
 /* Tabelle aus Zeilen von datenLesen.
    spalten: [{ feld, titel, art }]  art: "text" | "zahl" | "datum" | "datumzeit"
@@ -29614,7 +30105,7 @@ tabelleBauen: function (parent, spalten, zeilen, leerText, aktionen) {
 /* Klapp-Knopf (▾/▸) und Name als Knopf: Einfachklick klappt. */
 klappZellen: function (tr, name, offen, klappen, doppel) {
 
-    const td1 = this.el(tr, "td");
+    const td1 = this.el(tr, "td", "kom-klappzelle");
     const td2 = this.el(tr, "td");
     td2.title = this.text(name);
 
@@ -29719,7 +30210,7 @@ before_set_values: async function (form, { data }) {
     this.el(leiste, "span", "kom-klein kom-leise", "gilt für beide Liefertreue-Kacheln");
 
     this.inhaltEl = this.el(this.koerper, "div", "kom-st-gitter");
-    this.knopf(this.fuss, "Neu laden", () => this.laden());
+    this.fussKnopf("Neu laden", "Laden", () => this.laden());
 
     await this.laden();
 },
@@ -29931,6 +30422,7 @@ form_on_load: function (FORM) {
 .kom-st .kom-kopf { flex: 0 0 auto; display: flex; flex-wrap: wrap; align-items: baseline; gap: var(--space-3);
   padding: var(--space-3) var(--space-4); background: var(--surface-100); border-bottom: 1px solid var(--line); }
 .kom-st .kom-titel { margin: 0; font-size: var(--fs-h3); line-height: var(--lh-h3); font-weight: var(--fw-h3); }
+.kom-st .kom-satz { font-size: var(--fs-small); line-height: var(--lh-small); color: var(--ink); }
 .kom-st .kom-info { font-size: var(--fs-small); line-height: var(--lh-small); color: var(--ink-muted); }
 
 .kom-st .kom-st .kom-kacheln { white-space: normal; }
@@ -29952,7 +30444,13 @@ form_on_load: function (FORM) {
 .kom-st .kom-fuss { flex: 0 0 auto; display: flex; align-items: center; gap: var(--space-2);
   padding: var(--space-2) var(--space-4); background: var(--surface-100); border-top: 1px solid var(--line);
   white-space: nowrap; overflow-x: auto; }
-.kom-st .kom-vermerk { margin-left: auto; font-size: var(--fs-label); color: var(--ink-muted); }
+.kom-st .kom-vermerk { order: 1; margin-left: auto; font-size: var(--fs-label); color: var(--ink-muted); }   /* Knöpfe zuerst, Vermerk am Ende */
+.kom-st .kom-kurz { display: none; }
+@media (max-width: 600px) {
+  .kom-st .kom-fuss .kom-lang { display: none; }
+  .kom-st .kom-fuss .kom-kurz { display: inline; }
+  .kom-st .kom-fuss { padding: var(--space-2); }
+}
 
 .kom-st .kom-knopf { min-height: 36px; padding: 0 var(--space-3); border: 1px solid var(--line-strong);
   border-radius: var(--radius-sm); background: var(--surface-100); color: var(--ink); cursor: pointer;
@@ -29972,8 +30470,8 @@ form_on_load: function (FORM) {
 
 .kom-st .kom-leer { padding: var(--space-3); color: var(--ink-muted); }
 
-/* Die Meldung blendet ein und aus, Fehler bleiben stehen. */
-.kom-st .kom-status { position: fixed; bottom: var(--space-4); left: 50%; transform: translateX(-50%);
+/* Die Meldung blendet ein und aus, Fehler bleiben stehen. Sie steht über der Fußzeile, nicht mitten im Inhalt. */
+.kom-st .kom-status { position: fixed; bottom: 64px; left: 50%; transform: translateX(-50%);
   max-width: 90%; padding: var(--space-2) var(--space-3); border-radius: var(--radius-sm);
   background: var(--brand-gray); color: var(--on-brand); font-size: var(--fs-small);
   opacity: 0; pointer-events: none; transition: opacity .2s; z-index: 20; }
@@ -30058,7 +30556,7 @@ window.KOM_ANSICHTEN_TITEL["archiv"] = "Archiv";
 window.KOM_ANSICHTEN["archiv"] = function () { return {
 
 /* Kenndaten dieser Ansicht (aus tools/symolo_bauen.py). */
-ansicht: { name: "archiv", titel: "Archiv", klasse: "kom-ar", praefix: "komAr", cssId: "KOMARCSS" },
+ansicht: { name: "archiv", titel: "Archiv", klasse: "kom-ar", praefix: "komAr", cssId: "KOMARCSS", satz: "" },
 
 
 /* ===========================================================================
@@ -30494,6 +30992,11 @@ datumZeitText: function (value) {
 
 datenHinweise: [],
 
+/* Zahl der gelungenen Schreibvorgänge in diesem Fenster. sicher() vergleicht sie vor und nach einer
+   Aufgabe: Bricht eine Aufgabe mit mehreren Schritten mittendrin ab, sagt die Meldung, dass schon
+   etwas gespeichert ist (Prüfbericht D3). OFFEN (Symolo): Gibt es eine Transaktion? */
+geschrieben: 0,
+
 /* "symolo", "symolo-test" oder "lokal" (siehe einstellungen.quelle). */
 datenQuelle: function () {
 
@@ -30867,6 +31370,7 @@ schreiben: async function (art, name, id, werte, stand, optionen) {
         const neu = this.antwortObjekt(
             await this.anfrage("dsf.dbo.CreateObjectJson", [tabelle, JSON.stringify(roh)])
         );
+        this.geschrieben += 1;
 
         return this.zeileLesen(name, neu || {});
     }
@@ -30896,6 +31400,7 @@ schreiben: async function (art, name, id, werte, stand, optionen) {
         const neu = this.antwortObjekt(
             await this.anfrage("dsf.dbo.UpdateObjectJson", [tabelle, JSON.stringify(roh)])
         );
+        this.geschrieben += 1;
 
         /* OFFEN (Symolo): Was liefert UpdateObjectJson zurück? Ist es kein
            Objekt, gilt das gesendete. */
@@ -30962,16 +31467,46 @@ datenArchivieren: async function (name, zeile) {
 
 /* Menge -> Tausendstel. Leer oder Text zählt 0 (Excel-Funktion N).
    OFFEN (Symolo): Kommen Zahlen als Zahl oder als Text ("21.000")?
-   Wir verstehen beides; Text, der keine Zahl ist, zählt 0. */
+   VERMUTET: Text kommt aus der Datenbank, also mit Punkt als Komma und ohne
+   Tausenderpunkt ("21.000" = 21). Alles andere (z. B. "1.234.567", "1e5",
+   über 999.999.999) zählt 0 und steht oben als Hinweis, statt still falsch
+   zu rechnen (Prüfbericht B1, B3). */
 mengeMilli: function (wert) {
 
-    if (typeof wert === "number") return Number.isFinite(wert) ? Math.round(wert * 1000) : 0;
+    if (wert === null || wert === undefined) return 0;
+    if (typeof wert === "number") {
+        if (Number.isFinite(wert) && Math.abs(wert) <= this.mengeGrenze) return Math.round(wert * 1000);
+        this.mengeUnklar(wert);
+        return 0;
+    }
     if (typeof wert !== "string") return 0;
 
     const t = wert.trim();
-    if (!/^-?\d+([.,]\d+)?$/.test(t)) return 0;
+    if (t === "") return 0;
+    if (!/^-?\d+([.,]\d+)?$/.test(t)) {
+        if (/\d/.test(t)) this.mengeUnklar(t);   /* reiner Text wie "Rest" zählt 0 wie in Excel, ohne Hinweis */
+        return 0;
+    }
 
-    return Math.round(Number(t.replace(",", ".")) * 1000);
+    const zahl = Number(t.replace(",", "."));
+    if (Math.abs(zahl) > this.mengeGrenze) {
+        this.mengeUnklar(t);
+        return 0;
+    }
+    return Math.round(zahl * 1000);
+},
+
+/* Größte Menge, wie bei der Eingabe (R-M4, Mengenfeld mit 12 Stellen). */
+mengeGrenze: 999999999,
+
+/* Unklare Menge einmal als Hinweis oben vormerken (höchstens drei Beispiele). */
+mengeUnklar: function (wert) {
+
+    if (!Array.isArray(this.datenHinweise)) return;
+    const hinweis = "Menge „" + String(wert) + "“ ist unklar und zählt 0.";
+    const schon = this.datenHinweise.filter(h => h.indexOf("Menge „") === 0);
+    if (schon.length >= 3 || schon.indexOf(hinweis) >= 0) return;
+    this.datenHinweise.push(hinweis);
 },
 
 /* Tausendstel -> Text wie Excel (deutsch): 21000 -> "21", 60 -> "0,06". */
@@ -31089,7 +31624,8 @@ mengeMeldungen: {
     ganz: "Bitte eine ganze Zahl eintragen (0 oder mehr).",
     zahl: "Bitte eine Zahl ab 0 eintragen.",
     punkt: "Bitte ohne Punkt eintragen (1000 statt 1.000).",
-    gross: "Bitte eine Zahl bis 999.999.999 eintragen."
+    gross: "Bitte eine Zahl bis 999.999.999 eintragen.",
+    stellen: "Bitte höchstens drei Stellen nach dem Komma eintragen."
 },
 
 /* R-M4: "1.000" oder "1,000" kann 1 oder 1000 heißen; wird nicht geraten, sondern abgelehnt. */
@@ -31108,12 +31644,14 @@ mengeEingabe: function (text, ganz) {
 
     if (t === "") return { milli: null, fehler: "" };
     if (this.punktMehrdeutig(roh)) return { milli: null, fehler: this.mengeMeldungen.punkt };
-    if (!/^\+?(\d+\.?\d*|\.\d+)([eE][+-]?\d+)?$/.test(t)) return falsch;
+    /* Nur Ziffern mit höchstens einem Komma; kein "1e5", "+5" oder ".5" (Prüfbericht B2). */
+    if (!/^\d+(\.\d*)?$/.test(t)) return falsch;
+    if (!ganz && /\.\d{4,}$/.test(t)) return { milli: null, fehler: this.mengeMeldungen.stellen };
 
     const zahl = Number(t);
     if (!Number.isFinite(zahl) || zahl < 0) return falsch;
     if (ganz && !Number.isInteger(zahl)) return falsch;
-    if (zahl > 999999999) return { milli: null, fehler: this.mengeMeldungen.gross };
+    if (zahl > this.mengeGrenze) return { milli: null, fehler: this.mengeMeldungen.gross };
 
     return { milli: Math.round(zahl * 1000), fehler: "" };
 },
@@ -33469,8 +34007,9 @@ statVerspaetung: function (eintraege, heute) {
 
    Zustand, den die Ansicht führt: abs, suche, kunde, ansichtWahl, sortierung,
    gemerkt (R-DB4), markenZeilen/marken (Planung), listeHeute (Tageszahl).
-   OFFEN (Symolo): Der Klappzustand wird bisher nur solange gemerkt, wie das
-   Fenster offen ist. Je Benutzer dauerhaft geht erst mit einer Tabelle
+   Der Klappzustand (Ansicht und Auf-/Zuklappen) bleibt im Browser dieses
+   Geräts gespeichert (localStorage, laut Skill für solche Zustände erlaubt).
+   OFFEN (Symolo): Je Benutzer auf jedem Gerät geht erst mit einer Tabelle
    (Benutzer, Ansicht, Schlüssel) und der Benutzer-Anbindung.
    =========================================================================== */
 
@@ -33506,6 +34045,7 @@ ansichtKnoepfe: {},
 
 listeLeisteBauen: function (felder) {
 
+    this.klappenLaden();
     const leiste = this.el(this.koerper, "div", "kom-leiste");
 
     felder.forEach(f => {
@@ -33518,6 +34058,7 @@ listeLeisteBauen: function (felder) {
                     /* R-DB4: Ansicht umstellen = Startzustand der neuen Ansicht */
                     this.ansichtWahl = wert;
                     this.gemerkt = {};
+                    this.klappenMerken();
                     this.zeichnen();
                 });
             });
@@ -33733,6 +34274,34 @@ planungHaken: async function (d, box) {
     this.zeichnen();
 },
 
+/* R-DB4: Ansicht und Klappzustand im Browser merken. Ohne Speicher (privates Fenster, gesperrt) gilt
+   der Startzustand, wie bisher nur solange das Fenster offen ist. */
+klappenSchluessel: function () {
+
+    return "kom." + this.ansicht.name + ".klappen";
+},
+
+klappenLaden: function () {
+
+    try {
+        const z = JSON.parse(window.localStorage.getItem(this.klappenSchluessel()) || "null");
+        if (!z || typeof z !== "object") return;
+        if (this.dashAnsichten.some(a => a[0] === z.ansicht)) this.ansichtWahl = z.ansicht;
+        this.gemerkt = z.gemerkt && typeof z.gemerkt === "object" ? z.gemerkt : {};
+    } catch (fehler) {
+        /* kein Speicher: Startzustand */
+    }
+},
+
+klappenMerken: function () {
+
+    try {
+        window.localStorage.setItem(this.klappenSchluessel(), JSON.stringify({ ansicht: this.ansichtWahl, gemerkt: this.gemerkt }));
+    } catch (fehler) {
+        /* kein Speicher: nur solange das Fenster offen ist */
+    }
+},
+
 /* Klappen merken (R-DB4) und diese Karte neu zeichnen. */
 klappKnopf: function (td, offen, name, umschalten) {
 
@@ -33850,7 +34419,7 @@ karteZeichnen: function (karte, d) {
     const neu = () => this.karteZeichnen(karte, d);
     /* Baugruppen dieses AB, die einzeln im Schweißen liegen */
     const imSw = this.imSwJeAb[this.text(a.o.ab_schluessel)] || [];
-    const abUmschalten = () => { d.offen = !d.offen; this.gemerkt[d.schluessel] = d.offen; neu(); };
+    const abUmschalten = () => { d.offen = !d.offen; this.gemerkt[d.schluessel] = d.offen; this.klappenMerken(); neu(); };
 
     /* AB-Zeile: Nummer, Verkaufsartikel, Kunde */
     const tr = this.el(koerper, "tr", "kom-dab " + this.statusKlasse(a.w));
@@ -33862,7 +34431,7 @@ karteZeichnen: function (karte, d) {
     if (!d.offen) return;
 
     d.gruppen.forEach(g => {
-        const gUmschalten = () => { g.offen = !g.offen; this.gemerkt[g.schluessel] = g.offen; neu(); };
+        const gUmschalten = () => { g.offen = !g.offen; this.gemerkt[g.schluessel] = g.offen; this.klappenMerken(); neu(); };
 
         if (g.bg) {
             const btr = this.el(koerper, "tr", "kom-dbg");
@@ -35281,6 +35850,18 @@ el: function (parent, type, klasse, text) {
     return window.symolo.tools.layout.create(o);
 },
 
+/* Knopf in der Fußzeile mit kurzem Text für schmale Fenster (Handy). Die Fußzeile bleibt eine Zeile
+   (Skill, Abnahme), deshalb kürzer statt umbrechen. */
+fussKnopf: function (lang, kurz, klick, art) {
+
+    const b = this.knopf(this.fuss, "", klick, art);
+    this.el(b, "span", "kom-lang", lang);
+    this.el(b, "span", "kom-kurz", kurz);
+    b.setAttribute("aria-label", lang);
+    b.title = lang;
+    return b;
+},
+
 /* Ein Knopf. layout.create kann keine Events: Handler danach setzen. */
 knopf: function (parent, text, klick, art) {
 
@@ -35300,6 +35881,7 @@ geruestBauen: function (parent) {
 
     const kopf = this.el(view, "div", "kom-kopf");
     this.el(kopf, "h2", "kom-titel", this.ansicht.titel);
+    if (this.ansicht.satz) this.el(kopf, "span", "kom-satz", this.ansicht.satz);
     this.infoZeile = this.el(kopf, "div", "kom-info");
     this.bereichsleisteBauen(view);
 
@@ -35400,14 +35982,21 @@ statusZeigen: function (meldung, art) {
    Gibt null zurück, wenn es nicht geklappt hat. */
 sicher: async function (aufgabe) {
 
+    const vorher = this.geschrieben;
     try {
         return await aufgabe();
     } catch (fehler) {
         console.warn(this.ansicht.name + ":", fehler);
-        this.statusZeigen(fehler && fehler.message ? fehler.message : "Unbekannter Fehler.", "fehler");
+        let meldung = fehler && fehler.message ? fehler.message : "Unbekannter Fehler.";
+        if (this.geschrieben > vorher) meldung += " " + this.teilweiseGespeichert;
+        this.statusZeigen(meldung, "fehler");
         return null;
     }
 },
+
+/* Abbruch nach einem ersten Schreibschritt (Entnehmen, Archivieren, Zurückholen …): ohne Transaktion
+   kann dann etwas doppelt stehen. Neue Zeilen werden immer zuerst angelegt, Originale zuletzt ausgeblendet. */
+teilweiseGespeichert: "Ein Teil davon ist schon gespeichert. Bitte „Neu laden“ und prüfen, ob etwas doppelt steht.",
 
 /* Tabelle aus Zeilen von datenLesen.
    spalten: [{ feld, titel, art }]  art: "text" | "zahl" | "datum" | "datumzeit"
@@ -35452,7 +36041,7 @@ tabelleBauen: function (parent, spalten, zeilen, leerText, aktionen) {
 /* Klapp-Knopf (▾/▸) und Name als Knopf: Einfachklick klappt. */
 klappZellen: function (tr, name, offen, klappen, doppel) {
 
-    const td1 = this.el(tr, "td");
+    const td1 = this.el(tr, "td", "kom-klappzelle");
     const td2 = this.el(tr, "td");
     td2.title = this.text(name);
 
@@ -35554,7 +36143,7 @@ before_set_values: async function (form, { data }) {
     this.leisteBauen();
     this.zaehlerEl = this.el(this.koerper, "div", "kom-zaehler");
     this.inhaltEl = this.el(this.koerper, "div", "kom-inhalt");
-    this.knopf(this.fuss, "Neu laden", () => this.laden());
+    this.fussKnopf("Neu laden", "Laden", () => this.laden());
 
     await this.laden();
 },
@@ -35874,6 +36463,7 @@ form_on_load: function (FORM) {
 .kom-ar .kom-kopf { flex: 0 0 auto; display: flex; flex-wrap: wrap; align-items: baseline; gap: var(--space-3);
   padding: var(--space-3) var(--space-4); background: var(--surface-100); border-bottom: 1px solid var(--line); }
 .kom-ar .kom-titel { margin: 0; font-size: var(--fs-h3); line-height: var(--lh-h3); font-weight: var(--fw-h3); }
+.kom-ar .kom-satz { font-size: var(--fs-small); line-height: var(--lh-small); color: var(--ink); }
 .kom-ar .kom-info { font-size: var(--fs-small); line-height: var(--lh-small); color: var(--ink-muted); }
 
 .kom-ar .kom-ar .kom-kacheln { white-space: normal; }
@@ -35895,7 +36485,13 @@ form_on_load: function (FORM) {
 .kom-ar .kom-fuss { flex: 0 0 auto; display: flex; align-items: center; gap: var(--space-2);
   padding: var(--space-2) var(--space-4); background: var(--surface-100); border-top: 1px solid var(--line);
   white-space: nowrap; overflow-x: auto; }
-.kom-ar .kom-vermerk { margin-left: auto; font-size: var(--fs-label); color: var(--ink-muted); }
+.kom-ar .kom-vermerk { order: 1; margin-left: auto; font-size: var(--fs-label); color: var(--ink-muted); }   /* Knöpfe zuerst, Vermerk am Ende */
+.kom-ar .kom-kurz { display: none; }
+@media (max-width: 600px) {
+  .kom-ar .kom-fuss .kom-lang { display: none; }
+  .kom-ar .kom-fuss .kom-kurz { display: inline; }
+  .kom-ar .kom-fuss { padding: var(--space-2); }
+}
 
 .kom-ar .kom-knopf { min-height: 36px; padding: 0 var(--space-3); border: 1px solid var(--line-strong);
   border-radius: var(--radius-sm); background: var(--surface-100); color: var(--ink); cursor: pointer;
@@ -35915,8 +36511,8 @@ form_on_load: function (FORM) {
 
 .kom-ar .kom-leer { padding: var(--space-3); color: var(--ink-muted); }
 
-/* Die Meldung blendet ein und aus, Fehler bleiben stehen. */
-.kom-ar .kom-status { position: fixed; bottom: var(--space-4); left: 50%; transform: translateX(-50%);
+/* Die Meldung blendet ein und aus, Fehler bleiben stehen. Sie steht über der Fußzeile, nicht mitten im Inhalt. */
+.kom-ar .kom-status { position: fixed; bottom: 64px; left: 50%; transform: translateX(-50%);
   max-width: 90%; padding: var(--space-2) var(--space-3); border-radius: var(--radius-sm);
   background: var(--brand-gray); color: var(--on-brand); font-size: var(--fs-small);
   opacity: 0; pointer-events: none; transition: opacity .2s; z-index: 20; }
@@ -36008,7 +36604,7 @@ window.KOM_ANSICHTEN_TITEL["protokoll"] = "Änderungsprotokoll";
 window.KOM_ANSICHTEN["protokoll"] = function () { return {
 
 /* Kenndaten dieser Ansicht (aus tools/symolo_bauen.py). */
-ansicht: { name: "protokoll", titel: "Änderungsprotokoll", klasse: "kom-pr", praefix: "komPr", cssId: "KOMPRCSS" },
+ansicht: { name: "protokoll", titel: "Änderungsprotokoll", klasse: "kom-pr", praefix: "komPr", cssId: "KOMPRCSS", satz: "" },
 
 
 /* ===========================================================================
@@ -36444,6 +37040,11 @@ datumZeitText: function (value) {
 
 datenHinweise: [],
 
+/* Zahl der gelungenen Schreibvorgänge in diesem Fenster. sicher() vergleicht sie vor und nach einer
+   Aufgabe: Bricht eine Aufgabe mit mehreren Schritten mittendrin ab, sagt die Meldung, dass schon
+   etwas gespeichert ist (Prüfbericht D3). OFFEN (Symolo): Gibt es eine Transaktion? */
+geschrieben: 0,
+
 /* "symolo", "symolo-test" oder "lokal" (siehe einstellungen.quelle). */
 datenQuelle: function () {
 
@@ -36817,6 +37418,7 @@ schreiben: async function (art, name, id, werte, stand, optionen) {
         const neu = this.antwortObjekt(
             await this.anfrage("dsf.dbo.CreateObjectJson", [tabelle, JSON.stringify(roh)])
         );
+        this.geschrieben += 1;
 
         return this.zeileLesen(name, neu || {});
     }
@@ -36846,6 +37448,7 @@ schreiben: async function (art, name, id, werte, stand, optionen) {
         const neu = this.antwortObjekt(
             await this.anfrage("dsf.dbo.UpdateObjectJson", [tabelle, JSON.stringify(roh)])
         );
+        this.geschrieben += 1;
 
         /* OFFEN (Symolo): Was liefert UpdateObjectJson zurück? Ist es kein
            Objekt, gilt das gesendete. */
@@ -36912,16 +37515,46 @@ datenArchivieren: async function (name, zeile) {
 
 /* Menge -> Tausendstel. Leer oder Text zählt 0 (Excel-Funktion N).
    OFFEN (Symolo): Kommen Zahlen als Zahl oder als Text ("21.000")?
-   Wir verstehen beides; Text, der keine Zahl ist, zählt 0. */
+   VERMUTET: Text kommt aus der Datenbank, also mit Punkt als Komma und ohne
+   Tausenderpunkt ("21.000" = 21). Alles andere (z. B. "1.234.567", "1e5",
+   über 999.999.999) zählt 0 und steht oben als Hinweis, statt still falsch
+   zu rechnen (Prüfbericht B1, B3). */
 mengeMilli: function (wert) {
 
-    if (typeof wert === "number") return Number.isFinite(wert) ? Math.round(wert * 1000) : 0;
+    if (wert === null || wert === undefined) return 0;
+    if (typeof wert === "number") {
+        if (Number.isFinite(wert) && Math.abs(wert) <= this.mengeGrenze) return Math.round(wert * 1000);
+        this.mengeUnklar(wert);
+        return 0;
+    }
     if (typeof wert !== "string") return 0;
 
     const t = wert.trim();
-    if (!/^-?\d+([.,]\d+)?$/.test(t)) return 0;
+    if (t === "") return 0;
+    if (!/^-?\d+([.,]\d+)?$/.test(t)) {
+        if (/\d/.test(t)) this.mengeUnklar(t);   /* reiner Text wie "Rest" zählt 0 wie in Excel, ohne Hinweis */
+        return 0;
+    }
 
-    return Math.round(Number(t.replace(",", ".")) * 1000);
+    const zahl = Number(t.replace(",", "."));
+    if (Math.abs(zahl) > this.mengeGrenze) {
+        this.mengeUnklar(t);
+        return 0;
+    }
+    return Math.round(zahl * 1000);
+},
+
+/* Größte Menge, wie bei der Eingabe (R-M4, Mengenfeld mit 12 Stellen). */
+mengeGrenze: 999999999,
+
+/* Unklare Menge einmal als Hinweis oben vormerken (höchstens drei Beispiele). */
+mengeUnklar: function (wert) {
+
+    if (!Array.isArray(this.datenHinweise)) return;
+    const hinweis = "Menge „" + String(wert) + "“ ist unklar und zählt 0.";
+    const schon = this.datenHinweise.filter(h => h.indexOf("Menge „") === 0);
+    if (schon.length >= 3 || schon.indexOf(hinweis) >= 0) return;
+    this.datenHinweise.push(hinweis);
 },
 
 /* Tausendstel -> Text wie Excel (deutsch): 21000 -> "21", 60 -> "0,06". */
@@ -37039,7 +37672,8 @@ mengeMeldungen: {
     ganz: "Bitte eine ganze Zahl eintragen (0 oder mehr).",
     zahl: "Bitte eine Zahl ab 0 eintragen.",
     punkt: "Bitte ohne Punkt eintragen (1000 statt 1.000).",
-    gross: "Bitte eine Zahl bis 999.999.999 eintragen."
+    gross: "Bitte eine Zahl bis 999.999.999 eintragen.",
+    stellen: "Bitte höchstens drei Stellen nach dem Komma eintragen."
 },
 
 /* R-M4: "1.000" oder "1,000" kann 1 oder 1000 heißen; wird nicht geraten, sondern abgelehnt. */
@@ -37058,12 +37692,14 @@ mengeEingabe: function (text, ganz) {
 
     if (t === "") return { milli: null, fehler: "" };
     if (this.punktMehrdeutig(roh)) return { milli: null, fehler: this.mengeMeldungen.punkt };
-    if (!/^\+?(\d+\.?\d*|\.\d+)([eE][+-]?\d+)?$/.test(t)) return falsch;
+    /* Nur Ziffern mit höchstens einem Komma; kein "1e5", "+5" oder ".5" (Prüfbericht B2). */
+    if (!/^\d+(\.\d*)?$/.test(t)) return falsch;
+    if (!ganz && /\.\d{4,}$/.test(t)) return { milli: null, fehler: this.mengeMeldungen.stellen };
 
     const zahl = Number(t);
     if (!Number.isFinite(zahl) || zahl < 0) return falsch;
     if (ganz && !Number.isInteger(zahl)) return falsch;
-    if (zahl > 999999999) return { milli: null, fehler: this.mengeMeldungen.gross };
+    if (zahl > this.mengeGrenze) return { milli: null, fehler: this.mengeMeldungen.gross };
 
     return { milli: Math.round(zahl * 1000), fehler: "" };
 },
@@ -39419,8 +40055,9 @@ statVerspaetung: function (eintraege, heute) {
 
    Zustand, den die Ansicht führt: abs, suche, kunde, ansichtWahl, sortierung,
    gemerkt (R-DB4), markenZeilen/marken (Planung), listeHeute (Tageszahl).
-   OFFEN (Symolo): Der Klappzustand wird bisher nur solange gemerkt, wie das
-   Fenster offen ist. Je Benutzer dauerhaft geht erst mit einer Tabelle
+   Der Klappzustand (Ansicht und Auf-/Zuklappen) bleibt im Browser dieses
+   Geräts gespeichert (localStorage, laut Skill für solche Zustände erlaubt).
+   OFFEN (Symolo): Je Benutzer auf jedem Gerät geht erst mit einer Tabelle
    (Benutzer, Ansicht, Schlüssel) und der Benutzer-Anbindung.
    =========================================================================== */
 
@@ -39456,6 +40093,7 @@ ansichtKnoepfe: {},
 
 listeLeisteBauen: function (felder) {
 
+    this.klappenLaden();
     const leiste = this.el(this.koerper, "div", "kom-leiste");
 
     felder.forEach(f => {
@@ -39468,6 +40106,7 @@ listeLeisteBauen: function (felder) {
                     /* R-DB4: Ansicht umstellen = Startzustand der neuen Ansicht */
                     this.ansichtWahl = wert;
                     this.gemerkt = {};
+                    this.klappenMerken();
                     this.zeichnen();
                 });
             });
@@ -39683,6 +40322,34 @@ planungHaken: async function (d, box) {
     this.zeichnen();
 },
 
+/* R-DB4: Ansicht und Klappzustand im Browser merken. Ohne Speicher (privates Fenster, gesperrt) gilt
+   der Startzustand, wie bisher nur solange das Fenster offen ist. */
+klappenSchluessel: function () {
+
+    return "kom." + this.ansicht.name + ".klappen";
+},
+
+klappenLaden: function () {
+
+    try {
+        const z = JSON.parse(window.localStorage.getItem(this.klappenSchluessel()) || "null");
+        if (!z || typeof z !== "object") return;
+        if (this.dashAnsichten.some(a => a[0] === z.ansicht)) this.ansichtWahl = z.ansicht;
+        this.gemerkt = z.gemerkt && typeof z.gemerkt === "object" ? z.gemerkt : {};
+    } catch (fehler) {
+        /* kein Speicher: Startzustand */
+    }
+},
+
+klappenMerken: function () {
+
+    try {
+        window.localStorage.setItem(this.klappenSchluessel(), JSON.stringify({ ansicht: this.ansichtWahl, gemerkt: this.gemerkt }));
+    } catch (fehler) {
+        /* kein Speicher: nur solange das Fenster offen ist */
+    }
+},
+
 /* Klappen merken (R-DB4) und diese Karte neu zeichnen. */
 klappKnopf: function (td, offen, name, umschalten) {
 
@@ -39800,7 +40467,7 @@ karteZeichnen: function (karte, d) {
     const neu = () => this.karteZeichnen(karte, d);
     /* Baugruppen dieses AB, die einzeln im Schweißen liegen */
     const imSw = this.imSwJeAb[this.text(a.o.ab_schluessel)] || [];
-    const abUmschalten = () => { d.offen = !d.offen; this.gemerkt[d.schluessel] = d.offen; neu(); };
+    const abUmschalten = () => { d.offen = !d.offen; this.gemerkt[d.schluessel] = d.offen; this.klappenMerken(); neu(); };
 
     /* AB-Zeile: Nummer, Verkaufsartikel, Kunde */
     const tr = this.el(koerper, "tr", "kom-dab " + this.statusKlasse(a.w));
@@ -39812,7 +40479,7 @@ karteZeichnen: function (karte, d) {
     if (!d.offen) return;
 
     d.gruppen.forEach(g => {
-        const gUmschalten = () => { g.offen = !g.offen; this.gemerkt[g.schluessel] = g.offen; neu(); };
+        const gUmschalten = () => { g.offen = !g.offen; this.gemerkt[g.schluessel] = g.offen; this.klappenMerken(); neu(); };
 
         if (g.bg) {
             const btr = this.el(koerper, "tr", "kom-dbg");
@@ -41231,6 +41898,18 @@ el: function (parent, type, klasse, text) {
     return window.symolo.tools.layout.create(o);
 },
 
+/* Knopf in der Fußzeile mit kurzem Text für schmale Fenster (Handy). Die Fußzeile bleibt eine Zeile
+   (Skill, Abnahme), deshalb kürzer statt umbrechen. */
+fussKnopf: function (lang, kurz, klick, art) {
+
+    const b = this.knopf(this.fuss, "", klick, art);
+    this.el(b, "span", "kom-lang", lang);
+    this.el(b, "span", "kom-kurz", kurz);
+    b.setAttribute("aria-label", lang);
+    b.title = lang;
+    return b;
+},
+
 /* Ein Knopf. layout.create kann keine Events: Handler danach setzen. */
 knopf: function (parent, text, klick, art) {
 
@@ -41250,6 +41929,7 @@ geruestBauen: function (parent) {
 
     const kopf = this.el(view, "div", "kom-kopf");
     this.el(kopf, "h2", "kom-titel", this.ansicht.titel);
+    if (this.ansicht.satz) this.el(kopf, "span", "kom-satz", this.ansicht.satz);
     this.infoZeile = this.el(kopf, "div", "kom-info");
     this.bereichsleisteBauen(view);
 
@@ -41350,14 +42030,21 @@ statusZeigen: function (meldung, art) {
    Gibt null zurück, wenn es nicht geklappt hat. */
 sicher: async function (aufgabe) {
 
+    const vorher = this.geschrieben;
     try {
         return await aufgabe();
     } catch (fehler) {
         console.warn(this.ansicht.name + ":", fehler);
-        this.statusZeigen(fehler && fehler.message ? fehler.message : "Unbekannter Fehler.", "fehler");
+        let meldung = fehler && fehler.message ? fehler.message : "Unbekannter Fehler.";
+        if (this.geschrieben > vorher) meldung += " " + this.teilweiseGespeichert;
+        this.statusZeigen(meldung, "fehler");
         return null;
     }
 },
+
+/* Abbruch nach einem ersten Schreibschritt (Entnehmen, Archivieren, Zurückholen …): ohne Transaktion
+   kann dann etwas doppelt stehen. Neue Zeilen werden immer zuerst angelegt, Originale zuletzt ausgeblendet. */
+teilweiseGespeichert: "Ein Teil davon ist schon gespeichert. Bitte „Neu laden“ und prüfen, ob etwas doppelt steht.",
 
 /* Tabelle aus Zeilen von datenLesen.
    spalten: [{ feld, titel, art }]  art: "text" | "zahl" | "datum" | "datumzeit"
@@ -41402,7 +42089,7 @@ tabelleBauen: function (parent, spalten, zeilen, leerText, aktionen) {
 /* Klapp-Knopf (▾/▸) und Name als Knopf: Einfachklick klappt. */
 klappZellen: function (tr, name, offen, klappen, doppel) {
 
-    const td1 = this.el(tr, "td");
+    const td1 = this.el(tr, "td", "kom-klappzelle");
     const td2 = this.el(tr, "td");
     td2.title = this.text(name);
 
@@ -41508,7 +42195,7 @@ before_set_values: async function (form, { data }) {
     this.einstEl = this.el(this.koerper, "div", "kom-einstellungen");
     this.leisteEl = this.el(this.koerper, "div", "kom-leiste");
     this.inhaltEl = this.el(this.koerper, "div", "kom-inhalt");
-    this.knopf(this.fuss, "Neu laden", () => this.laden());
+    this.fussKnopf("Neu laden", "Laden", () => this.laden());
 
     await this.laden();
 },
@@ -41848,6 +42535,7 @@ form_on_load: function (FORM) {
 .kom-pr .kom-kopf { flex: 0 0 auto; display: flex; flex-wrap: wrap; align-items: baseline; gap: var(--space-3);
   padding: var(--space-3) var(--space-4); background: var(--surface-100); border-bottom: 1px solid var(--line); }
 .kom-pr .kom-titel { margin: 0; font-size: var(--fs-h3); line-height: var(--lh-h3); font-weight: var(--fw-h3); }
+.kom-pr .kom-satz { font-size: var(--fs-small); line-height: var(--lh-small); color: var(--ink); }
 .kom-pr .kom-info { font-size: var(--fs-small); line-height: var(--lh-small); color: var(--ink-muted); }
 
 .kom-pr .kom-pr .kom-kacheln { white-space: normal; }
@@ -41869,7 +42557,13 @@ form_on_load: function (FORM) {
 .kom-pr .kom-fuss { flex: 0 0 auto; display: flex; align-items: center; gap: var(--space-2);
   padding: var(--space-2) var(--space-4); background: var(--surface-100); border-top: 1px solid var(--line);
   white-space: nowrap; overflow-x: auto; }
-.kom-pr .kom-vermerk { margin-left: auto; font-size: var(--fs-label); color: var(--ink-muted); }
+.kom-pr .kom-vermerk { order: 1; margin-left: auto; font-size: var(--fs-label); color: var(--ink-muted); }   /* Knöpfe zuerst, Vermerk am Ende */
+.kom-pr .kom-kurz { display: none; }
+@media (max-width: 600px) {
+  .kom-pr .kom-fuss .kom-lang { display: none; }
+  .kom-pr .kom-fuss .kom-kurz { display: inline; }
+  .kom-pr .kom-fuss { padding: var(--space-2); }
+}
 
 .kom-pr .kom-knopf { min-height: 36px; padding: 0 var(--space-3); border: 1px solid var(--line-strong);
   border-radius: var(--radius-sm); background: var(--surface-100); color: var(--ink); cursor: pointer;
@@ -41889,8 +42583,8 @@ form_on_load: function (FORM) {
 
 .kom-pr .kom-leer { padding: var(--space-3); color: var(--ink-muted); }
 
-/* Die Meldung blendet ein und aus, Fehler bleiben stehen. */
-.kom-pr .kom-status { position: fixed; bottom: var(--space-4); left: 50%; transform: translateX(-50%);
+/* Die Meldung blendet ein und aus, Fehler bleiben stehen. Sie steht über der Fußzeile, nicht mitten im Inhalt. */
+.kom-pr .kom-status { position: fixed; bottom: 64px; left: 50%; transform: translateX(-50%);
   max-width: 90%; padding: var(--space-2) var(--space-3); border-radius: var(--radius-sm);
   background: var(--brand-gray); color: var(--on-brand); font-size: var(--fs-small);
   opacity: 0; pointer-events: none; transition: opacity .2s; z-index: 20; }
@@ -41972,7 +42666,7 @@ window.KOM_ANSICHTEN_TITEL["schweissen"] = "Schweißen";
 window.KOM_ANSICHTEN["schweissen"] = function () { return {
 
 /* Kenndaten dieser Ansicht (aus tools/symolo_bauen.py). */
-ansicht: { name: "schweissen", titel: "Schweißen", klasse: "kom-sw", praefix: "komSw", cssId: "KOMSWCSS" },
+ansicht: { name: "schweissen", titel: "Schweißen", klasse: "kom-sw", praefix: "komSw", cssId: "KOMSWCSS", satz: "" },
 
 
 /* ===========================================================================
@@ -42408,6 +43102,11 @@ datumZeitText: function (value) {
 
 datenHinweise: [],
 
+/* Zahl der gelungenen Schreibvorgänge in diesem Fenster. sicher() vergleicht sie vor und nach einer
+   Aufgabe: Bricht eine Aufgabe mit mehreren Schritten mittendrin ab, sagt die Meldung, dass schon
+   etwas gespeichert ist (Prüfbericht D3). OFFEN (Symolo): Gibt es eine Transaktion? */
+geschrieben: 0,
+
 /* "symolo", "symolo-test" oder "lokal" (siehe einstellungen.quelle). */
 datenQuelle: function () {
 
@@ -42781,6 +43480,7 @@ schreiben: async function (art, name, id, werte, stand, optionen) {
         const neu = this.antwortObjekt(
             await this.anfrage("dsf.dbo.CreateObjectJson", [tabelle, JSON.stringify(roh)])
         );
+        this.geschrieben += 1;
 
         return this.zeileLesen(name, neu || {});
     }
@@ -42810,6 +43510,7 @@ schreiben: async function (art, name, id, werte, stand, optionen) {
         const neu = this.antwortObjekt(
             await this.anfrage("dsf.dbo.UpdateObjectJson", [tabelle, JSON.stringify(roh)])
         );
+        this.geschrieben += 1;
 
         /* OFFEN (Symolo): Was liefert UpdateObjectJson zurück? Ist es kein
            Objekt, gilt das gesendete. */
@@ -42876,16 +43577,46 @@ datenArchivieren: async function (name, zeile) {
 
 /* Menge -> Tausendstel. Leer oder Text zählt 0 (Excel-Funktion N).
    OFFEN (Symolo): Kommen Zahlen als Zahl oder als Text ("21.000")?
-   Wir verstehen beides; Text, der keine Zahl ist, zählt 0. */
+   VERMUTET: Text kommt aus der Datenbank, also mit Punkt als Komma und ohne
+   Tausenderpunkt ("21.000" = 21). Alles andere (z. B. "1.234.567", "1e5",
+   über 999.999.999) zählt 0 und steht oben als Hinweis, statt still falsch
+   zu rechnen (Prüfbericht B1, B3). */
 mengeMilli: function (wert) {
 
-    if (typeof wert === "number") return Number.isFinite(wert) ? Math.round(wert * 1000) : 0;
+    if (wert === null || wert === undefined) return 0;
+    if (typeof wert === "number") {
+        if (Number.isFinite(wert) && Math.abs(wert) <= this.mengeGrenze) return Math.round(wert * 1000);
+        this.mengeUnklar(wert);
+        return 0;
+    }
     if (typeof wert !== "string") return 0;
 
     const t = wert.trim();
-    if (!/^-?\d+([.,]\d+)?$/.test(t)) return 0;
+    if (t === "") return 0;
+    if (!/^-?\d+([.,]\d+)?$/.test(t)) {
+        if (/\d/.test(t)) this.mengeUnklar(t);   /* reiner Text wie "Rest" zählt 0 wie in Excel, ohne Hinweis */
+        return 0;
+    }
 
-    return Math.round(Number(t.replace(",", ".")) * 1000);
+    const zahl = Number(t.replace(",", "."));
+    if (Math.abs(zahl) > this.mengeGrenze) {
+        this.mengeUnklar(t);
+        return 0;
+    }
+    return Math.round(zahl * 1000);
+},
+
+/* Größte Menge, wie bei der Eingabe (R-M4, Mengenfeld mit 12 Stellen). */
+mengeGrenze: 999999999,
+
+/* Unklare Menge einmal als Hinweis oben vormerken (höchstens drei Beispiele). */
+mengeUnklar: function (wert) {
+
+    if (!Array.isArray(this.datenHinweise)) return;
+    const hinweis = "Menge „" + String(wert) + "“ ist unklar und zählt 0.";
+    const schon = this.datenHinweise.filter(h => h.indexOf("Menge „") === 0);
+    if (schon.length >= 3 || schon.indexOf(hinweis) >= 0) return;
+    this.datenHinweise.push(hinweis);
 },
 
 /* Tausendstel -> Text wie Excel (deutsch): 21000 -> "21", 60 -> "0,06". */
@@ -43003,7 +43734,8 @@ mengeMeldungen: {
     ganz: "Bitte eine ganze Zahl eintragen (0 oder mehr).",
     zahl: "Bitte eine Zahl ab 0 eintragen.",
     punkt: "Bitte ohne Punkt eintragen (1000 statt 1.000).",
-    gross: "Bitte eine Zahl bis 999.999.999 eintragen."
+    gross: "Bitte eine Zahl bis 999.999.999 eintragen.",
+    stellen: "Bitte höchstens drei Stellen nach dem Komma eintragen."
 },
 
 /* R-M4: "1.000" oder "1,000" kann 1 oder 1000 heißen; wird nicht geraten, sondern abgelehnt. */
@@ -43022,12 +43754,14 @@ mengeEingabe: function (text, ganz) {
 
     if (t === "") return { milli: null, fehler: "" };
     if (this.punktMehrdeutig(roh)) return { milli: null, fehler: this.mengeMeldungen.punkt };
-    if (!/^\+?(\d+\.?\d*|\.\d+)([eE][+-]?\d+)?$/.test(t)) return falsch;
+    /* Nur Ziffern mit höchstens einem Komma; kein "1e5", "+5" oder ".5" (Prüfbericht B2). */
+    if (!/^\d+(\.\d*)?$/.test(t)) return falsch;
+    if (!ganz && /\.\d{4,}$/.test(t)) return { milli: null, fehler: this.mengeMeldungen.stellen };
 
     const zahl = Number(t);
     if (!Number.isFinite(zahl) || zahl < 0) return falsch;
     if (ganz && !Number.isInteger(zahl)) return falsch;
-    if (zahl > 999999999) return { milli: null, fehler: this.mengeMeldungen.gross };
+    if (zahl > this.mengeGrenze) return { milli: null, fehler: this.mengeMeldungen.gross };
 
     return { milli: Math.round(zahl * 1000), fehler: "" };
 },
@@ -45383,8 +46117,9 @@ statVerspaetung: function (eintraege, heute) {
 
    Zustand, den die Ansicht führt: abs, suche, kunde, ansichtWahl, sortierung,
    gemerkt (R-DB4), markenZeilen/marken (Planung), listeHeute (Tageszahl).
-   OFFEN (Symolo): Der Klappzustand wird bisher nur solange gemerkt, wie das
-   Fenster offen ist. Je Benutzer dauerhaft geht erst mit einer Tabelle
+   Der Klappzustand (Ansicht und Auf-/Zuklappen) bleibt im Browser dieses
+   Geräts gespeichert (localStorage, laut Skill für solche Zustände erlaubt).
+   OFFEN (Symolo): Je Benutzer auf jedem Gerät geht erst mit einer Tabelle
    (Benutzer, Ansicht, Schlüssel) und der Benutzer-Anbindung.
    =========================================================================== */
 
@@ -45420,6 +46155,7 @@ ansichtKnoepfe: {},
 
 listeLeisteBauen: function (felder) {
 
+    this.klappenLaden();
     const leiste = this.el(this.koerper, "div", "kom-leiste");
 
     felder.forEach(f => {
@@ -45432,6 +46168,7 @@ listeLeisteBauen: function (felder) {
                     /* R-DB4: Ansicht umstellen = Startzustand der neuen Ansicht */
                     this.ansichtWahl = wert;
                     this.gemerkt = {};
+                    this.klappenMerken();
                     this.zeichnen();
                 });
             });
@@ -45647,6 +46384,34 @@ planungHaken: async function (d, box) {
     this.zeichnen();
 },
 
+/* R-DB4: Ansicht und Klappzustand im Browser merken. Ohne Speicher (privates Fenster, gesperrt) gilt
+   der Startzustand, wie bisher nur solange das Fenster offen ist. */
+klappenSchluessel: function () {
+
+    return "kom." + this.ansicht.name + ".klappen";
+},
+
+klappenLaden: function () {
+
+    try {
+        const z = JSON.parse(window.localStorage.getItem(this.klappenSchluessel()) || "null");
+        if (!z || typeof z !== "object") return;
+        if (this.dashAnsichten.some(a => a[0] === z.ansicht)) this.ansichtWahl = z.ansicht;
+        this.gemerkt = z.gemerkt && typeof z.gemerkt === "object" ? z.gemerkt : {};
+    } catch (fehler) {
+        /* kein Speicher: Startzustand */
+    }
+},
+
+klappenMerken: function () {
+
+    try {
+        window.localStorage.setItem(this.klappenSchluessel(), JSON.stringify({ ansicht: this.ansichtWahl, gemerkt: this.gemerkt }));
+    } catch (fehler) {
+        /* kein Speicher: nur solange das Fenster offen ist */
+    }
+},
+
 /* Klappen merken (R-DB4) und diese Karte neu zeichnen. */
 klappKnopf: function (td, offen, name, umschalten) {
 
@@ -45764,7 +46529,7 @@ karteZeichnen: function (karte, d) {
     const neu = () => this.karteZeichnen(karte, d);
     /* Baugruppen dieses AB, die einzeln im Schweißen liegen */
     const imSw = this.imSwJeAb[this.text(a.o.ab_schluessel)] || [];
-    const abUmschalten = () => { d.offen = !d.offen; this.gemerkt[d.schluessel] = d.offen; neu(); };
+    const abUmschalten = () => { d.offen = !d.offen; this.gemerkt[d.schluessel] = d.offen; this.klappenMerken(); neu(); };
 
     /* AB-Zeile: Nummer, Verkaufsartikel, Kunde */
     const tr = this.el(koerper, "tr", "kom-dab " + this.statusKlasse(a.w));
@@ -45776,7 +46541,7 @@ karteZeichnen: function (karte, d) {
     if (!d.offen) return;
 
     d.gruppen.forEach(g => {
-        const gUmschalten = () => { g.offen = !g.offen; this.gemerkt[g.schluessel] = g.offen; neu(); };
+        const gUmschalten = () => { g.offen = !g.offen; this.gemerkt[g.schluessel] = g.offen; this.klappenMerken(); neu(); };
 
         if (g.bg) {
             const btr = this.el(koerper, "tr", "kom-dbg");
@@ -47195,6 +47960,18 @@ el: function (parent, type, klasse, text) {
     return window.symolo.tools.layout.create(o);
 },
 
+/* Knopf in der Fußzeile mit kurzem Text für schmale Fenster (Handy). Die Fußzeile bleibt eine Zeile
+   (Skill, Abnahme), deshalb kürzer statt umbrechen. */
+fussKnopf: function (lang, kurz, klick, art) {
+
+    const b = this.knopf(this.fuss, "", klick, art);
+    this.el(b, "span", "kom-lang", lang);
+    this.el(b, "span", "kom-kurz", kurz);
+    b.setAttribute("aria-label", lang);
+    b.title = lang;
+    return b;
+},
+
 /* Ein Knopf. layout.create kann keine Events: Handler danach setzen. */
 knopf: function (parent, text, klick, art) {
 
@@ -47214,6 +47991,7 @@ geruestBauen: function (parent) {
 
     const kopf = this.el(view, "div", "kom-kopf");
     this.el(kopf, "h2", "kom-titel", this.ansicht.titel);
+    if (this.ansicht.satz) this.el(kopf, "span", "kom-satz", this.ansicht.satz);
     this.infoZeile = this.el(kopf, "div", "kom-info");
     this.bereichsleisteBauen(view);
 
@@ -47314,14 +48092,21 @@ statusZeigen: function (meldung, art) {
    Gibt null zurück, wenn es nicht geklappt hat. */
 sicher: async function (aufgabe) {
 
+    const vorher = this.geschrieben;
     try {
         return await aufgabe();
     } catch (fehler) {
         console.warn(this.ansicht.name + ":", fehler);
-        this.statusZeigen(fehler && fehler.message ? fehler.message : "Unbekannter Fehler.", "fehler");
+        let meldung = fehler && fehler.message ? fehler.message : "Unbekannter Fehler.";
+        if (this.geschrieben > vorher) meldung += " " + this.teilweiseGespeichert;
+        this.statusZeigen(meldung, "fehler");
         return null;
     }
 },
+
+/* Abbruch nach einem ersten Schreibschritt (Entnehmen, Archivieren, Zurückholen …): ohne Transaktion
+   kann dann etwas doppelt stehen. Neue Zeilen werden immer zuerst angelegt, Originale zuletzt ausgeblendet. */
+teilweiseGespeichert: "Ein Teil davon ist schon gespeichert. Bitte „Neu laden“ und prüfen, ob etwas doppelt steht.",
 
 /* Tabelle aus Zeilen von datenLesen.
    spalten: [{ feld, titel, art }]  art: "text" | "zahl" | "datum" | "datumzeit"
@@ -47366,7 +48151,7 @@ tabelleBauen: function (parent, spalten, zeilen, leerText, aktionen) {
 /* Klapp-Knopf (▾/▸) und Name als Knopf: Einfachklick klappt. */
 klappZellen: function (tr, name, offen, klappen, doppel) {
 
-    const td1 = this.el(tr, "td");
+    const td1 = this.el(tr, "td", "kom-klappzelle");
     const td2 = this.el(tr, "td");
     td2.title = this.text(name);
 
@@ -47477,9 +48262,9 @@ anzeigeKnoepfe: {},
 swSpalten: [
     ["klapp", ""], ["nr", "AB / Zeichnungsnummer"], ["ben", "Benennung"], ["lk", "LK"], ["soll", "Soll"],
     ["swm", "Mitarbeiter"], ["swp", "Arbeitsplatz"], ["datum", "Eingelagert"], ["datum", "Entnommen"],
-    ["swt", "Liefertermin Stahlbau"], ["swt", "Termin Versand"], ["dlz", "DLZ"], ["aktion", ""],
+    ["swt", "Liefertermin Stahlbau"], ["swt", "Termin Versand"], ["dlz", "DLZ (Tage)"],
     ["mbg", "Menge / BG", true], ["idx", "Index", true], ["text", "Arbeitsgang", true], ["text", "Material", true],
-    ["text", "Profil", true], ["text", "Abmaße", true], ["text", "Bemerkung", true]
+    ["text", "Profil", true], ["text", "Abmaße", true], ["text", "Bemerkung", true], ["aktion", ""]
 ],
 
 before_set_values: async function (form, { data }) {
@@ -47491,8 +48276,8 @@ before_set_values: async function (form, { data }) {
     this.leisteBauen();
     const start = this.startOptionen();
     if (start.suche) this.suche = this.sucheEl.value = this.text(start.suche);   /* Sprung aus einem anderen Bereich */
-    this.knopf(this.fuss, "Neu laden", () => this.laden());
-    this.knopf(this.fuss, "Mitarbeiter verwalten", () => this.verwaltenDialog());
+    this.fussKnopf("Neu laden", "Laden", () => this.laden());
+    this.fussKnopf("Mitarbeiter verwalten", "Mitarbeiter", () => this.verwaltenDialog());
 
     await this.laden();
 },
@@ -47751,7 +48536,7 @@ kopfzeileBauen: function (parent) {
     const tr = this.el(this.el(tab, "thead"), "tr");
     this.swSpalten.forEach(([art, titel, mehr]) => {
         const zahl = art === "lk" || art === "soll" || art === "mbg" || art === "dlz";
-        this.el(tr, "th", (zahl ? "kom-zahl" : "") + (mehr ? " kom-mehr" : ""), titel);
+        this.el(tr, "th", (zahl ? "kom-zahl" : "") + (mehr ? " kom-mehr" : "") + (art === "aktion" ? " kom-aktion" : ""), titel);
     });
 },
 
@@ -47890,11 +48675,11 @@ zeileBauen: function (parent, z, art, o) {
     }
 
     this.zelle(tr, this.swDlz(z), "kom-zahl");
-    this.aktionZelle(tr, z, art, o);
 
     this.zelle(tr, art === "ab" ? "" : z.menge_bg, "kom-zahl kom-mehr");
     this.zelle(tr, z.index, "kom-mehr");
     ["arbeitsgang", "material", "profil", "abmasse", "bemerkung"].forEach(f => this.zelle(tr, z[f], "kom-mehr", z[f]));
+    this.aktionZelle(tr, z, art, o);   /* ganz rechts wie bisher, bleibt beim Scrollen sichtbar */
 
     return tr;
 },
@@ -47937,6 +48722,7 @@ platzZelle: function (tr, z) {
 
     const aktuell = this.swPlatzFinden(wert, this.plaetze);
     sel.value = wert === this.swVerschieden ? "__v" : (aktuell !== null ? aktuell : (wert ? "__alt" : ""));
+    sel.setAttribute("data-gespeichert", sel.value);
     sel.onchange = () => this.eintragen(z, "arbeitsplatz", sel.value, sel);
 },
 
@@ -47953,6 +48739,7 @@ datumZelle: function (tr, z, feld, kurz, titel) {
     f.autocomplete = "off";
     f.placeholder = "TT.MM.JJJJ";
     f.value = wert;
+    f.setAttribute("data-gespeichert", wert);
     f.setAttribute("aria-label", titel + " " + this.swAnzeigename(z));
 
     const speichern = text => {
@@ -47973,7 +48760,12 @@ datumZelle: function (tr, z, feld, kurz, titel) {
         const m = this.text(kal.value).match(/^(\d{4})-(\d{2})-(\d{2})$/);
         if (m) speichern(m[3] + "." + m[2] + "." + m[1]);
     };
-    const b = this.el(reihe, "button", "kom-feldknopf kom-sw-kalenderknopf", "📅");
+    /* Eigenes Symbol statt Emoji: sieht auf jedem Gerät gleich aus. Nur mit "Weitere Spalten" sichtbar
+       (Ben, 15.10.: sonst ist die Spalte zu schmal). */
+    const b = window.symolo.tools.layout.create({ parent: reihe, type: "button", class: "kom-feldknopf kom-sw-kalenderknopf",
+        html: '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" ' +
+            'stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="5" width="18" height="16" rx="2"/>' +
+            '<path d="M3 10h18M8 3v4M16 3v4"/></svg>' });
     b.type = "button";
     b.title = "Datum wählen";
     b.setAttribute("aria-label", titel + " " + this.swAnzeigename(z) + ": Kalender");
@@ -47998,13 +48790,16 @@ aktionZelle: function (tr, z, art, o) {
     r.setAttribute("aria-label", "Zurück " + name);
 },
 
-/* Ein Eintrag speichern (R-W6, R-W7). Bei einem Fehler bleibt das Feld stehen, rot umrandet. */
+/* Ein Eintrag speichern (R-W6, R-W7). Bei einem Fehler bleibt die Meldung stehen, und das Feld zeigt
+   wieder den gespeicherten Wert, damit nichts gespeichert aussieht, was es nicht ist (Prüfbericht B5). */
 eintragen: async function (z, feld, text, feldEl) {
 
     const r = await this.sicher(() => this.swSetzen(z._id, feld, text));
 
     if (r === null) {
-        if (feldEl && feldEl.classList) feldEl.classList.add("kom-ungueltig");
+        if (feldEl && feldEl.hasAttribute && feldEl.hasAttribute("data-gespeichert")) {
+            feldEl.value = feldEl.getAttribute("data-gespeichert");
+        }
         return;
     }
 
@@ -48250,6 +49045,7 @@ form_on_load: function (FORM) {
 .kom-sw .kom-kopf { flex: 0 0 auto; display: flex; flex-wrap: wrap; align-items: baseline; gap: var(--space-3);
   padding: var(--space-3) var(--space-4); background: var(--surface-100); border-bottom: 1px solid var(--line); }
 .kom-sw .kom-titel { margin: 0; font-size: var(--fs-h3); line-height: var(--lh-h3); font-weight: var(--fw-h3); }
+.kom-sw .kom-satz { font-size: var(--fs-small); line-height: var(--lh-small); color: var(--ink); }
 .kom-sw .kom-info { font-size: var(--fs-small); line-height: var(--lh-small); color: var(--ink-muted); }
 
 .kom-sw .kom-sw .kom-kacheln { white-space: normal; }
@@ -48271,7 +49067,13 @@ form_on_load: function (FORM) {
 .kom-sw .kom-fuss { flex: 0 0 auto; display: flex; align-items: center; gap: var(--space-2);
   padding: var(--space-2) var(--space-4); background: var(--surface-100); border-top: 1px solid var(--line);
   white-space: nowrap; overflow-x: auto; }
-.kom-sw .kom-vermerk { margin-left: auto; font-size: var(--fs-label); color: var(--ink-muted); }
+.kom-sw .kom-vermerk { order: 1; margin-left: auto; font-size: var(--fs-label); color: var(--ink-muted); }   /* Knöpfe zuerst, Vermerk am Ende */
+.kom-sw .kom-kurz { display: none; }
+@media (max-width: 600px) {
+  .kom-sw .kom-fuss .kom-lang { display: none; }
+  .kom-sw .kom-fuss .kom-kurz { display: inline; }
+  .kom-sw .kom-fuss { padding: var(--space-2); }
+}
 
 .kom-sw .kom-knopf { min-height: 36px; padding: 0 var(--space-3); border: 1px solid var(--line-strong);
   border-radius: var(--radius-sm); background: var(--surface-100); color: var(--ink); cursor: pointer;
@@ -48291,8 +49093,8 @@ form_on_load: function (FORM) {
 
 .kom-sw .kom-leer { padding: var(--space-3); color: var(--ink-muted); }
 
-/* Die Meldung blendet ein und aus, Fehler bleiben stehen. */
-.kom-sw .kom-status { position: fixed; bottom: var(--space-4); left: 50%; transform: translateX(-50%);
+/* Die Meldung blendet ein und aus, Fehler bleiben stehen. Sie steht über der Fußzeile, nicht mitten im Inhalt. */
+.kom-sw .kom-status { position: fixed; bottom: 64px; left: 50%; transform: translateX(-50%);
   max-width: 90%; padding: var(--space-2) var(--space-3); border-radius: var(--radius-sm);
   background: var(--brand-gray); color: var(--on-brand); font-size: var(--fs-small);
   opacity: 0; pointer-events: none; transition: opacity .2s; z-index: 20; }
@@ -48353,13 +49155,13 @@ form_on_load: function (FORM) {
 
 /* Breite Liste scrollt waagerecht; die Kopfzeile scrollt mit. */
 .kom-sw .kom-liste { overflow-x: auto; }
-.kom-sw .kom-karte { min-width: 1510px; margin-bottom: var(--space-4); background: var(--surface-100);
-  border: 1px solid var(--line); border-radius: var(--radius-lg); overflow: hidden; }
+.kom-sw .kom-karte { min-width: 1400px; margin-bottom: var(--space-4); background: var(--surface-100);
+  border: 1px solid var(--line); border-radius: var(--radius-lg); overflow: clip; }
 .kom-sw .kom-mehr-an .kom-karte { min-width: 2520px; }
 /* Karten außerhalb des sichtbaren Bereichs rechnet der Browser erst beim Hinscrollen (schnell bei vielen ABs). */
 .kom-sw .kom-karte { content-visibility: auto; contain-intrinsic-size: auto 120px; }
 
-.kom-sw .kom-bestand { width: 100%; min-width: 1510px; table-layout: fixed; border-collapse: collapse;
+.kom-sw .kom-bestand { width: 100%; min-width: 1400px; table-layout: fixed; border-collapse: collapse;
   font-size: var(--fs-small); line-height: var(--lh-small); }
 .kom-sw .kom-mehr-an .kom-bestand { min-width: 2520px; }
 .kom-sw .kom-bestand th { padding: var(--space-1) var(--space-2); text-align: left; font-weight: var(--fw-label);
@@ -48370,6 +49172,12 @@ form_on_load: function (FORM) {
 .kom-sw .kom-bestand .kom-zahl { text-align: right; font-variant-numeric: tabular-nums; }
 .kom-sw .kom-bestand .kom-mitte { text-align: center; }
 .kom-sw .kom-bestand .kom-leise { color: var(--ink-muted); }
+/* Aktionsspalte bleibt beim waagerechten Scrollen rechts sichtbar (Prüfbericht P3). overflow: clip an der
+   Karte statt hidden, sonst klebt sie an der Karte statt am Fenster. Zeilenfarben unten überschreiben den Grund. */
+.kom-sw .kom-bestand .kom-aktion { position: sticky; right: 0; z-index: 1; background: var(--surface-100);
+  box-shadow: inset 1px 0 0 var(--line); }
+/* Klapp-Pfeil ohne Innenabstand rechts, sonst zeigt die schmale Zelle Auslassungspunkte neben dem Pfeil. */
+.kom-sw .kom-bestand td.kom-klappzelle { padding-right: 0; text-overflow: clip; }
 
 /* Spaltenbreiten wie bisher; weitere Spalten nur mit dem Schalter. */
 .kom-sw .kom-c-klapp { width: 40px; }
@@ -48392,7 +49200,7 @@ form_on_load: function (FORM) {
 .kom-sw .kom-mehr-an col.kom-mehr { display: table-column; }
 
 /* Zeilen: AB kräftig, Baugruppe hell mit Balken links, Teil zart. */
-.kom-sw .kom-ab td { font-weight: var(--fw-label); }
+.kom-sw .kom-ab td { font-weight: 700; }   /* wie bisher (listen.css) */
 .kom-sw .kom-ab.kom-komplett td { background: var(--status-komplett); color: var(--on-status); }
 .kom-sw .kom-ab.kom-teilweise td { background: var(--status-teilweise); color: var(--on-status); }
 .kom-sw .kom-bg.kom-komplett td { background: color-mix(in srgb, var(--status-komplett) 55%, var(--surface-100)); }
@@ -48407,7 +49215,7 @@ form_on_load: function (FORM) {
 .kom-sw .kom-klapp, .kom-sw .kom-name { padding: 0; border: none; background: none; color: inherit;
   font: inherit; cursor: pointer; text-align: left; }
 .kom-sw .kom-klapp { width: 28px; min-height: 28px; font-size: var(--fs-body); }
-.kom-sw .kom-name { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; text-decoration: underline dotted; }
+.kom-sw .kom-name { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .kom-sw .kom-klapp:focus-visible, .kom-sw .kom-name:focus-visible { outline: 2px solid var(--focus); outline-offset: 1px; }
 
 .kom-sw .kom-statusmarke { display: inline-block; padding: 0 var(--space-2); border: 1px solid var(--line-strong);
@@ -48454,12 +49262,14 @@ form_on_load: function (FORM) {
 .kom-sw .kom-leise { color: var(--ink-muted); font-size: var(--fs-small); }
 .kom-sw .kom-oben > .kom-leise { margin: 0; }
 
-.kom-sw .kom-karte, .kom-sw .kom-bestand { min-width: 1700px; }
+.kom-sw .kom-karte, .kom-sw .kom-bestand { min-width: 1490px; }
 .kom-sw .kom-mehr-an .kom-karte, .kom-sw .kom-mehr-an .kom-bestand { min-width: 2620px; }
 
 .kom-sw .kom-c-swm { width: 150px; }
 .kom-sw .kom-c-swp { width: 120px; }
-.kom-sw .kom-c-swt { width: 190px; }
+/* Ohne „Weitere Spalten“ nur das Datum, mit ihnen Datum und Kalenderknopf. */
+.kom-sw .kom-c-swt { width: 120px; }
+.kom-sw .kom-mehr-an .kom-c-swt { width: 190px; }
 .kom-sw .kom-c-dlz { width: 56px; }
 .kom-sw .kom-c-aktion { width: 190px; }
 
@@ -48474,7 +49284,10 @@ form_on_load: function (FORM) {
 
 .kom-sw .kom-sw-datumzelle { position: relative; display: flex; gap: var(--space-1); align-items: center; }
 .kom-sw .kom-bestand .kom-sw-datumzelle .kom-eingabe { flex: 1 1 auto; width: auto; min-width: 0; text-align: left; }
-.kom-sw .kom-sw-datumzelle .kom-sw-kalenderknopf { flex: 0 0 32px; width: 32px; padding: 0; text-align: center; }
+.kom-sw .kom-sw-datumzelle .kom-sw-kalenderknopf { display: none; flex: 0 0 32px; width: 32px; padding: 0;
+  align-items: center; justify-content: center; }
+/* Ben, 15.10.: ohne „Weitere Spalten“ bekommt das Datum die ganze Breite, der Kalenderknopf erscheint nur mit. */
+.kom-sw .kom-mehr-an .kom-sw-datumzelle .kom-sw-kalenderknopf { display: inline-flex; }
 .kom-sw .kom-sw-kalender { position: absolute; right: 0; bottom: 0; width: 1px; height: 1px; opacity: 0; pointer-events: none; }
 
 /* Auswahl im Fenster */
@@ -48482,8 +49295,10 @@ form_on_load: function (FORM) {
   margin-bottom: var(--space-3); }
 .kom-sw .kom-dialog .kom-tabelle { margin-bottom: var(--space-3); }
 
-/* Sammlung: Überschrift eines AB, dessen Baugruppen einzeln im Schweißen liegen */
-.kom-sw .kom-sammlung td { background: color-mix(in srgb, var(--brand-gray) 22%, var(--surface-100)); }
+/* AB-Zeilen dunkelgrau wie bisher (listen.css): im Schweißen ist jeder AB komplett, Grün sagt hier nichts.
+   Das gilt auch für die Sammlung (Baugruppen eines AB einzeln im Schweißen). */
+.kom-sw .kom-bestand tr.kom-ab td { background: var(--brand-gray); color: var(--on-brand); }
+.kom-sw .kom-bestand tr.kom-ab .kom-leise { color: inherit; }
 .kom-sw .kom-kacheln { display: flex; flex-wrap: wrap; gap: var(--space-2); white-space: normal; }
 .kom-sw .kom-komzeile td { white-space: normal; overflow: visible; }
 
@@ -48507,7 +49322,7 @@ window.KOM_ANSICHTEN_TITEL["arbeitsplaetze"] = "Arbeitsplätze";
 window.KOM_ANSICHTEN["arbeitsplaetze"] = function () { return {
 
 /* Kenndaten dieser Ansicht (aus tools/symolo_bauen.py). */
-ansicht: { name: "arbeitsplaetze", titel: "Arbeitsplätze", klasse: "kom-ap", praefix: "komAp", cssId: "KOMAPCSS" },
+ansicht: { name: "arbeitsplaetze", titel: "Arbeitsplätze", klasse: "kom-ap", praefix: "komAp", cssId: "KOMAPCSS", satz: "Hallenplan Schweißen" },
 
 
 /* ===========================================================================
@@ -48943,6 +49758,11 @@ datumZeitText: function (value) {
 
 datenHinweise: [],
 
+/* Zahl der gelungenen Schreibvorgänge in diesem Fenster. sicher() vergleicht sie vor und nach einer
+   Aufgabe: Bricht eine Aufgabe mit mehreren Schritten mittendrin ab, sagt die Meldung, dass schon
+   etwas gespeichert ist (Prüfbericht D3). OFFEN (Symolo): Gibt es eine Transaktion? */
+geschrieben: 0,
+
 /* "symolo", "symolo-test" oder "lokal" (siehe einstellungen.quelle). */
 datenQuelle: function () {
 
@@ -49316,6 +50136,7 @@ schreiben: async function (art, name, id, werte, stand, optionen) {
         const neu = this.antwortObjekt(
             await this.anfrage("dsf.dbo.CreateObjectJson", [tabelle, JSON.stringify(roh)])
         );
+        this.geschrieben += 1;
 
         return this.zeileLesen(name, neu || {});
     }
@@ -49345,6 +50166,7 @@ schreiben: async function (art, name, id, werte, stand, optionen) {
         const neu = this.antwortObjekt(
             await this.anfrage("dsf.dbo.UpdateObjectJson", [tabelle, JSON.stringify(roh)])
         );
+        this.geschrieben += 1;
 
         /* OFFEN (Symolo): Was liefert UpdateObjectJson zurück? Ist es kein
            Objekt, gilt das gesendete. */
@@ -49411,16 +50233,46 @@ datenArchivieren: async function (name, zeile) {
 
 /* Menge -> Tausendstel. Leer oder Text zählt 0 (Excel-Funktion N).
    OFFEN (Symolo): Kommen Zahlen als Zahl oder als Text ("21.000")?
-   Wir verstehen beides; Text, der keine Zahl ist, zählt 0. */
+   VERMUTET: Text kommt aus der Datenbank, also mit Punkt als Komma und ohne
+   Tausenderpunkt ("21.000" = 21). Alles andere (z. B. "1.234.567", "1e5",
+   über 999.999.999) zählt 0 und steht oben als Hinweis, statt still falsch
+   zu rechnen (Prüfbericht B1, B3). */
 mengeMilli: function (wert) {
 
-    if (typeof wert === "number") return Number.isFinite(wert) ? Math.round(wert * 1000) : 0;
+    if (wert === null || wert === undefined) return 0;
+    if (typeof wert === "number") {
+        if (Number.isFinite(wert) && Math.abs(wert) <= this.mengeGrenze) return Math.round(wert * 1000);
+        this.mengeUnklar(wert);
+        return 0;
+    }
     if (typeof wert !== "string") return 0;
 
     const t = wert.trim();
-    if (!/^-?\d+([.,]\d+)?$/.test(t)) return 0;
+    if (t === "") return 0;
+    if (!/^-?\d+([.,]\d+)?$/.test(t)) {
+        if (/\d/.test(t)) this.mengeUnklar(t);   /* reiner Text wie "Rest" zählt 0 wie in Excel, ohne Hinweis */
+        return 0;
+    }
 
-    return Math.round(Number(t.replace(",", ".")) * 1000);
+    const zahl = Number(t.replace(",", "."));
+    if (Math.abs(zahl) > this.mengeGrenze) {
+        this.mengeUnklar(t);
+        return 0;
+    }
+    return Math.round(zahl * 1000);
+},
+
+/* Größte Menge, wie bei der Eingabe (R-M4, Mengenfeld mit 12 Stellen). */
+mengeGrenze: 999999999,
+
+/* Unklare Menge einmal als Hinweis oben vormerken (höchstens drei Beispiele). */
+mengeUnklar: function (wert) {
+
+    if (!Array.isArray(this.datenHinweise)) return;
+    const hinweis = "Menge „" + String(wert) + "“ ist unklar und zählt 0.";
+    const schon = this.datenHinweise.filter(h => h.indexOf("Menge „") === 0);
+    if (schon.length >= 3 || schon.indexOf(hinweis) >= 0) return;
+    this.datenHinweise.push(hinweis);
 },
 
 /* Tausendstel -> Text wie Excel (deutsch): 21000 -> "21", 60 -> "0,06". */
@@ -49538,7 +50390,8 @@ mengeMeldungen: {
     ganz: "Bitte eine ganze Zahl eintragen (0 oder mehr).",
     zahl: "Bitte eine Zahl ab 0 eintragen.",
     punkt: "Bitte ohne Punkt eintragen (1000 statt 1.000).",
-    gross: "Bitte eine Zahl bis 999.999.999 eintragen."
+    gross: "Bitte eine Zahl bis 999.999.999 eintragen.",
+    stellen: "Bitte höchstens drei Stellen nach dem Komma eintragen."
 },
 
 /* R-M4: "1.000" oder "1,000" kann 1 oder 1000 heißen; wird nicht geraten, sondern abgelehnt. */
@@ -49557,12 +50410,14 @@ mengeEingabe: function (text, ganz) {
 
     if (t === "") return { milli: null, fehler: "" };
     if (this.punktMehrdeutig(roh)) return { milli: null, fehler: this.mengeMeldungen.punkt };
-    if (!/^\+?(\d+\.?\d*|\.\d+)([eE][+-]?\d+)?$/.test(t)) return falsch;
+    /* Nur Ziffern mit höchstens einem Komma; kein "1e5", "+5" oder ".5" (Prüfbericht B2). */
+    if (!/^\d+(\.\d*)?$/.test(t)) return falsch;
+    if (!ganz && /\.\d{4,}$/.test(t)) return { milli: null, fehler: this.mengeMeldungen.stellen };
 
     const zahl = Number(t);
     if (!Number.isFinite(zahl) || zahl < 0) return falsch;
     if (ganz && !Number.isInteger(zahl)) return falsch;
-    if (zahl > 999999999) return { milli: null, fehler: this.mengeMeldungen.gross };
+    if (zahl > this.mengeGrenze) return { milli: null, fehler: this.mengeMeldungen.gross };
 
     return { milli: Math.round(zahl * 1000), fehler: "" };
 },
@@ -51918,8 +52773,9 @@ statVerspaetung: function (eintraege, heute) {
 
    Zustand, den die Ansicht führt: abs, suche, kunde, ansichtWahl, sortierung,
    gemerkt (R-DB4), markenZeilen/marken (Planung), listeHeute (Tageszahl).
-   OFFEN (Symolo): Der Klappzustand wird bisher nur solange gemerkt, wie das
-   Fenster offen ist. Je Benutzer dauerhaft geht erst mit einer Tabelle
+   Der Klappzustand (Ansicht und Auf-/Zuklappen) bleibt im Browser dieses
+   Geräts gespeichert (localStorage, laut Skill für solche Zustände erlaubt).
+   OFFEN (Symolo): Je Benutzer auf jedem Gerät geht erst mit einer Tabelle
    (Benutzer, Ansicht, Schlüssel) und der Benutzer-Anbindung.
    =========================================================================== */
 
@@ -51955,6 +52811,7 @@ ansichtKnoepfe: {},
 
 listeLeisteBauen: function (felder) {
 
+    this.klappenLaden();
     const leiste = this.el(this.koerper, "div", "kom-leiste");
 
     felder.forEach(f => {
@@ -51967,6 +52824,7 @@ listeLeisteBauen: function (felder) {
                     /* R-DB4: Ansicht umstellen = Startzustand der neuen Ansicht */
                     this.ansichtWahl = wert;
                     this.gemerkt = {};
+                    this.klappenMerken();
                     this.zeichnen();
                 });
             });
@@ -52182,6 +53040,34 @@ planungHaken: async function (d, box) {
     this.zeichnen();
 },
 
+/* R-DB4: Ansicht und Klappzustand im Browser merken. Ohne Speicher (privates Fenster, gesperrt) gilt
+   der Startzustand, wie bisher nur solange das Fenster offen ist. */
+klappenSchluessel: function () {
+
+    return "kom." + this.ansicht.name + ".klappen";
+},
+
+klappenLaden: function () {
+
+    try {
+        const z = JSON.parse(window.localStorage.getItem(this.klappenSchluessel()) || "null");
+        if (!z || typeof z !== "object") return;
+        if (this.dashAnsichten.some(a => a[0] === z.ansicht)) this.ansichtWahl = z.ansicht;
+        this.gemerkt = z.gemerkt && typeof z.gemerkt === "object" ? z.gemerkt : {};
+    } catch (fehler) {
+        /* kein Speicher: Startzustand */
+    }
+},
+
+klappenMerken: function () {
+
+    try {
+        window.localStorage.setItem(this.klappenSchluessel(), JSON.stringify({ ansicht: this.ansichtWahl, gemerkt: this.gemerkt }));
+    } catch (fehler) {
+        /* kein Speicher: nur solange das Fenster offen ist */
+    }
+},
+
 /* Klappen merken (R-DB4) und diese Karte neu zeichnen. */
 klappKnopf: function (td, offen, name, umschalten) {
 
@@ -52299,7 +53185,7 @@ karteZeichnen: function (karte, d) {
     const neu = () => this.karteZeichnen(karte, d);
     /* Baugruppen dieses AB, die einzeln im Schweißen liegen */
     const imSw = this.imSwJeAb[this.text(a.o.ab_schluessel)] || [];
-    const abUmschalten = () => { d.offen = !d.offen; this.gemerkt[d.schluessel] = d.offen; neu(); };
+    const abUmschalten = () => { d.offen = !d.offen; this.gemerkt[d.schluessel] = d.offen; this.klappenMerken(); neu(); };
 
     /* AB-Zeile: Nummer, Verkaufsartikel, Kunde */
     const tr = this.el(koerper, "tr", "kom-dab " + this.statusKlasse(a.w));
@@ -52311,7 +53197,7 @@ karteZeichnen: function (karte, d) {
     if (!d.offen) return;
 
     d.gruppen.forEach(g => {
-        const gUmschalten = () => { g.offen = !g.offen; this.gemerkt[g.schluessel] = g.offen; neu(); };
+        const gUmschalten = () => { g.offen = !g.offen; this.gemerkt[g.schluessel] = g.offen; this.klappenMerken(); neu(); };
 
         if (g.bg) {
             const btr = this.el(koerper, "tr", "kom-dbg");
@@ -53730,6 +54616,18 @@ el: function (parent, type, klasse, text) {
     return window.symolo.tools.layout.create(o);
 },
 
+/* Knopf in der Fußzeile mit kurzem Text für schmale Fenster (Handy). Die Fußzeile bleibt eine Zeile
+   (Skill, Abnahme), deshalb kürzer statt umbrechen. */
+fussKnopf: function (lang, kurz, klick, art) {
+
+    const b = this.knopf(this.fuss, "", klick, art);
+    this.el(b, "span", "kom-lang", lang);
+    this.el(b, "span", "kom-kurz", kurz);
+    b.setAttribute("aria-label", lang);
+    b.title = lang;
+    return b;
+},
+
 /* Ein Knopf. layout.create kann keine Events: Handler danach setzen. */
 knopf: function (parent, text, klick, art) {
 
@@ -53749,6 +54647,7 @@ geruestBauen: function (parent) {
 
     const kopf = this.el(view, "div", "kom-kopf");
     this.el(kopf, "h2", "kom-titel", this.ansicht.titel);
+    if (this.ansicht.satz) this.el(kopf, "span", "kom-satz", this.ansicht.satz);
     this.infoZeile = this.el(kopf, "div", "kom-info");
     this.bereichsleisteBauen(view);
 
@@ -53849,14 +54748,21 @@ statusZeigen: function (meldung, art) {
    Gibt null zurück, wenn es nicht geklappt hat. */
 sicher: async function (aufgabe) {
 
+    const vorher = this.geschrieben;
     try {
         return await aufgabe();
     } catch (fehler) {
         console.warn(this.ansicht.name + ":", fehler);
-        this.statusZeigen(fehler && fehler.message ? fehler.message : "Unbekannter Fehler.", "fehler");
+        let meldung = fehler && fehler.message ? fehler.message : "Unbekannter Fehler.";
+        if (this.geschrieben > vorher) meldung += " " + this.teilweiseGespeichert;
+        this.statusZeigen(meldung, "fehler");
         return null;
     }
 },
+
+/* Abbruch nach einem ersten Schreibschritt (Entnehmen, Archivieren, Zurückholen …): ohne Transaktion
+   kann dann etwas doppelt stehen. Neue Zeilen werden immer zuerst angelegt, Originale zuletzt ausgeblendet. */
+teilweiseGespeichert: "Ein Teil davon ist schon gespeichert. Bitte „Neu laden“ und prüfen, ob etwas doppelt steht.",
 
 /* Tabelle aus Zeilen von datenLesen.
    spalten: [{ feld, titel, art }]  art: "text" | "zahl" | "datum" | "datumzeit"
@@ -53901,7 +54807,7 @@ tabelleBauen: function (parent, spalten, zeilen, leerText, aktionen) {
 /* Klapp-Knopf (▾/▸) und Name als Knopf: Einfachklick klappt. */
 klappZellen: function (tr, name, offen, klappen, doppel) {
 
-    const td1 = this.el(tr, "td");
+    const td1 = this.el(tr, "td", "kom-klappzelle");
     const td2 = this.el(tr, "td");
     td2.title = this.text(name);
 
@@ -54003,7 +54909,7 @@ before_set_values: async function (form, { data }) {
         "Platz oder nach „Nicht einsortiert“ ziehen. Rechtsklick auf einen Eintrag: AB aufsplitten bzw. zusammenführen " +
         "und Mitarbeiter ändern. Der Platz gilt dann auch im Schweißen.");
     this.planEl = this.el(this.koerper, "div", "kom-plan");
-    this.knopf(this.fuss, "Neu laden", () => this.laden());
+    this.fussKnopf("Neu laden", "Laden", () => this.laden());
 
     await this.laden();
 },
@@ -54314,6 +55220,7 @@ form_on_load: function (FORM) {
 .kom-ap .kom-kopf { flex: 0 0 auto; display: flex; flex-wrap: wrap; align-items: baseline; gap: var(--space-3);
   padding: var(--space-3) var(--space-4); background: var(--surface-100); border-bottom: 1px solid var(--line); }
 .kom-ap .kom-titel { margin: 0; font-size: var(--fs-h3); line-height: var(--lh-h3); font-weight: var(--fw-h3); }
+.kom-ap .kom-satz { font-size: var(--fs-small); line-height: var(--lh-small); color: var(--ink); }
 .kom-ap .kom-info { font-size: var(--fs-small); line-height: var(--lh-small); color: var(--ink-muted); }
 
 .kom-ap .kom-ap .kom-kacheln { white-space: normal; }
@@ -54335,7 +55242,13 @@ form_on_load: function (FORM) {
 .kom-ap .kom-fuss { flex: 0 0 auto; display: flex; align-items: center; gap: var(--space-2);
   padding: var(--space-2) var(--space-4); background: var(--surface-100); border-top: 1px solid var(--line);
   white-space: nowrap; overflow-x: auto; }
-.kom-ap .kom-vermerk { margin-left: auto; font-size: var(--fs-label); color: var(--ink-muted); }
+.kom-ap .kom-vermerk { order: 1; margin-left: auto; font-size: var(--fs-label); color: var(--ink-muted); }   /* Knöpfe zuerst, Vermerk am Ende */
+.kom-ap .kom-kurz { display: none; }
+@media (max-width: 600px) {
+  .kom-ap .kom-fuss .kom-lang { display: none; }
+  .kom-ap .kom-fuss .kom-kurz { display: inline; }
+  .kom-ap .kom-fuss { padding: var(--space-2); }
+}
 
 .kom-ap .kom-knopf { min-height: 36px; padding: 0 var(--space-3); border: 1px solid var(--line-strong);
   border-radius: var(--radius-sm); background: var(--surface-100); color: var(--ink); cursor: pointer;
@@ -54355,8 +55268,8 @@ form_on_load: function (FORM) {
 
 .kom-ap .kom-leer { padding: var(--space-3); color: var(--ink-muted); }
 
-/* Die Meldung blendet ein und aus, Fehler bleiben stehen. */
-.kom-ap .kom-status { position: fixed; bottom: var(--space-4); left: 50%; transform: translateX(-50%);
+/* Die Meldung blendet ein und aus, Fehler bleiben stehen. Sie steht über der Fußzeile, nicht mitten im Inhalt. */
+.kom-ap .kom-status { position: fixed; bottom: 64px; left: 50%; transform: translateX(-50%);
   max-width: 90%; padding: var(--space-2) var(--space-3); border-radius: var(--radius-sm);
   background: var(--brand-gray); color: var(--on-brand); font-size: var(--fs-small);
   opacity: 0; pointer-events: none; transition: opacity .2s; z-index: 20; }
@@ -54451,7 +55364,7 @@ window.KOM_ANSICHTEN_TITEL["regal"] = "Regal";
 window.KOM_ANSICHTEN["regal"] = function () { return {
 
 /* Kenndaten dieser Ansicht (aus tools/symolo_bauen.py). */
-ansicht: { name: "regal", titel: "Regal", klasse: "kom-rg", praefix: "komRg", cssId: "KOMRGCSS" },
+ansicht: { name: "regal", titel: "Regal", klasse: "kom-rg", praefix: "komRg", cssId: "KOMRGCSS", satz: "" },
 
 
 /* ===========================================================================
@@ -54887,6 +55800,11 @@ datumZeitText: function (value) {
 
 datenHinweise: [],
 
+/* Zahl der gelungenen Schreibvorgänge in diesem Fenster. sicher() vergleicht sie vor und nach einer
+   Aufgabe: Bricht eine Aufgabe mit mehreren Schritten mittendrin ab, sagt die Meldung, dass schon
+   etwas gespeichert ist (Prüfbericht D3). OFFEN (Symolo): Gibt es eine Transaktion? */
+geschrieben: 0,
+
 /* "symolo", "symolo-test" oder "lokal" (siehe einstellungen.quelle). */
 datenQuelle: function () {
 
@@ -55260,6 +56178,7 @@ schreiben: async function (art, name, id, werte, stand, optionen) {
         const neu = this.antwortObjekt(
             await this.anfrage("dsf.dbo.CreateObjectJson", [tabelle, JSON.stringify(roh)])
         );
+        this.geschrieben += 1;
 
         return this.zeileLesen(name, neu || {});
     }
@@ -55289,6 +56208,7 @@ schreiben: async function (art, name, id, werte, stand, optionen) {
         const neu = this.antwortObjekt(
             await this.anfrage("dsf.dbo.UpdateObjectJson", [tabelle, JSON.stringify(roh)])
         );
+        this.geschrieben += 1;
 
         /* OFFEN (Symolo): Was liefert UpdateObjectJson zurück? Ist es kein
            Objekt, gilt das gesendete. */
@@ -55355,16 +56275,46 @@ datenArchivieren: async function (name, zeile) {
 
 /* Menge -> Tausendstel. Leer oder Text zählt 0 (Excel-Funktion N).
    OFFEN (Symolo): Kommen Zahlen als Zahl oder als Text ("21.000")?
-   Wir verstehen beides; Text, der keine Zahl ist, zählt 0. */
+   VERMUTET: Text kommt aus der Datenbank, also mit Punkt als Komma und ohne
+   Tausenderpunkt ("21.000" = 21). Alles andere (z. B. "1.234.567", "1e5",
+   über 999.999.999) zählt 0 und steht oben als Hinweis, statt still falsch
+   zu rechnen (Prüfbericht B1, B3). */
 mengeMilli: function (wert) {
 
-    if (typeof wert === "number") return Number.isFinite(wert) ? Math.round(wert * 1000) : 0;
+    if (wert === null || wert === undefined) return 0;
+    if (typeof wert === "number") {
+        if (Number.isFinite(wert) && Math.abs(wert) <= this.mengeGrenze) return Math.round(wert * 1000);
+        this.mengeUnklar(wert);
+        return 0;
+    }
     if (typeof wert !== "string") return 0;
 
     const t = wert.trim();
-    if (!/^-?\d+([.,]\d+)?$/.test(t)) return 0;
+    if (t === "") return 0;
+    if (!/^-?\d+([.,]\d+)?$/.test(t)) {
+        if (/\d/.test(t)) this.mengeUnklar(t);   /* reiner Text wie "Rest" zählt 0 wie in Excel, ohne Hinweis */
+        return 0;
+    }
 
-    return Math.round(Number(t.replace(",", ".")) * 1000);
+    const zahl = Number(t.replace(",", "."));
+    if (Math.abs(zahl) > this.mengeGrenze) {
+        this.mengeUnklar(t);
+        return 0;
+    }
+    return Math.round(zahl * 1000);
+},
+
+/* Größte Menge, wie bei der Eingabe (R-M4, Mengenfeld mit 12 Stellen). */
+mengeGrenze: 999999999,
+
+/* Unklare Menge einmal als Hinweis oben vormerken (höchstens drei Beispiele). */
+mengeUnklar: function (wert) {
+
+    if (!Array.isArray(this.datenHinweise)) return;
+    const hinweis = "Menge „" + String(wert) + "“ ist unklar und zählt 0.";
+    const schon = this.datenHinweise.filter(h => h.indexOf("Menge „") === 0);
+    if (schon.length >= 3 || schon.indexOf(hinweis) >= 0) return;
+    this.datenHinweise.push(hinweis);
 },
 
 /* Tausendstel -> Text wie Excel (deutsch): 21000 -> "21", 60 -> "0,06". */
@@ -55482,7 +56432,8 @@ mengeMeldungen: {
     ganz: "Bitte eine ganze Zahl eintragen (0 oder mehr).",
     zahl: "Bitte eine Zahl ab 0 eintragen.",
     punkt: "Bitte ohne Punkt eintragen (1000 statt 1.000).",
-    gross: "Bitte eine Zahl bis 999.999.999 eintragen."
+    gross: "Bitte eine Zahl bis 999.999.999 eintragen.",
+    stellen: "Bitte höchstens drei Stellen nach dem Komma eintragen."
 },
 
 /* R-M4: "1.000" oder "1,000" kann 1 oder 1000 heißen; wird nicht geraten, sondern abgelehnt. */
@@ -55501,12 +56452,14 @@ mengeEingabe: function (text, ganz) {
 
     if (t === "") return { milli: null, fehler: "" };
     if (this.punktMehrdeutig(roh)) return { milli: null, fehler: this.mengeMeldungen.punkt };
-    if (!/^\+?(\d+\.?\d*|\.\d+)([eE][+-]?\d+)?$/.test(t)) return falsch;
+    /* Nur Ziffern mit höchstens einem Komma; kein "1e5", "+5" oder ".5" (Prüfbericht B2). */
+    if (!/^\d+(\.\d*)?$/.test(t)) return falsch;
+    if (!ganz && /\.\d{4,}$/.test(t)) return { milli: null, fehler: this.mengeMeldungen.stellen };
 
     const zahl = Number(t);
     if (!Number.isFinite(zahl) || zahl < 0) return falsch;
     if (ganz && !Number.isInteger(zahl)) return falsch;
-    if (zahl > 999999999) return { milli: null, fehler: this.mengeMeldungen.gross };
+    if (zahl > this.mengeGrenze) return { milli: null, fehler: this.mengeMeldungen.gross };
 
     return { milli: Math.round(zahl * 1000), fehler: "" };
 },
@@ -57862,8 +58815,9 @@ statVerspaetung: function (eintraege, heute) {
 
    Zustand, den die Ansicht führt: abs, suche, kunde, ansichtWahl, sortierung,
    gemerkt (R-DB4), markenZeilen/marken (Planung), listeHeute (Tageszahl).
-   OFFEN (Symolo): Der Klappzustand wird bisher nur solange gemerkt, wie das
-   Fenster offen ist. Je Benutzer dauerhaft geht erst mit einer Tabelle
+   Der Klappzustand (Ansicht und Auf-/Zuklappen) bleibt im Browser dieses
+   Geräts gespeichert (localStorage, laut Skill für solche Zustände erlaubt).
+   OFFEN (Symolo): Je Benutzer auf jedem Gerät geht erst mit einer Tabelle
    (Benutzer, Ansicht, Schlüssel) und der Benutzer-Anbindung.
    =========================================================================== */
 
@@ -57899,6 +58853,7 @@ ansichtKnoepfe: {},
 
 listeLeisteBauen: function (felder) {
 
+    this.klappenLaden();
     const leiste = this.el(this.koerper, "div", "kom-leiste");
 
     felder.forEach(f => {
@@ -57911,6 +58866,7 @@ listeLeisteBauen: function (felder) {
                     /* R-DB4: Ansicht umstellen = Startzustand der neuen Ansicht */
                     this.ansichtWahl = wert;
                     this.gemerkt = {};
+                    this.klappenMerken();
                     this.zeichnen();
                 });
             });
@@ -58126,6 +59082,34 @@ planungHaken: async function (d, box) {
     this.zeichnen();
 },
 
+/* R-DB4: Ansicht und Klappzustand im Browser merken. Ohne Speicher (privates Fenster, gesperrt) gilt
+   der Startzustand, wie bisher nur solange das Fenster offen ist. */
+klappenSchluessel: function () {
+
+    return "kom." + this.ansicht.name + ".klappen";
+},
+
+klappenLaden: function () {
+
+    try {
+        const z = JSON.parse(window.localStorage.getItem(this.klappenSchluessel()) || "null");
+        if (!z || typeof z !== "object") return;
+        if (this.dashAnsichten.some(a => a[0] === z.ansicht)) this.ansichtWahl = z.ansicht;
+        this.gemerkt = z.gemerkt && typeof z.gemerkt === "object" ? z.gemerkt : {};
+    } catch (fehler) {
+        /* kein Speicher: Startzustand */
+    }
+},
+
+klappenMerken: function () {
+
+    try {
+        window.localStorage.setItem(this.klappenSchluessel(), JSON.stringify({ ansicht: this.ansichtWahl, gemerkt: this.gemerkt }));
+    } catch (fehler) {
+        /* kein Speicher: nur solange das Fenster offen ist */
+    }
+},
+
 /* Klappen merken (R-DB4) und diese Karte neu zeichnen. */
 klappKnopf: function (td, offen, name, umschalten) {
 
@@ -58243,7 +59227,7 @@ karteZeichnen: function (karte, d) {
     const neu = () => this.karteZeichnen(karte, d);
     /* Baugruppen dieses AB, die einzeln im Schweißen liegen */
     const imSw = this.imSwJeAb[this.text(a.o.ab_schluessel)] || [];
-    const abUmschalten = () => { d.offen = !d.offen; this.gemerkt[d.schluessel] = d.offen; neu(); };
+    const abUmschalten = () => { d.offen = !d.offen; this.gemerkt[d.schluessel] = d.offen; this.klappenMerken(); neu(); };
 
     /* AB-Zeile: Nummer, Verkaufsartikel, Kunde */
     const tr = this.el(koerper, "tr", "kom-dab " + this.statusKlasse(a.w));
@@ -58255,7 +59239,7 @@ karteZeichnen: function (karte, d) {
     if (!d.offen) return;
 
     d.gruppen.forEach(g => {
-        const gUmschalten = () => { g.offen = !g.offen; this.gemerkt[g.schluessel] = g.offen; neu(); };
+        const gUmschalten = () => { g.offen = !g.offen; this.gemerkt[g.schluessel] = g.offen; this.klappenMerken(); neu(); };
 
         if (g.bg) {
             const btr = this.el(koerper, "tr", "kom-dbg");
@@ -59674,6 +60658,18 @@ el: function (parent, type, klasse, text) {
     return window.symolo.tools.layout.create(o);
 },
 
+/* Knopf in der Fußzeile mit kurzem Text für schmale Fenster (Handy). Die Fußzeile bleibt eine Zeile
+   (Skill, Abnahme), deshalb kürzer statt umbrechen. */
+fussKnopf: function (lang, kurz, klick, art) {
+
+    const b = this.knopf(this.fuss, "", klick, art);
+    this.el(b, "span", "kom-lang", lang);
+    this.el(b, "span", "kom-kurz", kurz);
+    b.setAttribute("aria-label", lang);
+    b.title = lang;
+    return b;
+},
+
 /* Ein Knopf. layout.create kann keine Events: Handler danach setzen. */
 knopf: function (parent, text, klick, art) {
 
@@ -59693,6 +60689,7 @@ geruestBauen: function (parent) {
 
     const kopf = this.el(view, "div", "kom-kopf");
     this.el(kopf, "h2", "kom-titel", this.ansicht.titel);
+    if (this.ansicht.satz) this.el(kopf, "span", "kom-satz", this.ansicht.satz);
     this.infoZeile = this.el(kopf, "div", "kom-info");
     this.bereichsleisteBauen(view);
 
@@ -59793,14 +60790,21 @@ statusZeigen: function (meldung, art) {
    Gibt null zurück, wenn es nicht geklappt hat. */
 sicher: async function (aufgabe) {
 
+    const vorher = this.geschrieben;
     try {
         return await aufgabe();
     } catch (fehler) {
         console.warn(this.ansicht.name + ":", fehler);
-        this.statusZeigen(fehler && fehler.message ? fehler.message : "Unbekannter Fehler.", "fehler");
+        let meldung = fehler && fehler.message ? fehler.message : "Unbekannter Fehler.";
+        if (this.geschrieben > vorher) meldung += " " + this.teilweiseGespeichert;
+        this.statusZeigen(meldung, "fehler");
         return null;
     }
 },
+
+/* Abbruch nach einem ersten Schreibschritt (Entnehmen, Archivieren, Zurückholen …): ohne Transaktion
+   kann dann etwas doppelt stehen. Neue Zeilen werden immer zuerst angelegt, Originale zuletzt ausgeblendet. */
+teilweiseGespeichert: "Ein Teil davon ist schon gespeichert. Bitte „Neu laden“ und prüfen, ob etwas doppelt steht.",
 
 /* Tabelle aus Zeilen von datenLesen.
    spalten: [{ feld, titel, art }]  art: "text" | "zahl" | "datum" | "datumzeit"
@@ -59845,7 +60849,7 @@ tabelleBauen: function (parent, spalten, zeilen, leerText, aktionen) {
 /* Klapp-Knopf (▾/▸) und Name als Knopf: Einfachklick klappt. */
 klappZellen: function (tr, name, offen, klappen, doppel) {
 
-    const td1 = this.el(tr, "td");
+    const td1 = this.el(tr, "td", "kom-klappzelle");
     const td2 = this.el(tr, "td");
     td2.title = this.text(name);
 
@@ -59943,7 +60947,7 @@ before_set_values: async function (form, { data }) {
         "Fach oder nach „Nicht einsortiert“ ziehen. Rechtsklick auf einen AB: aufsplitten; Rechtsklick auf eine Baugruppe: " +
         "AB zusammenführen. Der Platz gilt dann für den ganzen AB bzw. die Baugruppe in der Bestandsliste.");
     this.regalEl = this.el(this.koerper, "div", "kom-regal-inhalt");
-    this.knopf(this.fuss, "Neu laden", () => this.laden());
+    this.fussKnopf("Neu laden", "Laden", () => this.laden());
 
     await this.laden();
 },
@@ -60252,6 +61256,7 @@ form_on_load: function (FORM) {
 .kom-rg .kom-kopf { flex: 0 0 auto; display: flex; flex-wrap: wrap; align-items: baseline; gap: var(--space-3);
   padding: var(--space-3) var(--space-4); background: var(--surface-100); border-bottom: 1px solid var(--line); }
 .kom-rg .kom-titel { margin: 0; font-size: var(--fs-h3); line-height: var(--lh-h3); font-weight: var(--fw-h3); }
+.kom-rg .kom-satz { font-size: var(--fs-small); line-height: var(--lh-small); color: var(--ink); }
 .kom-rg .kom-info { font-size: var(--fs-small); line-height: var(--lh-small); color: var(--ink-muted); }
 
 .kom-rg .kom-rg .kom-kacheln { white-space: normal; }
@@ -60273,7 +61278,13 @@ form_on_load: function (FORM) {
 .kom-rg .kom-fuss { flex: 0 0 auto; display: flex; align-items: center; gap: var(--space-2);
   padding: var(--space-2) var(--space-4); background: var(--surface-100); border-top: 1px solid var(--line);
   white-space: nowrap; overflow-x: auto; }
-.kom-rg .kom-vermerk { margin-left: auto; font-size: var(--fs-label); color: var(--ink-muted); }
+.kom-rg .kom-vermerk { order: 1; margin-left: auto; font-size: var(--fs-label); color: var(--ink-muted); }   /* Knöpfe zuerst, Vermerk am Ende */
+.kom-rg .kom-kurz { display: none; }
+@media (max-width: 600px) {
+  .kom-rg .kom-fuss .kom-lang { display: none; }
+  .kom-rg .kom-fuss .kom-kurz { display: inline; }
+  .kom-rg .kom-fuss { padding: var(--space-2); }
+}
 
 .kom-rg .kom-knopf { min-height: 36px; padding: 0 var(--space-3); border: 1px solid var(--line-strong);
   border-radius: var(--radius-sm); background: var(--surface-100); color: var(--ink); cursor: pointer;
@@ -60293,8 +61304,8 @@ form_on_load: function (FORM) {
 
 .kom-rg .kom-leer { padding: var(--space-3); color: var(--ink-muted); }
 
-/* Die Meldung blendet ein und aus, Fehler bleiben stehen. */
-.kom-rg .kom-status { position: fixed; bottom: var(--space-4); left: 50%; transform: translateX(-50%);
+/* Die Meldung blendet ein und aus, Fehler bleiben stehen. Sie steht über der Fußzeile, nicht mitten im Inhalt. */
+.kom-rg .kom-status { position: fixed; bottom: 64px; left: 50%; transform: translateX(-50%);
   max-width: 90%; padding: var(--space-2) var(--space-3); border-radius: var(--radius-sm);
   background: var(--brand-gray); color: var(--on-brand); font-size: var(--fs-small);
   opacity: 0; pointer-events: none; transition: opacity .2s; z-index: 20; }
@@ -60384,7 +61395,7 @@ window.KOM_ANSICHTEN_TITEL["verbindungstest"] = "Verbindungstest";
 window.KOM_ANSICHTEN["verbindungstest"] = function () { return {
 
 /* Kenndaten dieser Ansicht (aus tools/symolo_bauen.py). */
-ansicht: { name: "verbindungstest", titel: "Verbindungstest", klasse: "kom-vt", praefix: "komVt", cssId: "KOMVTCSS" },
+ansicht: { name: "verbindungstest", titel: "Verbindungstest", klasse: "kom-vt", praefix: "komVt", cssId: "KOMVTCSS", satz: "" },
 
 
 /* ===========================================================================
@@ -60820,6 +61831,11 @@ datumZeitText: function (value) {
 
 datenHinweise: [],
 
+/* Zahl der gelungenen Schreibvorgänge in diesem Fenster. sicher() vergleicht sie vor und nach einer
+   Aufgabe: Bricht eine Aufgabe mit mehreren Schritten mittendrin ab, sagt die Meldung, dass schon
+   etwas gespeichert ist (Prüfbericht D3). OFFEN (Symolo): Gibt es eine Transaktion? */
+geschrieben: 0,
+
 /* "symolo", "symolo-test" oder "lokal" (siehe einstellungen.quelle). */
 datenQuelle: function () {
 
@@ -61193,6 +62209,7 @@ schreiben: async function (art, name, id, werte, stand, optionen) {
         const neu = this.antwortObjekt(
             await this.anfrage("dsf.dbo.CreateObjectJson", [tabelle, JSON.stringify(roh)])
         );
+        this.geschrieben += 1;
 
         return this.zeileLesen(name, neu || {});
     }
@@ -61222,6 +62239,7 @@ schreiben: async function (art, name, id, werte, stand, optionen) {
         const neu = this.antwortObjekt(
             await this.anfrage("dsf.dbo.UpdateObjectJson", [tabelle, JSON.stringify(roh)])
         );
+        this.geschrieben += 1;
 
         /* OFFEN (Symolo): Was liefert UpdateObjectJson zurück? Ist es kein
            Objekt, gilt das gesendete. */
@@ -61288,16 +62306,46 @@ datenArchivieren: async function (name, zeile) {
 
 /* Menge -> Tausendstel. Leer oder Text zählt 0 (Excel-Funktion N).
    OFFEN (Symolo): Kommen Zahlen als Zahl oder als Text ("21.000")?
-   Wir verstehen beides; Text, der keine Zahl ist, zählt 0. */
+   VERMUTET: Text kommt aus der Datenbank, also mit Punkt als Komma und ohne
+   Tausenderpunkt ("21.000" = 21). Alles andere (z. B. "1.234.567", "1e5",
+   über 999.999.999) zählt 0 und steht oben als Hinweis, statt still falsch
+   zu rechnen (Prüfbericht B1, B3). */
 mengeMilli: function (wert) {
 
-    if (typeof wert === "number") return Number.isFinite(wert) ? Math.round(wert * 1000) : 0;
+    if (wert === null || wert === undefined) return 0;
+    if (typeof wert === "number") {
+        if (Number.isFinite(wert) && Math.abs(wert) <= this.mengeGrenze) return Math.round(wert * 1000);
+        this.mengeUnklar(wert);
+        return 0;
+    }
     if (typeof wert !== "string") return 0;
 
     const t = wert.trim();
-    if (!/^-?\d+([.,]\d+)?$/.test(t)) return 0;
+    if (t === "") return 0;
+    if (!/^-?\d+([.,]\d+)?$/.test(t)) {
+        if (/\d/.test(t)) this.mengeUnklar(t);   /* reiner Text wie "Rest" zählt 0 wie in Excel, ohne Hinweis */
+        return 0;
+    }
 
-    return Math.round(Number(t.replace(",", ".")) * 1000);
+    const zahl = Number(t.replace(",", "."));
+    if (Math.abs(zahl) > this.mengeGrenze) {
+        this.mengeUnklar(t);
+        return 0;
+    }
+    return Math.round(zahl * 1000);
+},
+
+/* Größte Menge, wie bei der Eingabe (R-M4, Mengenfeld mit 12 Stellen). */
+mengeGrenze: 999999999,
+
+/* Unklare Menge einmal als Hinweis oben vormerken (höchstens drei Beispiele). */
+mengeUnklar: function (wert) {
+
+    if (!Array.isArray(this.datenHinweise)) return;
+    const hinweis = "Menge „" + String(wert) + "“ ist unklar und zählt 0.";
+    const schon = this.datenHinweise.filter(h => h.indexOf("Menge „") === 0);
+    if (schon.length >= 3 || schon.indexOf(hinweis) >= 0) return;
+    this.datenHinweise.push(hinweis);
 },
 
 /* Tausendstel -> Text wie Excel (deutsch): 21000 -> "21", 60 -> "0,06". */
@@ -61415,7 +62463,8 @@ mengeMeldungen: {
     ganz: "Bitte eine ganze Zahl eintragen (0 oder mehr).",
     zahl: "Bitte eine Zahl ab 0 eintragen.",
     punkt: "Bitte ohne Punkt eintragen (1000 statt 1.000).",
-    gross: "Bitte eine Zahl bis 999.999.999 eintragen."
+    gross: "Bitte eine Zahl bis 999.999.999 eintragen.",
+    stellen: "Bitte höchstens drei Stellen nach dem Komma eintragen."
 },
 
 /* R-M4: "1.000" oder "1,000" kann 1 oder 1000 heißen; wird nicht geraten, sondern abgelehnt. */
@@ -61434,12 +62483,14 @@ mengeEingabe: function (text, ganz) {
 
     if (t === "") return { milli: null, fehler: "" };
     if (this.punktMehrdeutig(roh)) return { milli: null, fehler: this.mengeMeldungen.punkt };
-    if (!/^\+?(\d+\.?\d*|\.\d+)([eE][+-]?\d+)?$/.test(t)) return falsch;
+    /* Nur Ziffern mit höchstens einem Komma; kein "1e5", "+5" oder ".5" (Prüfbericht B2). */
+    if (!/^\d+(\.\d*)?$/.test(t)) return falsch;
+    if (!ganz && /\.\d{4,}$/.test(t)) return { milli: null, fehler: this.mengeMeldungen.stellen };
 
     const zahl = Number(t);
     if (!Number.isFinite(zahl) || zahl < 0) return falsch;
     if (ganz && !Number.isInteger(zahl)) return falsch;
-    if (zahl > 999999999) return { milli: null, fehler: this.mengeMeldungen.gross };
+    if (zahl > this.mengeGrenze) return { milli: null, fehler: this.mengeMeldungen.gross };
 
     return { milli: Math.round(zahl * 1000), fehler: "" };
 },
@@ -63795,8 +64846,9 @@ statVerspaetung: function (eintraege, heute) {
 
    Zustand, den die Ansicht führt: abs, suche, kunde, ansichtWahl, sortierung,
    gemerkt (R-DB4), markenZeilen/marken (Planung), listeHeute (Tageszahl).
-   OFFEN (Symolo): Der Klappzustand wird bisher nur solange gemerkt, wie das
-   Fenster offen ist. Je Benutzer dauerhaft geht erst mit einer Tabelle
+   Der Klappzustand (Ansicht und Auf-/Zuklappen) bleibt im Browser dieses
+   Geräts gespeichert (localStorage, laut Skill für solche Zustände erlaubt).
+   OFFEN (Symolo): Je Benutzer auf jedem Gerät geht erst mit einer Tabelle
    (Benutzer, Ansicht, Schlüssel) und der Benutzer-Anbindung.
    =========================================================================== */
 
@@ -63832,6 +64884,7 @@ ansichtKnoepfe: {},
 
 listeLeisteBauen: function (felder) {
 
+    this.klappenLaden();
     const leiste = this.el(this.koerper, "div", "kom-leiste");
 
     felder.forEach(f => {
@@ -63844,6 +64897,7 @@ listeLeisteBauen: function (felder) {
                     /* R-DB4: Ansicht umstellen = Startzustand der neuen Ansicht */
                     this.ansichtWahl = wert;
                     this.gemerkt = {};
+                    this.klappenMerken();
                     this.zeichnen();
                 });
             });
@@ -64059,6 +65113,34 @@ planungHaken: async function (d, box) {
     this.zeichnen();
 },
 
+/* R-DB4: Ansicht und Klappzustand im Browser merken. Ohne Speicher (privates Fenster, gesperrt) gilt
+   der Startzustand, wie bisher nur solange das Fenster offen ist. */
+klappenSchluessel: function () {
+
+    return "kom." + this.ansicht.name + ".klappen";
+},
+
+klappenLaden: function () {
+
+    try {
+        const z = JSON.parse(window.localStorage.getItem(this.klappenSchluessel()) || "null");
+        if (!z || typeof z !== "object") return;
+        if (this.dashAnsichten.some(a => a[0] === z.ansicht)) this.ansichtWahl = z.ansicht;
+        this.gemerkt = z.gemerkt && typeof z.gemerkt === "object" ? z.gemerkt : {};
+    } catch (fehler) {
+        /* kein Speicher: Startzustand */
+    }
+},
+
+klappenMerken: function () {
+
+    try {
+        window.localStorage.setItem(this.klappenSchluessel(), JSON.stringify({ ansicht: this.ansichtWahl, gemerkt: this.gemerkt }));
+    } catch (fehler) {
+        /* kein Speicher: nur solange das Fenster offen ist */
+    }
+},
+
 /* Klappen merken (R-DB4) und diese Karte neu zeichnen. */
 klappKnopf: function (td, offen, name, umschalten) {
 
@@ -64176,7 +65258,7 @@ karteZeichnen: function (karte, d) {
     const neu = () => this.karteZeichnen(karte, d);
     /* Baugruppen dieses AB, die einzeln im Schweißen liegen */
     const imSw = this.imSwJeAb[this.text(a.o.ab_schluessel)] || [];
-    const abUmschalten = () => { d.offen = !d.offen; this.gemerkt[d.schluessel] = d.offen; neu(); };
+    const abUmschalten = () => { d.offen = !d.offen; this.gemerkt[d.schluessel] = d.offen; this.klappenMerken(); neu(); };
 
     /* AB-Zeile: Nummer, Verkaufsartikel, Kunde */
     const tr = this.el(koerper, "tr", "kom-dab " + this.statusKlasse(a.w));
@@ -64188,7 +65270,7 @@ karteZeichnen: function (karte, d) {
     if (!d.offen) return;
 
     d.gruppen.forEach(g => {
-        const gUmschalten = () => { g.offen = !g.offen; this.gemerkt[g.schluessel] = g.offen; neu(); };
+        const gUmschalten = () => { g.offen = !g.offen; this.gemerkt[g.schluessel] = g.offen; this.klappenMerken(); neu(); };
 
         if (g.bg) {
             const btr = this.el(koerper, "tr", "kom-dbg");
@@ -65607,6 +66689,18 @@ el: function (parent, type, klasse, text) {
     return window.symolo.tools.layout.create(o);
 },
 
+/* Knopf in der Fußzeile mit kurzem Text für schmale Fenster (Handy). Die Fußzeile bleibt eine Zeile
+   (Skill, Abnahme), deshalb kürzer statt umbrechen. */
+fussKnopf: function (lang, kurz, klick, art) {
+
+    const b = this.knopf(this.fuss, "", klick, art);
+    this.el(b, "span", "kom-lang", lang);
+    this.el(b, "span", "kom-kurz", kurz);
+    b.setAttribute("aria-label", lang);
+    b.title = lang;
+    return b;
+},
+
 /* Ein Knopf. layout.create kann keine Events: Handler danach setzen. */
 knopf: function (parent, text, klick, art) {
 
@@ -65626,6 +66720,7 @@ geruestBauen: function (parent) {
 
     const kopf = this.el(view, "div", "kom-kopf");
     this.el(kopf, "h2", "kom-titel", this.ansicht.titel);
+    if (this.ansicht.satz) this.el(kopf, "span", "kom-satz", this.ansicht.satz);
     this.infoZeile = this.el(kopf, "div", "kom-info");
     this.bereichsleisteBauen(view);
 
@@ -65726,14 +66821,21 @@ statusZeigen: function (meldung, art) {
    Gibt null zurück, wenn es nicht geklappt hat. */
 sicher: async function (aufgabe) {
 
+    const vorher = this.geschrieben;
     try {
         return await aufgabe();
     } catch (fehler) {
         console.warn(this.ansicht.name + ":", fehler);
-        this.statusZeigen(fehler && fehler.message ? fehler.message : "Unbekannter Fehler.", "fehler");
+        let meldung = fehler && fehler.message ? fehler.message : "Unbekannter Fehler.";
+        if (this.geschrieben > vorher) meldung += " " + this.teilweiseGespeichert;
+        this.statusZeigen(meldung, "fehler");
         return null;
     }
 },
+
+/* Abbruch nach einem ersten Schreibschritt (Entnehmen, Archivieren, Zurückholen …): ohne Transaktion
+   kann dann etwas doppelt stehen. Neue Zeilen werden immer zuerst angelegt, Originale zuletzt ausgeblendet. */
+teilweiseGespeichert: "Ein Teil davon ist schon gespeichert. Bitte „Neu laden“ und prüfen, ob etwas doppelt steht.",
 
 /* Tabelle aus Zeilen von datenLesen.
    spalten: [{ feld, titel, art }]  art: "text" | "zahl" | "datum" | "datumzeit"
@@ -65778,7 +66880,7 @@ tabelleBauen: function (parent, spalten, zeilen, leerText, aktionen) {
 /* Klapp-Knopf (▾/▸) und Name als Knopf: Einfachklick klappt. */
 klappZellen: function (tr, name, offen, klappen, doppel) {
 
-    const td1 = this.el(tr, "td");
+    const td1 = this.el(tr, "td", "kom-klappzelle");
     const td2 = this.el(tr, "td");
     td2.title = this.text(name);
 
@@ -65863,8 +66965,8 @@ before_set_values: async function (form, { data }) {
 
     /* Erst das Gerüst, dann die Daten (Skill, Vertrag). */
     this.geruestBauen(parent);
-    this.knopf(this.fuss, "Neu laden", () => this.laden());
-    this.knopf(this.fuss, "Beispiel anlegen", () => this.beispielAnlegen(), "haupt");
+    this.fussKnopf("Neu laden", "Laden", () => this.laden());
+    this.fussKnopf("Beispiel anlegen", "Beispiel", () => this.beispielAnlegen(), "haupt");
 
     await this.laden();
 },
@@ -66030,6 +67132,7 @@ form_on_load: function (FORM) {
 .kom-vt .kom-kopf { flex: 0 0 auto; display: flex; flex-wrap: wrap; align-items: baseline; gap: var(--space-3);
   padding: var(--space-3) var(--space-4); background: var(--surface-100); border-bottom: 1px solid var(--line); }
 .kom-vt .kom-titel { margin: 0; font-size: var(--fs-h3); line-height: var(--lh-h3); font-weight: var(--fw-h3); }
+.kom-vt .kom-satz { font-size: var(--fs-small); line-height: var(--lh-small); color: var(--ink); }
 .kom-vt .kom-info { font-size: var(--fs-small); line-height: var(--lh-small); color: var(--ink-muted); }
 
 .kom-vt .kom-vt .kom-kacheln { white-space: normal; }
@@ -66051,7 +67154,13 @@ form_on_load: function (FORM) {
 .kom-vt .kom-fuss { flex: 0 0 auto; display: flex; align-items: center; gap: var(--space-2);
   padding: var(--space-2) var(--space-4); background: var(--surface-100); border-top: 1px solid var(--line);
   white-space: nowrap; overflow-x: auto; }
-.kom-vt .kom-vermerk { margin-left: auto; font-size: var(--fs-label); color: var(--ink-muted); }
+.kom-vt .kom-vermerk { order: 1; margin-left: auto; font-size: var(--fs-label); color: var(--ink-muted); }   /* Knöpfe zuerst, Vermerk am Ende */
+.kom-vt .kom-kurz { display: none; }
+@media (max-width: 600px) {
+  .kom-vt .kom-fuss .kom-lang { display: none; }
+  .kom-vt .kom-fuss .kom-kurz { display: inline; }
+  .kom-vt .kom-fuss { padding: var(--space-2); }
+}
 
 .kom-vt .kom-knopf { min-height: 36px; padding: 0 var(--space-3); border: 1px solid var(--line-strong);
   border-radius: var(--radius-sm); background: var(--surface-100); color: var(--ink); cursor: pointer;
@@ -66071,8 +67180,8 @@ form_on_load: function (FORM) {
 
 .kom-vt .kom-leer { padding: var(--space-3); color: var(--ink-muted); }
 
-/* Die Meldung blendet ein und aus, Fehler bleiben stehen. */
-.kom-vt .kom-status { position: fixed; bottom: var(--space-4); left: 50%; transform: translateX(-50%);
+/* Die Meldung blendet ein und aus, Fehler bleiben stehen. Sie steht über der Fußzeile, nicht mitten im Inhalt. */
+.kom-vt .kom-status { position: fixed; bottom: 64px; left: 50%; transform: translateX(-50%);
   max-width: 90%; padding: var(--space-2) var(--space-3); border-radius: var(--radius-sm);
   background: var(--brand-gray); color: var(--on-brand); font-size: var(--fs-small);
   opacity: 0; pointer-events: none; transition: opacity .2s; z-index: 20; }
