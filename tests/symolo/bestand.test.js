@@ -83,6 +83,22 @@ test("R_A4 Sortierung: wie importiert, A-Z, Z-A, Fortschritt", async () => {
     assert.deepEqual(auf, auf.slice().sort((x, y) => x - y));
 });
 
+test("R_M4 Mengen lesen: unklare Schreibweise zählt 0 und steht als Hinweis oben", () => {
+    const { v } = umgebung(null, "bestandsliste");
+    v.datenHinweise = [];
+    assert.equal(v.mengeMilli("Rest"), 0);
+    assert.deepEqual(v.datenHinweise, [], "reiner Text ohne Ziffer: wie Excel, ohne Hinweis");
+    for (const ein of ["1.234.567", "1e5", "12 Stk", 1e12, "1000000000"]) assert.equal(v.mengeMilli(ein), 0, String(ein));
+    assert.equal(v.datenHinweise.length, 3, "höchstens drei Beispiele");
+    assert.match(v.datenHinweise[0], /Menge „1\.234\.567“ ist unklar und zählt 0\./);
+    v.datenHinweise = [];
+    v.mengeMilli("1e5");
+    v.mengeMilli("1e5");
+    assert.equal(v.datenHinweise.length, 1, "derselbe Wert nur einmal");
+    assert.equal(v.mengeMilli(999999999), 999999999000);
+    assert.equal(v.mengeMilli("-2,5"), -2500);
+});
+
 test("Mengen in Tausendsteln: Text, Komma, leer", () => {
     const { v } = umgebung(null, "bestandsliste");
     assert.equal(v.mengeMilli(21), 21000);
@@ -114,3 +130,22 @@ if (process.env.KOM_VERGLEICH_AUSGABE) {
             JSON.stringify({ abs: aus, daten: { teil: db["fwm.kom_teil"].zeilen, baugruppe: db["fwm.kom_baugruppe"].zeilen } }));
     });
 }
+
+/* Zufallsvergleich mit bestand/rechnen.py und der Vorhanden-Eingabe (tests/test_symolo.py setzt die Variable). */
+test("R_S1 R_S2 R_M1 Vergleich: Zufallsfälle aus Python, Ausgabe für Python", { skip: !process.env.KOM_RECHNEN_EINGABE }, () => {
+    const fs = require("node:fs");
+    const { v } = umgebung(null, "bestandsliste");
+    const eing = JSON.parse(fs.readFileSync(process.env.KOM_RECHNEN_EINGABE, "utf8"));
+    const w = x => [x.status, x.fortschritt, x.prozent];
+    const aus = {
+        gruppen: eing.gruppen.map(g => {
+            const teile = g.map(([vh, soll]) => v.teilWerte(vh, soll));
+            return { teile: teile.map(w), sammel: w(v.sammelWerte(teile)) };
+        }),
+        eingaben: eing.eingaben.map(t => {
+            const e = v.mengeEingabe(t, true);
+            return [e.milli, e.fehler];
+        })
+    };
+    fs.writeFileSync(process.env.KOM_RECHNEN_AUSGABE, JSON.stringify(aus));
+});

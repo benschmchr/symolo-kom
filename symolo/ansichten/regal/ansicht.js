@@ -27,7 +27,7 @@ before_set_values: async function (form, { data }) {
         "Fach oder nach „Nicht einsortiert“ ziehen. Rechtsklick auf einen AB: aufsplitten; Rechtsklick auf eine Baugruppe: " +
         "AB zusammenführen. Der Platz gilt dann für den ganzen AB bzw. die Baugruppe in der Bestandsliste.");
     this.regalEl = this.el(this.koerper, "div", "kom-regal-inhalt");
-    this.knopf(this.fuss, "Neu laden", () => this.laden());
+    this.fussKnopf("Neu laden", "Laden", () => this.laden());
 
     await this.laden();
 },

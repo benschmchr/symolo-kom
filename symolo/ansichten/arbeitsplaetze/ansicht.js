@@ -31,7 +31,7 @@ before_set_values: async function (form, { data }) {
         "Platz oder nach „Nicht einsortiert“ ziehen. Rechtsklick auf einen Eintrag: AB aufsplitten bzw. zusammenführen " +
         "und Mitarbeiter ändern. Der Platz gilt dann auch im Schweißen.");
     this.planEl = this.el(this.koerper, "div", "kom-plan");
-    this.knopf(this.fuss, "Neu laden", () => this.laden());
+    this.fussKnopf("Neu laden", "Laden", () => this.laden());
 
     await this.laden();
 },

@@ -40,9 +40,9 @@ anzeigeKnoepfe: {},
 swSpalten: [
     ["klapp", ""], ["nr", "AB / Zeichnungsnummer"], ["ben", "Benennung"], ["lk", "LK"], ["soll", "Soll"],
     ["swm", "Mitarbeiter"], ["swp", "Arbeitsplatz"], ["datum", "Eingelagert"], ["datum", "Entnommen"],
-    ["swt", "Liefertermin Stahlbau"], ["swt", "Termin Versand"], ["dlz", "DLZ"], ["aktion", ""],
+    ["swt", "Liefertermin Stahlbau"], ["swt", "Termin Versand"], ["dlz", "DLZ (Tage)"],
     ["mbg", "Menge / BG", true], ["idx", "Index", true], ["text", "Arbeitsgang", true], ["text", "Material", true],
-    ["text", "Profil", true], ["text", "Abmaße", true], ["text", "Bemerkung", true]
+    ["text", "Profil", true], ["text", "Abmaße", true], ["text", "Bemerkung", true], ["aktion", ""]
 ],
 
 before_set_values: async function (form, { data }) {
@@ -54,8 +54,8 @@ before_set_values: async function (form, { data }) {
     this.leisteBauen();
     const start = this.startOptionen();
     if (start.suche) this.suche = this.sucheEl.value = this.text(start.suche);   /* Sprung aus einem anderen Bereich */
-    this.knopf(this.fuss, "Neu laden", () => this.laden());
-    this.knopf(this.fuss, "Mitarbeiter verwalten", () => this.verwaltenDialog());
+    this.fussKnopf("Neu laden", "Laden", () => this.laden());
+    this.fussKnopf("Mitarbeiter verwalten", "Mitarbeiter", () => this.verwaltenDialog());
 
     await this.laden();
 },
@@ -314,7 +314,7 @@ kopfzeileBauen: function (parent) {
     const tr = this.el(this.el(tab, "thead"), "tr");
     this.swSpalten.forEach(([art, titel, mehr]) => {
         const zahl = art === "lk" || art === "soll" || art === "mbg" || art === "dlz";
-        this.el(tr, "th", (zahl ? "kom-zahl" : "") + (mehr ? " kom-mehr" : ""), titel);
+        this.el(tr, "th", (zahl ? "kom-zahl" : "") + (mehr ? " kom-mehr" : "") + (art === "aktion" ? " kom-aktion" : ""), titel);
     });
 },
 
@@ -453,11 +453,11 @@ zeileBauen: function (parent, z, art, o) {
     }
 
     this.zelle(tr, this.swDlz(z), "kom-zahl");
-    this.aktionZelle(tr, z, art, o);
 
     this.zelle(tr, art === "ab" ? "" : z.menge_bg, "kom-zahl kom-mehr");
     this.zelle(tr, z.index, "kom-mehr");
     ["arbeitsgang", "material", "profil", "abmasse", "bemerkung"].forEach(f => this.zelle(tr, z[f], "kom-mehr", z[f]));
+    this.aktionZelle(tr, z, art, o);   /* ganz rechts wie bisher, bleibt beim Scrollen sichtbar */
 
     return tr;
 },
@@ -500,6 +500,7 @@ platzZelle: function (tr, z) {
 
     const aktuell = this.swPlatzFinden(wert, this.plaetze);
     sel.value = wert === this.swVerschieden ? "__v" : (aktuell !== null ? aktuell : (wert ? "__alt" : ""));
+    sel.setAttribute("data-gespeichert", sel.value);
     sel.onchange = () => this.eintragen(z, "arbeitsplatz", sel.value, sel);
 },
 
@@ -516,6 +517,7 @@ datumZelle: function (tr, z, feld, kurz, titel) {
     f.autocomplete = "off";
     f.placeholder = "TT.MM.JJJJ";
     f.value = wert;
+    f.setAttribute("data-gespeichert", wert);
     f.setAttribute("aria-label", titel + " " + this.swAnzeigename(z));
 
     const speichern = text => {
@@ -536,7 +538,12 @@ datumZelle: function (tr, z, feld, kurz, titel) {
         const m = this.text(kal.value).match(/^(\d{4})-(\d{2})-(\d{2})$/);
         if (m) speichern(m[3] + "." + m[2] + "." + m[1]);
     };
-    const b = this.el(reihe, "button", "kom-feldknopf kom-sw-kalenderknopf", "📅");
+    /* Eigenes Symbol statt Emoji: sieht auf jedem Gerät gleich aus. Nur mit "Weitere Spalten" sichtbar
+       (Ben, 15.10.: sonst ist die Spalte zu schmal). */
+    const b = window.symolo.tools.layout.create({ parent: reihe, type: "button", class: "kom-feldknopf kom-sw-kalenderknopf",
+        html: '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" ' +
+            'stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="5" width="18" height="16" rx="2"/>' +
+            '<path d="M3 10h18M8 3v4M16 3v4"/></svg>' });
     b.type = "button";
     b.title = "Datum wählen";
     b.setAttribute("aria-label", titel + " " + this.swAnzeigename(z) + ": Kalender");
@@ -561,13 +568,16 @@ aktionZelle: function (tr, z, art, o) {
     r.setAttribute("aria-label", "Zurück " + name);
 },
 
-/* Ein Eintrag speichern (R-W6, R-W7). Bei einem Fehler bleibt das Feld stehen, rot umrandet. */
+/* Ein Eintrag speichern (R-W6, R-W7). Bei einem Fehler bleibt die Meldung stehen, und das Feld zeigt
+   wieder den gespeicherten Wert, damit nichts gespeichert aussieht, was es nicht ist (Prüfbericht B5). */
 eintragen: async function (z, feld, text, feldEl) {
 
     const r = await this.sicher(() => this.swSetzen(z._id, feld, text));
 
     if (r === null) {
-        if (feldEl && feldEl.classList) feldEl.classList.add("kom-ungueltig");
+        if (feldEl && feldEl.hasAttribute && feldEl.hasAttribute("data-gespeichert")) {
+            feldEl.value = feldEl.getAttribute("data-gespeichert");
+        }
         return;
     }
 

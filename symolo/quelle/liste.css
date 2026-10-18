@@ -49,6 +49,7 @@
 .ANSICHT .kom-dash td { padding: var(--space-1) var(--space-2); border-bottom: 1px solid var(--line);
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .ANSICHT .kom-dash tbody tr:last-child td { border-bottom: none; }
+.ANSICHT .kom-dash td.kom-klappzelle { padding-right: 0; text-overflow: clip; }
 .ANSICHT .kom-dash .kom-zahl { text-align: right; font-variant-numeric: tabular-nums; }
 .ANSICHT .kom-dash .kom-mitte { text-align: center; }
 .ANSICHT .kom-kopfzeile { margin: 0; }

@@ -195,3 +195,33 @@ test("R_DB4 Startzustand je Ansicht und gemerktes Auf- und Zuklappen", () => {
     assert.equal(liste[0].schluessel, "ab1");
     assert.equal(liste[0].gruppen[0].schluessel, "ab1|100 a");
 });
+
+test("R_DB4 Ansicht und Klappzustand bleiben im Browser gemerkt; ohne Speicher gilt der Startzustand", () => {
+    const speicher = {};
+    const mitSpeicher = c => {
+        c.localStorage = { getItem: k => (k in speicher ? speicher[k] : null), setItem: (k, w) => { speicher[k] = String(w); } };
+    };
+    const a = umgebung(null, "dashboard", mitSpeicher).v;
+    a.ansichtWahl = "alles";
+    a.gemerkt = { AB2515902: false };
+    a.klappenMerken();
+    assert.ok("kom.dashboard.klappen" in speicher);
+
+    const b = umgebung(null, "dashboard", mitSpeicher).v;
+    b.klappenLaden();
+    assert.equal(b.ansichtWahl, "alles");
+    assert.deepEqual(JSON.parse(JSON.stringify(b.gemerkt)), { AB2515902: false });
+
+    const f = umgebung(null, "forecast", mitSpeicher).v;
+    f.klappenLaden();
+    assert.equal(f.ansichtWahl, "bg", "jede Ansicht merkt für sich");
+
+    speicher["kom.dashboard.klappen"] = "kaputt{";
+    const c = umgebung(null, "dashboard", mitSpeicher).v;
+    c.klappenLaden();
+    assert.equal(c.ansichtWahl, "bg");
+    const d = umgebung(null, "dashboard").v;   /* kein localStorage */
+    d.klappenLaden();
+    d.klappenMerken();
+    assert.equal(d.ansichtWahl, "bg");
+});

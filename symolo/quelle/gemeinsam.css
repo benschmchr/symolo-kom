@@ -11,6 +11,7 @@
 .ANSICHT .kom-kopf { flex: 0 0 auto; display: flex; flex-wrap: wrap; align-items: baseline; gap: var(--space-3);
   padding: var(--space-3) var(--space-4); background: var(--surface-100); border-bottom: 1px solid var(--line); }
 .ANSICHT .kom-titel { margin: 0; font-size: var(--fs-h3); line-height: var(--lh-h3); font-weight: var(--fw-h3); }
+.ANSICHT .kom-satz { font-size: var(--fs-small); line-height: var(--lh-small); color: var(--ink); }
 .ANSICHT .kom-info { font-size: var(--fs-small); line-height: var(--lh-small); color: var(--ink-muted); }
 
 .ANSICHT .ANSICHT .kom-kacheln { white-space: normal; }
@@ -32,7 +33,13 @@
 .ANSICHT .kom-fuss { flex: 0 0 auto; display: flex; align-items: center; gap: var(--space-2);
   padding: var(--space-2) var(--space-4); background: var(--surface-100); border-top: 1px solid var(--line);
   white-space: nowrap; overflow-x: auto; }
-.ANSICHT .kom-vermerk { margin-left: auto; font-size: var(--fs-label); color: var(--ink-muted); }
+.ANSICHT .kom-vermerk { order: 1; margin-left: auto; font-size: var(--fs-label); color: var(--ink-muted); }   /* Knöpfe zuerst, Vermerk am Ende */
+.ANSICHT .kom-kurz { display: none; }
+@media (max-width: 600px) {
+  .ANSICHT .kom-fuss .kom-lang { display: none; }
+  .ANSICHT .kom-fuss .kom-kurz { display: inline; }
+  .ANSICHT .kom-fuss { padding: var(--space-2); }
+}
 
 .ANSICHT .kom-knopf { min-height: 36px; padding: 0 var(--space-3); border: 1px solid var(--line-strong);
   border-radius: var(--radius-sm); background: var(--surface-100); color: var(--ink); cursor: pointer;
@@ -52,8 +59,8 @@
 
 .ANSICHT .kom-leer { padding: var(--space-3); color: var(--ink-muted); }
 
-/* Die Meldung blendet ein und aus, Fehler bleiben stehen. */
-.ANSICHT .kom-status { position: fixed; bottom: var(--space-4); left: 50%; transform: translateX(-50%);
+/* Die Meldung blendet ein und aus, Fehler bleiben stehen. Sie steht über der Fußzeile, nicht mitten im Inhalt. */
+.ANSICHT .kom-status { position: fixed; bottom: 64px; left: 50%; transform: translateX(-50%);
   max-width: 90%; padding: var(--space-2) var(--space-3); border-radius: var(--radius-sm);
   background: var(--brand-gray); color: var(--on-brand); font-size: var(--fs-small);
   opacity: 0; pointer-events: none; transition: opacity .2s; z-index: 20; }

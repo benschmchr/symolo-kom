@@ -14,8 +14,8 @@ before_set_values: async function (form, { data }) {
 
     /* Erst das Gerüst, dann die Daten (Skill, Vertrag). */
     this.geruestBauen(parent);
-    this.knopf(this.fuss, "Neu laden", () => this.laden());
-    this.knopf(this.fuss, "Beispiel anlegen", () => this.beispielAnlegen(), "haupt");
+    this.fussKnopf("Neu laden", "Laden", () => this.laden());
+    this.fussKnopf("Beispiel anlegen", "Beispiel", () => this.beispielAnlegen(), "haupt");
 
     await this.laden();
 },

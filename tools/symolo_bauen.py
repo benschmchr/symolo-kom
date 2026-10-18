@@ -29,16 +29,17 @@ FERTIG = SYMOLO / "fertig"
 
 # Je Bereich eine Ansicht (Ben, 16.10.2026: „mach wie es übersichtlicher ist“).
 # klasse: Wrapper-Klasse (jede CSS-Regel beginnt damit), praefix: für IDs, css_id: für injector.css/rmcss.
+# satz: Beschreibung neben dem kurzen Titel (die Überschrift der bisherigen Seite); der Titel bleibt kurz wie im Menü.
 ANSICHTEN = [
     {"name": "bestandsliste", "titel": "Bestandsliste", "klasse": "kom-bl", "praefix": "komBl", "css_id": "KOMBLCSS", "css": ["bestand"]},
-    {"name": "dashboard", "titel": "Dashboard", "klasse": "kom-db", "praefix": "komDb", "css_id": "KOMDBCSS", "css": ["liste"]},
-    {"name": "forecast", "titel": "Forecast", "klasse": "kom-fc", "praefix": "komFc", "css_id": "KOMFCCSS", "css": ["liste"]},
-    {"name": "planung", "titel": "Planung", "klasse": "kom-pl", "praefix": "komPl", "css_id": "KOMPLCSS", "css": ["liste"]},
+    {"name": "dashboard", "titel": "Dashboard", "klasse": "kom-db", "praefix": "komDb", "css_id": "KOMDBCSS", "css": ["liste"], "satz": "Fortschritt der Arbeitsaufträge"},
+    {"name": "forecast", "titel": "Forecast", "klasse": "kom-fc", "praefix": "komFc", "css_id": "KOMFCCSS", "css": ["liste"], "satz": "Offene Aufträge nach Liefertermin"},
+    {"name": "planung", "titel": "Planung", "klasse": "kom-pl", "praefix": "komPl", "css_id": "KOMPLCSS", "css": ["liste"], "satz": "Zur Planung vorgemerkte Arbeitsaufträge"},
     {"name": "statistik", "titel": "Statistik", "klasse": "kom-st", "praefix": "komSt", "css_id": "KOMSTCSS"},
     {"name": "archiv", "titel": "Archiv", "klasse": "kom-ar", "praefix": "komAr", "css_id": "KOMARCSS"},
     {"name": "protokoll", "titel": "Änderungsprotokoll", "klasse": "kom-pr", "praefix": "komPr", "css_id": "KOMPRCSS"},
     {"name": "schweissen", "titel": "Schweißen", "klasse": "kom-sw", "praefix": "komSw", "css_id": "KOMSWCSS", "css": ["bestand"]},
-    {"name": "arbeitsplaetze", "titel": "Arbeitsplätze", "klasse": "kom-ap", "praefix": "komAp", "css_id": "KOMAPCSS"},
+    {"name": "arbeitsplaetze", "titel": "Arbeitsplätze", "klasse": "kom-ap", "praefix": "komAp", "css_id": "KOMAPCSS", "satz": "Hallenplan Schweißen"},
     {"name": "regal", "titel": "Regal", "klasse": "kom-rg", "praefix": "komRg", "css_id": "KOMRGCSS"},
     {"name": "verbindungstest", "titel": "Verbindungstest", "klasse": "kom-vt", "praefix": "komVt", "css_id": "KOMVTCSS"},
 ]  # fmt: skip
@@ -65,8 +66,9 @@ VERBOTEN_JS = {
     "functionWrapper": "Skill: Selbstbezug nur mit this",
     "DeleteObjectJson": "Vorgabe: nie löschen, archivieren",
     "Database.Execute": "Vorgabe: nie per SQL schreiben",
-    "localStorage": "nur im Nachbau; Ansichten speichern nichts im Browser (bis Symolo es erlaubt)",
 }
+# localStorage ist erlaubt: der Skill nennt es für Zustände, die wiederkommen sollen (Klappzustand, R-DB4).
+# Daten der Datenbank gehören nie hinein.
 
 
 def ohne_kommentare_js(text: str) -> str:
@@ -120,7 +122,7 @@ def objekt_bauen(a: dict) -> str:
     ansicht = (
         "/* Kenndaten dieser Ansicht (aus tools/symolo_bauen.py). */\n"
         f'ansicht: {{ name: "{a["name"]}", titel: "{a["titel"]}", klasse: "{a["klasse"]}", '
-        f'praefix: "{a["praefix"]}", cssId: "{a["css_id"]}" }},'
+        f'praefix: "{a["praefix"]}", cssId: "{a["css_id"]}", satz: "{a.get("satz", "")}" }},'
     )
     css = css_bauen(a)
     hooks = (

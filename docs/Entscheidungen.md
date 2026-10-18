@@ -236,3 +236,17 @@ Offen (werden vor ihrer Phase gefragt): W4 Morgenmail, W5 Datenübernahme, W7 Ä
 - **R-AP7 (Kachel auf der Startseite) entfällt:** In Symolo gibt es keine Startseite; die Leiste ersetzt sie.
 - **Noch nicht dabei:** Handy-Karten (Schweißen, Arbeitsplätze) und die Suche von überall (R-SU).
 - **OFFEN (Symolo):** Es gibt keine Transaktion und kein Anlegen mehrerer Zeilen auf einmal. Beim Entnehmen werden die neuen Zeilen zuerst angelegt, die ausgeblendeten Originale zuletzt, damit bei einem Abbruch nichts fehlt (höchstens doppelt steht). Die ausgeblendeten Originale bleiben in der Datenbank; ob die IT sie später endgültig löscht, ist offen. Mehrfaches Archivieren und Zurückholen desselben AB verwendet vorhandene Zeilen wieder.
+
+## Umbau für Symolo: Prüfberichte vom 16. und 17.10. (Ben, 18.10.2026)
+- **Abwägung** mit dem Skill als Maßstab: `/mnt/project-files/symolo/Abwaegung_Pruefberichte.md`. Ben: „los“, bei allen Fragen die Empfehlung A.
+- **Dichte bleibt kompakt** (P1): Der Skill baut Fenster kompakt, die Schrift gehört dem Framework. Keine 44-px-Knöpfe; nur die AB-Zeile wieder fett (700) wie bisher.
+- **Startzustand der Klappen bleibt** (P2): Der Code klappt schon wie die bisherige App (nur der erste AB offen; ABs/BGs/Alles wie R-DB4, Schweißen wie R-W10). Neu: Ansicht und Klappzustand von Dashboard, Forecast und Planung bleiben im Browser des Geräts gemerkt (`localStorage`, laut Skill für solche Zustände erlaubt; die Bauregel dagegen ist aufgehoben).
+- **Fußzeile bleibt eine Zeile** (B4, Skill-Abnahme): am Handy kürzere Knopftexte („Laden“, „Archivieren …“, „Mitarbeiter“) statt Umbruch; die Meldung steht über der Fußzeile.
+- **Breite** (P3): Die Aktionsspalte (Entnehmen, Archivieren, Zurück) bleibt beim waagerechten Scrollen rechts sichtbar und steht im Schweißen wieder ganz rechts. Der Kalenderknopf erscheint wie bisher nur mit „Weitere Spalten“ (Ben, 15.10.), als eigenes Symbol statt Emoji. Bestandsliste mindestens 1.400 px wie bisher, Schweißen 1.490 px. Im Symolo-Fenster scrollt die Liste trotzdem, wenn es schmaler ist.
+- **Schweißen** (P4, P5): AB-Zeilen und Sammlungen dunkelgrau wie bisher (Grün sagte dort nichts), keine gepunktete Unterstreichung, keine Auslassungspunkte neben dem Pfeil, Spalte „DLZ (Tage)“, Kopf „Entnehmen“ in der Bestandsliste.
+- **Überschriften** (P6): Titel bleibt kurz wie im Menü; daneben der Satz der bisherigen Seite (Dashboard, Forecast, Planung, Arbeitsplätze). **Hilfe** (P7) entfällt vorerst.
+- **Mengen** (B1 bis B3): Gelesener Text mit Punkt gilt als Komma (Datenbank-Schreibweise); Unklares zählt 0 und steht als Hinweis oben. Soll: höchstens drei Nachkommastellen; „1e5“, „+5“, „,5“ werden abgelehnt (strenger als bisher). Soll 0 bleibt Komplett (Excel-Regel). Nach einer abgelehnten Eingabe zeigt das Feld wieder den gespeicherten Wert (B5).
+- **Abbruch mitten drin** (D3): Hat eine Aufgabe schon etwas gespeichert, sagt die Meldung das und bittet, neu zu laden und auf Doppeltes zu prüfen. Ein Knopf „Doppelte finden“ erst mit dem Entwickler.
+- **Vergleichstest** (E1): 600 Zufallsfälle für Status, Fortschritt und Prozent und für die Vorhanden-Eingabe gegen die bisherige App.
+- **Bauen** (D5): Nach jedem Merge oder Konflikt `symolo/fertig/` neu bauen, nie von Hand lösen (CLAUDE.md).
+- **Folgt im zweiten Schritt:** Rechte über `currentRights` (Entwickler, 16.10.), Archivieren über einen Status, nur lesende Abnahmeliste für den Entwickler.

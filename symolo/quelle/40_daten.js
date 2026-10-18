@@ -19,6 +19,11 @@
 
 datenHinweise: [],
 
+/* Zahl der gelungenen Schreibvorgänge in diesem Fenster. sicher() vergleicht sie vor und nach einer
+   Aufgabe: Bricht eine Aufgabe mit mehreren Schritten mittendrin ab, sagt die Meldung, dass schon
+   etwas gespeichert ist (Prüfbericht D3). OFFEN (Symolo): Gibt es eine Transaktion? */
+geschrieben: 0,
+
 /* "symolo", "symolo-test" oder "lokal" (siehe einstellungen.quelle). */
 datenQuelle: function () {
 
@@ -392,6 +397,7 @@ schreiben: async function (art, name, id, werte, stand, optionen) {
         const neu = this.antwortObjekt(
             await this.anfrage("dsf.dbo.CreateObjectJson", [tabelle, JSON.stringify(roh)])
         );
+        this.geschrieben += 1;
 
         return this.zeileLesen(name, neu || {});
     }
@@ -421,6 +427,7 @@ schreiben: async function (art, name, id, werte, stand, optionen) {
         const neu = this.antwortObjekt(
             await this.anfrage("dsf.dbo.UpdateObjectJson", [tabelle, JSON.stringify(roh)])
         );
+        this.geschrieben += 1;
 
         /* OFFEN (Symolo): Was liefert UpdateObjectJson zurück? Ist es kein
            Objekt, gilt das gesendete. */

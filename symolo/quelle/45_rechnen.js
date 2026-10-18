@@ -9,16 +9,46 @@
 
 /* Menge -> Tausendstel. Leer oder Text zählt 0 (Excel-Funktion N).
    OFFEN (Symolo): Kommen Zahlen als Zahl oder als Text ("21.000")?
-   Wir verstehen beides; Text, der keine Zahl ist, zählt 0. */
+   VERMUTET: Text kommt aus der Datenbank, also mit Punkt als Komma und ohne
+   Tausenderpunkt ("21.000" = 21). Alles andere (z. B. "1.234.567", "1e5",
+   über 999.999.999) zählt 0 und steht oben als Hinweis, statt still falsch
+   zu rechnen (Prüfbericht B1, B3). */
 mengeMilli: function (wert) {
 
-    if (typeof wert === "number") return Number.isFinite(wert) ? Math.round(wert * 1000) : 0;
+    if (wert === null || wert === undefined) return 0;
+    if (typeof wert === "number") {
+        if (Number.isFinite(wert) && Math.abs(wert) <= this.mengeGrenze) return Math.round(wert * 1000);
+        this.mengeUnklar(wert);
+        return 0;
+    }
     if (typeof wert !== "string") return 0;
 
     const t = wert.trim();
-    if (!/^-?\d+([.,]\d+)?$/.test(t)) return 0;
+    if (t === "") return 0;
+    if (!/^-?\d+([.,]\d+)?$/.test(t)) {
+        if (/\d/.test(t)) this.mengeUnklar(t);   /* reiner Text wie "Rest" zählt 0 wie in Excel, ohne Hinweis */
+        return 0;
+    }
 
-    return Math.round(Number(t.replace(",", ".")) * 1000);
+    const zahl = Number(t.replace(",", "."));
+    if (Math.abs(zahl) > this.mengeGrenze) {
+        this.mengeUnklar(t);
+        return 0;
+    }
+    return Math.round(zahl * 1000);
+},
+
+/* Größte Menge, wie bei der Eingabe (R-M4, Mengenfeld mit 12 Stellen). */
+mengeGrenze: 999999999,
+
+/* Unklare Menge einmal als Hinweis oben vormerken (höchstens drei Beispiele). */
+mengeUnklar: function (wert) {
+
+    if (!Array.isArray(this.datenHinweise)) return;
+    const hinweis = "Menge „" + String(wert) + "“ ist unklar und zählt 0.";
+    const schon = this.datenHinweise.filter(h => h.indexOf("Menge „") === 0);
+    if (schon.length >= 3 || schon.indexOf(hinweis) >= 0) return;
+    this.datenHinweise.push(hinweis);
 },
 
 /* Tausendstel -> Text wie Excel (deutsch): 21000 -> "21", 60 -> "0,06". */
@@ -136,7 +166,8 @@ mengeMeldungen: {
     ganz: "Bitte eine ganze Zahl eintragen (0 oder mehr).",
     zahl: "Bitte eine Zahl ab 0 eintragen.",
     punkt: "Bitte ohne Punkt eintragen (1000 statt 1.000).",
-    gross: "Bitte eine Zahl bis 999.999.999 eintragen."
+    gross: "Bitte eine Zahl bis 999.999.999 eintragen.",
+    stellen: "Bitte höchstens drei Stellen nach dem Komma eintragen."
 },
 
 /* R-M4: "1.000" oder "1,000" kann 1 oder 1000 heißen; wird nicht geraten, sondern abgelehnt. */
@@ -155,12 +186,14 @@ mengeEingabe: function (text, ganz) {
 
     if (t === "") return { milli: null, fehler: "" };
     if (this.punktMehrdeutig(roh)) return { milli: null, fehler: this.mengeMeldungen.punkt };
-    if (!/^\+?(\d+\.?\d*|\.\d+)([eE][+-]?\d+)?$/.test(t)) return falsch;
+    /* Nur Ziffern mit höchstens einem Komma; kein "1e5", "+5" oder ".5" (Prüfbericht B2). */
+    if (!/^\d+(\.\d*)?$/.test(t)) return falsch;
+    if (!ganz && /\.\d{4,}$/.test(t)) return { milli: null, fehler: this.mengeMeldungen.stellen };
 
     const zahl = Number(t);
     if (!Number.isFinite(zahl) || zahl < 0) return falsch;
     if (ganz && !Number.isInteger(zahl)) return falsch;
-    if (zahl > 999999999) return { milli: null, fehler: this.mengeMeldungen.gross };
+    if (zahl > this.mengeGrenze) return { milli: null, fehler: this.mengeMeldungen.gross };
 
     return { milli: Math.round(zahl * 1000), fehler: "" };
 },

@@ -24,6 +24,18 @@ el: function (parent, type, klasse, text) {
     return window.symolo.tools.layout.create(o);
 },
 
+/* Knopf in der Fußzeile mit kurzem Text für schmale Fenster (Handy). Die Fußzeile bleibt eine Zeile
+   (Skill, Abnahme), deshalb kürzer statt umbrechen. */
+fussKnopf: function (lang, kurz, klick, art) {
+
+    const b = this.knopf(this.fuss, "", klick, art);
+    this.el(b, "span", "kom-lang", lang);
+    this.el(b, "span", "kom-kurz", kurz);
+    b.setAttribute("aria-label", lang);
+    b.title = lang;
+    return b;
+},
+
 /* Ein Knopf. layout.create kann keine Events: Handler danach setzen. */
 knopf: function (parent, text, klick, art) {
 
@@ -43,6 +55,7 @@ geruestBauen: function (parent) {
 
     const kopf = this.el(view, "div", "kom-kopf");
     this.el(kopf, "h2", "kom-titel", this.ansicht.titel);
+    if (this.ansicht.satz) this.el(kopf, "span", "kom-satz", this.ansicht.satz);
     this.infoZeile = this.el(kopf, "div", "kom-info");
     this.bereichsleisteBauen(view);
 
@@ -143,14 +156,21 @@ statusZeigen: function (meldung, art) {
    Gibt null zurück, wenn es nicht geklappt hat. */
 sicher: async function (aufgabe) {
 
+    const vorher = this.geschrieben;
     try {
         return await aufgabe();
     } catch (fehler) {
         console.warn(this.ansicht.name + ":", fehler);
-        this.statusZeigen(fehler && fehler.message ? fehler.message : "Unbekannter Fehler.", "fehler");
+        let meldung = fehler && fehler.message ? fehler.message : "Unbekannter Fehler.";
+        if (this.geschrieben > vorher) meldung += " " + this.teilweiseGespeichert;
+        this.statusZeigen(meldung, "fehler");
         return null;
     }
 },
+
+/* Abbruch nach einem ersten Schreibschritt (Entnehmen, Archivieren, Zurückholen …): ohne Transaktion
+   kann dann etwas doppelt stehen. Neue Zeilen werden immer zuerst angelegt, Originale zuletzt ausgeblendet. */
+teilweiseGespeichert: "Ein Teil davon ist schon gespeichert. Bitte „Neu laden“ und prüfen, ob etwas doppelt steht.",
 
 /* Tabelle aus Zeilen von datenLesen.
    spalten: [{ feld, titel, art }]  art: "text" | "zahl" | "datum" | "datumzeit"
@@ -195,7 +215,7 @@ tabelleBauen: function (parent, spalten, zeilen, leerText, aktionen) {
 /* Klapp-Knopf (▾/▸) und Name als Knopf: Einfachklick klappt. */
 klappZellen: function (tr, name, offen, klappen, doppel) {
 
-    const td1 = this.el(tr, "td");
+    const td1 = this.el(tr, "td", "kom-klappzelle");
     const td2 = this.el(tr, "td");
     td2.title = this.text(name);
 

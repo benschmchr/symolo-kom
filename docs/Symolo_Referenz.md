@@ -226,14 +226,14 @@ Im Code steht **OFFEN (Symolo)** an jeder ungeklärten Stelle und **VERMUTET** a
 | Schreibweise der Felder (Get gegenüber Select) | egal, die App liest tolerant |
 | SQL-Sprache, `where`/`order by`/`in`, Zeilengrenze | einfache Abfragen ohne `limit` und `join` |
 | Länge einer Abfrage | `in (…)` in Stücken zu 500 IDs |
-| Mengen als Zahl oder als Text (`21.000`) | beides wird gelesen; Text, der keine Zahl ist, zählt 0 |
-| Klappzustand des Dashboards je Benutzer speichern | vorerst nur solange das Fenster offen ist; später eine Tabelle (Benutzer, Ansicht, Schlüssel) |
+| Mengen als Zahl oder als Text (`21.000`) | beides wird gelesen, Text mit Punkt als Komma (`21.000` = 21); eine unklare Schreibweise (`1.234.567`, `1e5`, über 999.999.999) zählt 0 und steht oben als Hinweis |
+| Klappzustand des Dashboards je Benutzer speichern | im Browser des Geräts (`localStorage`, laut Skill erlaubt); je Benutzer auf allen Geräten später eine Tabelle (Benutzer, Ansicht, Schlüssel) |
 | Datumsformat beim Schreiben | wie beim Lesen: `2026-10-16T00:00:00.0000000Z` |
 | Sammel-Update (z. B. Lagerort für alle Teile eines AB) | einzeln, je 8 gleichzeitig |
 | Gleichzeitiges Ändern | `udate` vor dem Speichern vergleichen |
 | Bereiche wechseln (Bereichsleiste oben im Fenster) | `window.KOM_BEREICH_WECHSELN(name, optionen)` setzt nur `test.html`; in Symolo meldet die Leiste „noch nicht angebunden“. **OFFEN:** Wie ein Hook-Objekt ein anderes Formular öffnet |
 | Schweißen: Felder `auftrag.bereich`, `baugruppe.archiviert`, `teil.archiviert`, `schweisszeile.zurueckgeholt`; Tabellen `arbeitsplatz`, `mitarbeiter` | Vorschlag; entnommene Originale werden ausgeblendet, nie gelöscht |
-| Entnehmen ohne Transaktion und ohne Anlegen mehrerer Zeilen auf einmal | neue Zeilen zuerst, Originale zuletzt ausblenden; bei Abbruch steht höchstens etwas doppelt |
+| Entnehmen ohne Transaktion und ohne Anlegen mehrerer Zeilen auf einmal | neue Zeilen zuerst, Originale zuletzt ausblenden; bei Abbruch steht höchstens etwas doppelt, und die Meldung sagt, dass schon etwas gespeichert ist |
 | Ausgeblendete Originale (entnommen, zurückgeholt) | bleiben in der Datenbank; endgültig löschen macht die IT |
 | Benutzer, Rollen, Rechte | vorerst keine |
 | Schrift, Farben, Fenstergröße, Handy | FWM-Variablen innerhalb der Ansicht, Thema light |
