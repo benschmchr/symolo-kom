@@ -84,6 +84,15 @@ def pruefen_js(name: str, js: str) -> None:
             raise SystemExit(f"{name}: „{wort}“ ist nicht erlaubt ({grund}).")
 
 
+def pruefen_doppelt(name: str, js: str) -> None:
+    """Zwei gleiche Namen im gemeinsamen Code: der spätere ersetzt still den früheren.
+    Ansichten dürfen gemeinsame Namen absichtlich ersetzen, darum nur symolo/quelle."""
+    namen = re.findall(r"^([A-Za-z_$][\w$]*)\s*:", ohne_kommentare_js(js), flags=re.M)
+    doppelt = sorted({n for n in namen if namen.count(n) > 1})
+    if doppelt:
+        raise SystemExit(f"{name}: Name doppelt im Hook-Objekt: {', '.join(doppelt)}.")
+
+
 def pruefen_css(name: str, css: str, klasse: str) -> None:
     """Skill, CSS-Scoping: kein Backtick, jede Regel beginnt mit der Wrapper-Klasse."""
     if "`" in css:
@@ -141,6 +150,7 @@ def objekt_bauen(a: dict) -> str:
     )
     js_teile = [ansicht, *teile]
     pruefen_js(a["name"], "\n\n".join(js_teile))
+    pruefen_doppelt("symolo/quelle", "\n\n".join(teile[:-1]))
     return "{\n\n" + "\n\n\n".join([*js_teile, hooks]) + "\n\n}"
 
 

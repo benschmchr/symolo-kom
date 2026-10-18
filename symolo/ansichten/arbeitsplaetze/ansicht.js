@@ -129,7 +129,7 @@ eintragBauen: function (parent, e, mitPlatz) {
     x.tabIndex = 0;
     x.setAttribute("role", "button");
     x.title = this.hpAnzeige(e);
-    x.draggable = true;
+    x.draggable = this.darf("kom.schweissen.bearbeiten");
 
     x.onclick = () => this.platzDialog(e);
     x.onkeydown = k => { if (k.key === "Enter" || k.key === " ") { k.preventDefault(); this.platzDialog(e); } };
@@ -168,9 +168,10 @@ platzDialog: function (e) {
             const gleich = this.hpKlein(name) === this.hpKlein(e.platz);
             const b = this.knopf(raster, name, () => { this.dialogSchliessen(); this.platzSetzen(e, name); }, gleich ? "gewaehlt" : "");
             b.disabled = gleich;
+            this.nurMitRecht(b, "kom.schweissen.bearbeiten");
         });
 
-        this.knopf(knoepfe, "Kein Arbeitsplatz", () => { this.dialogSchliessen(); this.platzSetzen(e, ""); });
+        this.nurMitRecht(this.knopf(knoepfe, "Kein Arbeitsplatz", () => { this.dialogSchliessen(); this.platzSetzen(e, ""); }), "kom.schweissen.bearbeiten");
         this.knopf(knoepfe, "AB-Menü", () => { this.dialogSchliessen(); this.eintragMenue(e); });
         this.knopf(knoepfe, "Abbrechen", () => this.dialogSchliessen(), "rot");
     });
@@ -190,7 +191,7 @@ eintragMenue: function (e) {
 
     this.dialogZeigen(e.name, (inhalt, knoepfe) => {
         knoepfe.classList.add("kom-dialog-spalte");
-        punkte.forEach(([text, aktion]) => this.knopf(knoepfe, text, () => { this.dialogSchliessen(); aktion(); }));
+        punkte.forEach(([text, aktion]) => this.nurMitRecht(this.knopf(knoepfe, text, () => { this.dialogSchliessen(); aktion(); }), "kom.schweissen.bearbeiten"));
         this.knopf(knoepfe, "Abbrechen", () => this.dialogSchliessen(), "rot");
         if (!e.komplett && e.name.toUpperCase().indexOf("_BG") > -1) {
             this.el(inhalt, "p", "kom-leise", "Zusammenführen geht nur, wenn alle Baugruppen des AB im Schweißen liegen.");
@@ -220,11 +221,11 @@ mitarbeiterDialog: function (e) {
             this.el(inhalt, "p", "kom-leise", "Noch keine Mitarbeiter eingetragen (Ansicht Schweißen: „Mitarbeiter verwalten“).");
         }
 
-        this.knopf(knoepfe, "Speichern", () => {
+        this.nurMitRecht(this.knopf(knoepfe, "Speichern", () => {
             this.dialogSchliessen();
             const wert = boxen.filter(b => b.checked).map(b => b.value).join(this.swTrenner);
             this.aendern(() => this.hpMitarbeiterSetzen(e.name, wert));
-        }, "haupt");
+        }, "haupt"), "kom.schweissen.bearbeiten");
         this.knopf(knoepfe, "Abbrechen", () => this.dialogSchliessen(), "rot");
     });
 },

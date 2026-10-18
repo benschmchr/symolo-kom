@@ -205,7 +205,7 @@ detailZeichnen: async function (kopf) {
     if (this.text(kopf.kunde)) this.pille(this.zaehlerEl, "Kunde:", this.text(kopf.kunde));
     this.pille(this.zaehlerEl, "Zeilen:", String(zeilen.length));
 
-    this.knopf(kopfzeile, "Wiederherstellen …", () => this.wiederherstellenFragen(kopf, zeilen.length), "haupt");
+    this.nurMitRecht(this.knopf(kopfzeile, "Wiederherstellen …", () => this.wiederherstellenFragen(kopf, zeilen.length), "haupt"), "kom.bestand.bearbeiten");
     if (this.archivAusSchweissen(kopf)) {
         this.el(platz, "p", "kom-leise", "Dieser AB wurde im Schweißen archiviert. Wiederherstellen bringt ihn dorthin zurück.");
     }

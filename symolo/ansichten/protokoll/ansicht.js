@@ -43,6 +43,12 @@ before_set_values: async function (form, { data }) {
 laden: async function () {
 
     this.datenHinweise = [];
+
+    /* Protokoll ansehen und verwalten nur mit dem Recht (früher nur Admin). Ohne Recht wird nichts gelesen. */
+    if (!this.darf("kom.protokoll.verwalten")) {
+        this.statusZeigen("Das Protokoll sehen nur Personen mit dem Recht dafür.");
+        return;
+    }
     this.statusZeigen("Lade …");
 
     const fertig = await this.sicher(async () => {

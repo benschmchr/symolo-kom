@@ -118,7 +118,7 @@ eintragBauen: function (parent, e, mitPlatz) {
     x.tabIndex = 0;
     x.setAttribute("role", "button");
     x.title = e.name + ": " + e.w.status;
-    x.draggable = true;
+    x.draggable = this.darf("kom.bestand.bearbeiten");
 
     x.onclick = () => this.platzDialog(e);
     x.onkeydown = k => { if (k.key === "Enter" || k.key === " ") { k.preventDefault(); this.platzDialog(e); } };
@@ -160,6 +160,7 @@ platzDialog: function (e) {
             const b = this.knopf(raster, p + (p === "R3" ? " · Sperrlager" : ""), () => { this.dialogSchliessen(); this.platzSetzen(e, p); },
                 p === e.platz ? "gewaehlt" : "");
             b.disabled = p === e.platz;
+            this.nurMitRecht(b, "kom.bestand.bearbeiten");
         }));
 
         const frei = this.el(inhalt, "label", "kom-feld");
@@ -168,6 +169,7 @@ platzDialog: function (e) {
         const f = this.el(zeile, "input", "kom-eingabe");
         f.maxLength = 40;
         f.placeholder = "z. B. Kiste 4";
+        this.nurMitRecht(f, "kom.bestand.bearbeiten");
         const eintragen = () => {
             const text = this.text(f.value);
             if (!text) return;
@@ -179,9 +181,9 @@ platzDialog: function (e) {
             this.platzSetzen(e, p);
         };
         f.onkeydown = k => { if (k.key === "Enter") eintragen(); };
-        this.knopf(zeile, "Eintragen", eintragen);
+        this.nurMitRecht(this.knopf(zeile, "Eintragen", eintragen), "kom.bestand.bearbeiten");
 
-        this.knopf(knoepfe, "Kein Platz", () => { this.dialogSchliessen(); this.platzSetzen(e, ""); });
+        this.nurMitRecht(this.knopf(knoepfe, "Kein Platz", () => { this.dialogSchliessen(); this.platzSetzen(e, ""); }), "kom.bestand.bearbeiten");
         this.knopf(knoepfe, "In der Bestandsliste anzeigen", () => {
             this.dialogSchliessen();
             this.bereichOeffnen("bestandsliste", { suche: this.text(e.ab.o.ab_anzeige) });
@@ -194,7 +196,7 @@ platzDialog: function (e) {
 eintragMenue: function (e) {
 
     if (e.bg) {
-        this.menueZeigen(e.name, [["AB zusammenführen", () => this.zusammen(e.ab, e.bg)]]);
+        this.menueZeigen(e.name, [["AB zusammenführen", () => this.zusammen(e.ab, e.bg), "kom.bestand.bearbeiten"]]);
         return;
     }
     if (e.ab.bgs.length < 2) {
@@ -204,7 +206,7 @@ eintragMenue: function (e) {
     this.menueZeigen(e.name, [["AB in Baugruppen aufsplitten", () => this.aendern(e.ab, async () => {
         await this.regalTeilen(e.ab);
         return e.name + " ist in Baugruppen aufgesplittet.";
-    })]]);
+    }), "kom.bestand.bearbeiten"]]);
 },
 
 /* Eine Baugruppe einzeln verschieben splittet den AB. Liegen danach alle

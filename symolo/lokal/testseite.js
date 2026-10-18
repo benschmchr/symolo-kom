@@ -78,6 +78,19 @@
     schalter("Spaltennamen anders schreiben", "schreibweise");
     schalter("Verbindung tot (Meldung nach 15 Sekunden)", "tot");
 
+    /* Rechte wie in Symolo (currentRights): ohne Häkchen alle an, mit Häkchen keins. */
+    const ohneRechte = element("label");
+    const ohneBox = element("input");
+    ohneBox.type = "checkbox";
+    ohneBox.onchange = () => {
+        if (ohneBox.checked) window.currentRights = {};
+        else delete window.currentRights;
+        oeffnen(aktivName);
+    };
+    ohneRechte.appendChild(ohneBox);
+    ohneRechte.appendChild(document.createTextNode("Ohne Rechte (nur ansehen)"));
+    leiste.appendChild(ohneRechte);
+
     leiste.appendChild(element("span",
         "Beispieldaten, keine Verbindung zu Symolo. Änderungen bleiben nur in diesem Browser. " +
         "Erstellt: Ben Schumacher, 09.10.2026"));

@@ -249,4 +249,8 @@ Offen (werden vor ihrer Phase gefragt): W4 Morgenmail, W5 Datenübernahme, W7 Ä
 - **Abbruch mitten drin** (D3): Hat eine Aufgabe schon etwas gespeichert, sagt die Meldung das und bittet, neu zu laden und auf Doppeltes zu prüfen. Ein Knopf „Doppelte finden“ erst mit dem Entwickler.
 - **Vergleichstest** (E1): 600 Zufallsfälle für Status, Fortschritt und Prozent und für die Vorhanden-Eingabe gegen die bisherige App.
 - **Bauen** (D5): Nach jedem Merge oder Konflikt `symolo/fertig/` neu bauen, nie von Hand lösen (CLAUDE.md).
-- **Folgt im zweiten Schritt:** Rechte über `currentRights` (Entwickler, 16.10.), Archivieren über einen Status, nur lesende Abnahmeliste für den Entwickler.
+- **Rechte** (D2, Herr Herzog 16.10.): ein Objekt `currentRights` mit fünf Rechten (`kom.bestand.bearbeiten`, `kom.schweissen.bearbeiten`, `kom.planung.bearbeiten`, `kom.import.excel`, `kom.protokoll.verwalten`), nur in `50_benutzer.js` geprüft. Ansehen darf jeder; ohne Recht ist der Knopf aus, das Protokoll ist ohne Recht leer (früher nur Admin). Im Nachbau alle an, in Symolo ohne `currentRights` keins. Die Schreibsperre bleibt an, bis Herr Herzog Namen und Rechte geprüft hat.
+- **Archivieren über einen Status** (Herr Herzog 16.10.): je Tabelle `archivWerte` in `20_tabellen.js`; die App rechnet weiter mit ja/nein, nur `40_daten.js` übersetzt. Ohne Eintrag bleibt es ein Ja/Nein-Feld.
+- **IDs** (Herr Herzog 16.10.): intern erlaubt, nie anzeigen, beim Anlegen nicht mitgeben (statt „nie setzen“).
+- **Abnahme nur lesend** (D1) als erster Schritt in `docs/Symolo_Anbindung.md`; **ausgeblendete Daten** (D7) bleiben in der Datenbank, als offener Punkt in der Referenz (Datenschutz, sobald Namen im Protokoll stehen).
+- **Bauen**: Der Bau bricht ab, wenn ein Name im gemeinsamen Code doppelt vorkommt (der spätere ersetzt sonst still den früheren).

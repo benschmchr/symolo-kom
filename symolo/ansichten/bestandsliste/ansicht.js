@@ -42,7 +42,7 @@ before_set_values: async function (form, { data }) {
     const start = this.startOptionen();
     if (start.suche) this.suche = this.sucheEl.value = this.text(start.suche);   /* Sprung aus einem anderen Bereich */
     this.fussKnopf("Neu laden", "Laden", () => this.laden());
-    this.fussKnopf("AB archivieren …", "Archivieren …", () => this.abEingabeDialog());
+    this.nurMitRecht(this.fussKnopf("AB archivieren …", "Archivieren …", () => this.abEingabeDialog()), "kom.bestand.bearbeiten");
 
     await this.laden();
 },
@@ -312,6 +312,7 @@ statusZelle: function (tr, w, klick, titel) {
     b.type = "button";
     b.title = titel;
     b.onclick = klick;
+    this.nurMitRecht(b, "kom.bestand.bearbeiten");
 },
 
 /* Lagerort an AB oder BG (R-L1, R-L4): Auswahl statt Tippen. Teile haben
@@ -324,6 +325,7 @@ platzZelle: function (tr, ab, bg) {
     const td = this.el(tr, "td", "kom-mitte");
     const sel = this.el(td, "select", "kom-platzwahl");
     sel.title = "Lagerort " + this.text(bg ? bg.o.name : ab.o.ab_anzeige) + " (gilt für alles darunter)";
+    this.nurMitRecht(sel, "kom.bestand.bearbeiten");
 
     const option = (parent, w, text) => { const x = this.el(parent, "option", "", text); x.value = w; return x; };
 
@@ -472,6 +474,7 @@ entnehmenZelle: function (tr, a, bg) {
     const b = this.knopf(td, "Entnehmen", () => this.entnehmenFragen(a, bg), "rot-klein");
     b.title = "Ins Schweißen verschieben (mit Rückfrage)";
     b.setAttribute("aria-label", "Entnehmen " + name);
+    this.nurMitRecht(b, "kom.bestand.bearbeiten");
 },
 
 /* Rückfrage wie in Excel, dann ins Schweißen verschieben. Gelöscht wird nichts: die Zeilen werden
@@ -487,14 +490,14 @@ entnehmenFragen: async function (a, bg) {
         this.el(inhalt, "p", "kom-leise", "Die Zeilen verschwinden aus der Bestandsliste und stehen dann im Schweißen. " +
             "Dort geht es mit „Zurück“ wieder zurück.");
 
-        this.knopf(knoepfe, "Ja, entnehmen", async () => {
+        this.nurMitRecht(this.knopf(knoepfe, "Ja, entnehmen", async () => {
             this.dialogSchliessen();
             const fertig = await this.sicher(() => this.swEntnehmen(a.o._id, bgId));
             if (fertig === null) return;
             await this.imSchweissenLaden();
             await this.abNeuLaden(a);
             this.statusZeigen(this.swPlanName(p) + " ist jetzt im Schweißen.");
-        }, "haupt");
+        }, "haupt"), "kom.bestand.bearbeiten");
         const nein = this.knopf(knoepfe, "Abbrechen", () => this.dialogSchliessen(), "rot");
         this.dialogFokus = nein;   /* Sicherheitsfrage: ein versehentliches Enter entnimmt nichts */
     });
@@ -535,6 +538,7 @@ vorhandenZelle: function (tr, t, a, vh) {
     f.autocomplete = "off";
     f.value = vh;
     f.setAttribute("aria-label", "Vorhanden " + this.text(t.o.zeichnungsnummer));
+    this.nurMitRecht(f, "kom.bestand.bearbeiten");
 
     const speichern = () => {
         if (this.text(f.value) === vh) return;
@@ -627,8 +631,8 @@ allesFragen: function (ab, knoten, name) {
 abMenue: function (ab) {
 
     this.menueZeigen(this.text(ab.o.ab_anzeige), [
-        ["AB bearbeiten (Soll ändern)", () => this.sollDialog(ab)],
-        ["AB archivieren …", () => this.archivierenFragen(ab)],
+        ["AB bearbeiten (Soll ändern)", () => this.sollDialog(ab), "kom.bestand.bearbeiten"],
+        ["AB archivieren …", () => this.archivierenFragen(ab), "kom.bestand.bearbeiten"],
         ["Nur diesen AB anzeigen", () => { this.nurAb = ab.o._id; this.anzeigen(); }]
     ]);
 },
@@ -675,13 +679,13 @@ archivierenFragen: function (ab) {
         this.el(inhalt, "p", "kom-leise", "Er verschwindet aus der Bestandsliste. Im Archiv lässt er sich ansehen " +
             "und wiederherstellen.");
 
-        this.knopf(knoepfe, "Ja, archivieren", async () => {
+        this.nurMitRecht(this.knopf(knoepfe, "Ja, archivieren", async () => {
             this.dialogSchliessen();
             const fertig = await this.sicher(() => this.abArchivieren(ab));
             if (fertig === null) return;
             await this.abNeuLaden(ab);
             this.statusZeigen(name + " wurde archiviert (" + n + " Zeilen).");
-        }, "haupt");
+        }, "haupt"), "kom.bestand.bearbeiten");
         const nein = this.knopf(knoepfe, "Abbrechen", () => this.dialogSchliessen(), "rot");
         this.dialogFokus = nein;   /* Sicherheitsfrage: ein versehentliches Enter archiviert nichts */
     });
@@ -719,7 +723,7 @@ sollDialog: function (ab) {
             return [t, f, fehler];
         });
 
-        this.knopf(knoepfe, "Speichern", () => {
+        this.nurMitRecht(this.knopf(knoepfe, "Speichern", () => {
             let ok = true;
             const neu = felder.map(([t, f, fehler]) => {
                 const e = this.mengeEingabe(f.value, false);
@@ -734,7 +738,7 @@ sollDialog: function (ab) {
                 const n = await this.sollSetzen(neu);
                 return this.text(ab.o.ab_anzeige) + ": " + (n ? "Soll bei " + n + (n === 1 ? " Teil" : " Teilen") + " geändert." : "nichts geändert.");
             });
-        }, "haupt");
+        }, "haupt"), "kom.bestand.bearbeiten");
         this.knopf(knoepfe, "Abbrechen", () => this.dialogSchliessen(), "rot");
     });
 },

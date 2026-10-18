@@ -81,8 +81,16 @@ einstellungen: {
      verweise  unser Feld, das auf eine andere Tabelle zeigt:
                ziel = unser Tabellenname, anzeige = Feld dort, das statt
                der ID angezeigt wird (IDs werden nie angezeigt)
-     archiv    unser Feld für "archiviert" (j/n). Fehlt es, kann die
+     archiv    unser Feld für "archiviert". Fehlt es, kann die
                Tabelle nicht archiviert werden. Gelöscht wird nie.
+     archivWerte  nur wenn in Symolo ein STATUS archiviert statt eines
+               Ja/Nein-Felds (Herr Herzog, 16.10.: "meist über einen Status"):
+               archivWerte: { ja: "archiviert", nein: "aktiv" } und rechts beim
+               Archiv-Feld die Statusspalte eintragen (archiviert: "status").
+               Die App rechnet weiter mit ja/nein, 40_daten.js übersetzt beim
+               Lesen, in Bedingungen und beim Schreiben.
+               Fehlt archivWerte, ist es ein Ja/Nein-Feld wie bisher.
+               OFFEN (Symolo): Spalte und Werte je Tabelle.
    =========================================================================== */
 tabellen: {
 
@@ -607,7 +615,8 @@ sqlBauen: function (name, optionen) {
 
     for (const feld in bedingungen) {
         const sp = this.sqlName(this.spalte(name, feld));
-        const w = bedingungen[feld];
+        const w = Array.isArray(bedingungen[feld]) ? bedingungen[feld].map(x => this.archivRoh(name, feld, x))
+            : bedingungen[feld] === null ? null : this.archivRoh(name, feld, bedingungen[feld]);
 
         if (w === null) {
             wo.push(sp + " is null");
@@ -659,12 +668,23 @@ zeileLesen: function (name, row) {
         if (verweise[feld]) {
             z["_" + feld + "_id"] = wert === undefined ? null : wert;
             z[feld] = "";                 /* Name kommt aus datenAufloesen */
+        } else if (feld === t.archiv && t.archivWerte) {
+            z[feld] = this.text(wert) === this.text(t.archivWerte.ja);
         } else {
             z[feld] = wert === undefined ? null : wert;
         }
     }
 
     return z;
+},
+
+/* Archiv über einen Status (20_tabellen.js, archivWerte): ja/nein der App
+   -> Statuswert in Symolo. Ohne archivWerte bleibt der Wert, wie er ist. */
+archivRoh: function (name, feld, wert) {
+
+    const t = this.tabelleInfo(name);
+    if (feld !== t.archiv || !t.archivWerte) return wert;
+    return this.istJa(wert) ? t.archivWerte.ja : t.archivWerte.nein;
 },
 
 /* optionen.archiv: "ohne" (Standard), "nur" oder "alle"
@@ -793,7 +813,7 @@ rohSetzen: function (name, roh, werte) {
         const sp = t.felder[feld];
         if (!sp) throw new Error("Unbekanntes Feld „" + feld + "“ in " + name);
 
-        roh[this.schluesselVon(roh, sp) || sp] = werte[feld];
+        roh[this.schluesselVon(roh, sp) || sp] = this.archivRoh(name, feld, werte[feld]);
     }
 
     return roh;
@@ -900,7 +920,8 @@ datenAendernViele: async function (aufgaben) {
 },
 
 /* Archivieren statt löschen (Ben, 16.10.2026).
-   OFFEN (Symolo): Name und Typ des Archiv-Felds. Angenommen: true. */
+   Ja/Nein-Feld oder Status: steht je Tabelle in 20_tabellen.js (archivWerte).
+   OFFEN (Symolo): Name und Werte des Felds je Tabelle. */
 datenArchivieren: async function (name, zeile) {
 
     const feld = this.tabelleInfo(name).archiv;
@@ -3706,6 +3727,7 @@ planungZelle: function (tr, d) {
     box.checked = Boolean(d.geplant);
     box.disabled = !this.schreibenErlaubt();
     box.title = box.disabled ? "Speichern noch gesperrt" : "Zur Planung vormerken";
+    this.nurMitRecht(box, "kom.planung.bearbeiten");
     box.setAttribute("aria-label", this.text(d.a.o.ab_anzeige) + " zur Planung vormerken");
     box.onchange = () => { this.planungHaken(d, box); };
 },
@@ -5256,27 +5278,58 @@ swZaehler: function (bloecke) {
 
 
 /* ===========================================================================
-   BENUTZER UND ROLLEN
-   Vorerst OHNE Anmeldung und Rechte (Ben, 16.10.2026): Alle sehen und
-   dürfen alles. Diese Stelle ist nur vorbereitet, damit Rollen später
-   ohne Umbau dazukommen.
+   BENUTZER UND RECHTE
+   Rechte nach Herrn Herzog (16.10.2026): ein einfaches Objekt currentRights,
+   Namen <modul>.<gruppe>.<recht>, sparsam. Ansehen darf jeder. Fehlt ein
+   Recht, ist der Knopf aus. Nur diese Stelle prüft Rechte.
 
-   OFFEN (Symolo), für später: Woher bekommt die Ansicht Name und Gruppen
-   der angemeldeten Person (Sitzungsdaten, Formulardaten, ein Befehl)?
-   Geplante Rollen: Gast (nur ansehen), Kommissionierung, Stahlbau, Admin.
-   Wichtig: Die Ansicht blendet nur Knöpfe aus. Geschützt ist erst, wenn
-   Symolo die Schreibrechte je Tabelle prüft.
+   OFFEN (Symolo): Woher bekommt die Ansicht currentRights und den Namen der
+   angemeldeten Person? VERMUTET: als window.currentRights.
+   Ohne currentRights gilt: im lokalen Nachbau alle Rechte an, in Symolo keins.
+   Wichtig: Die Ansicht schaltet nur Knöpfe aus. Geschützt ist erst, wenn
+   Symolo die Schreibrechte je Tabelle selbst prüft.
    =========================================================================== */
+
+/* Die Rechte der App. Rechts steht, was ohne das Recht aus ist. */
+rechteListe: {
+    "kom.bestand.bearbeiten": "Vorhanden, Soll, Lagerort, Regal, Entnehmen, Archivieren, Wiederherstellen",
+    "kom.schweissen.bearbeiten": "Mitarbeiter, Arbeitsplatz, Termine, Archivieren, Zurück",
+    "kom.planung.bearbeiten": "Häkchen in der Planung",
+    "kom.import.excel": "Kommissionierliste und Forecast einlesen (kommt mit Phase 7)",
+    "kom.protokoll.verwalten": "Protokoll ansehen, Einstellungen, leeren"
+},
 
 benutzer: function () {
 
-    return { name: "", rollen: ["Kommissionierung", "Stahlbau", "Admin"] };
+    return { name: "" };
 },
 
-/* Darf die Person das? Vorerst immer ja. */
-darf: function (rolle) {
+rechte: function () {
 
-    return this.benutzer().rollen.indexOf(rolle) >= 0 || this.benutzer().rollen.indexOf("Admin") >= 0;
+    const r = window.currentRights;
+    if (r && typeof r === "object") return r;
+    if (this.datenQuelle() === "lokal") {
+        const alle = {};
+        for (const name in this.rechteListe) alle[name] = true;
+        return alle;
+    }
+    return {};
+},
+
+/* Darf die Person das? recht = Name aus rechteListe. */
+darf: function (recht) {
+
+    return this.rechte()[recht] === true;
+},
+
+/* Knopf oder Feld aus, wenn das Recht fehlt. Gibt das Element zurück. */
+nurMitRecht: function (el, recht) {
+
+    if (!this.darf(recht)) {
+        el.disabled = true;
+        el.title = "Dafür fehlt das Recht.";
+    }
+    return el;
 },
 
 
@@ -5555,12 +5608,15 @@ dialogSchliessen: function () {
 },
 
 /* Menü (Rechtsklick): Titel, Knöpfe untereinander, "Abbrechen" rot unten
-   (Ben, 15.10.2026). eintraege: [[text, aktion]] */
+   (Ben, 15.10.2026). eintraege: [[text, aktion, recht]]; ohne das Recht ist der Knopf aus. */
 menueZeigen: function (titel, eintraege) {
 
     this.dialogZeigen(titel, (inhalt, knoepfe) => {
         knoepfe.classList.add("kom-dialog-spalte");
-        eintraege.forEach(([text, aktion]) => this.knopf(knoepfe, text, () => { this.dialogSchliessen(); aktion(); }));
+        eintraege.forEach(([text, aktion, recht]) => {
+            const b = this.knopf(knoepfe, text, () => { this.dialogSchliessen(); aktion(); });
+            if (recht) this.nurMitRecht(b, recht);
+        });
         this.knopf(knoepfe, "Abbrechen", () => this.dialogSchliessen(), "rot");
     });
 },
@@ -5697,7 +5753,7 @@ eintragBauen: function (parent, e, mitPlatz) {
     x.tabIndex = 0;
     x.setAttribute("role", "button");
     x.title = this.hpAnzeige(e);
-    x.draggable = true;
+    x.draggable = this.darf("kom.schweissen.bearbeiten");
 
     x.onclick = () => this.platzDialog(e);
     x.onkeydown = k => { if (k.key === "Enter" || k.key === " ") { k.preventDefault(); this.platzDialog(e); } };
@@ -5736,9 +5792,10 @@ platzDialog: function (e) {
             const gleich = this.hpKlein(name) === this.hpKlein(e.platz);
             const b = this.knopf(raster, name, () => { this.dialogSchliessen(); this.platzSetzen(e, name); }, gleich ? "gewaehlt" : "");
             b.disabled = gleich;
+            this.nurMitRecht(b, "kom.schweissen.bearbeiten");
         });
 
-        this.knopf(knoepfe, "Kein Arbeitsplatz", () => { this.dialogSchliessen(); this.platzSetzen(e, ""); });
+        this.nurMitRecht(this.knopf(knoepfe, "Kein Arbeitsplatz", () => { this.dialogSchliessen(); this.platzSetzen(e, ""); }), "kom.schweissen.bearbeiten");
         this.knopf(knoepfe, "AB-Menü", () => { this.dialogSchliessen(); this.eintragMenue(e); });
         this.knopf(knoepfe, "Abbrechen", () => this.dialogSchliessen(), "rot");
     });
@@ -5758,7 +5815,7 @@ eintragMenue: function (e) {
 
     this.dialogZeigen(e.name, (inhalt, knoepfe) => {
         knoepfe.classList.add("kom-dialog-spalte");
-        punkte.forEach(([text, aktion]) => this.knopf(knoepfe, text, () => { this.dialogSchliessen(); aktion(); }));
+        punkte.forEach(([text, aktion]) => this.nurMitRecht(this.knopf(knoepfe, text, () => { this.dialogSchliessen(); aktion(); }), "kom.schweissen.bearbeiten"));
         this.knopf(knoepfe, "Abbrechen", () => this.dialogSchliessen(), "rot");
         if (!e.komplett && e.name.toUpperCase().indexOf("_BG") > -1) {
             this.el(inhalt, "p", "kom-leise", "Zusammenführen geht nur, wenn alle Baugruppen des AB im Schweißen liegen.");
@@ -5788,11 +5845,11 @@ mitarbeiterDialog: function (e) {
             this.el(inhalt, "p", "kom-leise", "Noch keine Mitarbeiter eingetragen (Ansicht Schweißen: „Mitarbeiter verwalten“).");
         }
 
-        this.knopf(knoepfe, "Speichern", () => {
+        this.nurMitRecht(this.knopf(knoepfe, "Speichern", () => {
             this.dialogSchliessen();
             const wert = boxen.filter(b => b.checked).map(b => b.value).join(this.swTrenner);
             this.aendern(() => this.hpMitarbeiterSetzen(e.name, wert));
-        }, "haupt");
+        }, "haupt"), "kom.schweissen.bearbeiten");
         this.knopf(knoepfe, "Abbrechen", () => this.dialogSchliessen(), "rot");
     });
 },

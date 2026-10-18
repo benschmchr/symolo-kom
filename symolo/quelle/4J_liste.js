@@ -252,6 +252,7 @@ planungZelle: function (tr, d) {
     box.checked = Boolean(d.geplant);
     box.disabled = !this.schreibenErlaubt();
     box.title = box.disabled ? "Speichern noch gesperrt" : "Zur Planung vormerken";
+    this.nurMitRecht(box, "kom.planung.bearbeiten");
     box.setAttribute("aria-label", this.text(d.a.o.ab_anzeige) + " zur Planung vormerken");
     box.onchange = () => { this.planungHaken(d, box); };
 },

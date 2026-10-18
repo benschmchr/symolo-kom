@@ -1,6 +1,6 @@
 # Anbindung der Bestandsliste an Symolo (für den Symolo-Entwickler)
 
-Stand: 16.10.2026 (Phase 0) · Erstellt: Ben Schumacher, 09.10.2026
+Stand: 18.10.2026 · Erstellt: Ben Schumacher, 09.10.2026
 
 Hier steht, was Sie tun müssen, damit die Bestandsliste in Symolo läuft. Die Fachlogik müssen Sie dafür nicht kennen. Alles Hintergrundwissen (Vorgaben, Befehlsliste, test.html, Skills) steht in [Symolo_Referenz.md](Symolo_Referenz.md).
 
@@ -8,7 +8,7 @@ Hier steht, was Sie tun müssen, damit die Bestandsliste in Symolo läuft. Die F
 
 - Je Bereich gibt es eine Ansicht als **Hook-Objekt** nach dem Skill „Barebone → Framework“ (`form_on_load`, `before_set_values`, `onUnload`). Jede Ansicht ist in sich geschlossen.
 - Alle Daten laufen über **WebSocket** (`{ cmd, par }`), nie über `fetch` oder die HTTP-Pfade.
-- Daten kommen aus Symolo. Die App hat keine eigene Datenbank und vorerst keine Anmeldung und keine Rechte (Ben, 16.10.2026).
+- Daten kommen aus Symolo. Die App hat keine eigene Datenbank und keine eigene Anmeldung. Rechte liest sie aus `currentRights` (Abschnitt 2.3).
 - Entwickelt und getestet wird mit einem **Nachbau von `window.symolo`** und Beispieldaten (`symolo/lokal/`). Auf Symolo wurde dabei nie zugegriffen.
 - Im Code steht **OFFEN (Symolo)** an jeder Stelle, die Sie prüfen oder eintragen, und **VERMUTET** an jeder Annahme.
 
@@ -24,7 +24,7 @@ Hier steht, was Sie tun müssen, damit die Bestandsliste in Symolo läuft. Die F
 | `GetDboSelect`, `GetObjectById`, `CreateObjectFromDictJson` | nein | Zweck offen |
 | `dsf.dbo.DeleteObjectJson`, `dsf.Database.Execute` | **nie** | Die App löscht nie und schreibt nie per SQL. |
 
-## 2. Was Sie anpassen (nur 2 Dateien, dann neu bauen)
+## 2. Was Sie anpassen (nur 3 Dateien, dann neu bauen)
 
 ### 2.1 `symolo/quelle/20_tabellen.js`: Tabellen und Felder
 
@@ -45,6 +45,7 @@ teil: {
 ```
 
 - `archiv: "archiviert"` nennt das Feld, das beim Archivieren auf ja gesetzt wird. Gelöscht wird nie.
+- Archiviert die Tabelle in Symolo über einen **Status** statt über ja/nein, rechts beim Archiv-Feld die Statusspalte eintragen und die Werte dazuschreiben: `archivWerte: { ja: "archiviert", nein: "aktiv" }`. Die App rechnet weiter mit ja/nein; `40_daten.js` übersetzt beim Lesen, in Abfragen und beim Schreiben.
 - `_standard` enthält die Standardfelder aller Symolo-Tabellen (`id`, `iuser`, `idate`, `uuser`, `udate`).
 - Die Tabellen `fwm.kom_…` sind unser Vorschlag. Es gibt sie in Symolo noch nicht. Die Felder stammen 1:1 aus der bisherigen App.
 
@@ -57,7 +58,21 @@ teil: {
 | `timeoutMs` | Zeitlimit je Anfrage (15 s) |
 | `schreibenErlaubtInSymolo` | **Schreibsperre**: steht auf `false`. Erst auf `true` setzen, wenn alle Namen in `20_tabellen.js` geprüft sind. Bis dahin liest die App nur. |
 
-### 2.3 Neu bauen
+### 2.3 `symolo/quelle/50_benutzer.js`: Rechte
+
+Die App liest ein einfaches Objekt `currentRights` (VERMUTET: `window.currentRights`). Es gibt fünf Rechte; was fehlt, gilt als nicht erlaubt.
+
+| Recht | Ohne das Recht ist aus |
+|---|---|
+| `kom.bestand.bearbeiten` | Vorhanden, Soll, Lagerort, Regal, Entnehmen, Archivieren, Wiederherstellen |
+| `kom.schweissen.bearbeiten` | Mitarbeiter, Arbeitsplatz, Termine, Archivieren, Zurück |
+| `kom.planung.bearbeiten` | Häkchen in der Planung |
+| `kom.import.excel` | Kommissionierliste und Forecast einlesen (kommt mit Phase 7) |
+| `kom.protokoll.verwalten` | Protokoll ansehen, Einstellungen, leeren |
+
+Ansehen darf jeder. Ohne `currentRights` hat in Symolo niemand ein Recht; im Nachbau sind alle an. Liefert Symolo die Rechte anders, ändert sich nur die Methode `rechte`. Die App schaltet nur Knöpfe aus. Geschützt ist es erst, wenn Symolo die Schreibrechte selbst prüft.
+
+### 2.4 Neu bauen
 
 ```
 python tools/symolo_bauen.py
@@ -77,7 +92,7 @@ Jede Ansicht hat eine eigene Wrapper-Klasse (`kom-bl`, `kom-db`, `kom-rg`, `kom-
 ## 4. Regeln, an die sich die App hält
 
 1. IDs werden nie angezeigt. Sie stehen nur in Feldern mit `_` vorne (`_id`, `_gruppe_id`), und die Anzeige verweigert solche Felder.
-2. Beim Anlegen wird nie eine ID gesetzt.
+2. Beim Anlegen wird keine ID mitgegeben. Intern benutzt die App IDs (zum Holen und Ändern), angezeigt werden sie nie.
 3. Beim Ändern wird das Objekt direkt vorher frisch geholt, ein Feld geändert und das **komplette** Objekt zurückgeschickt. Hat sich `udate` seit dem Lesen geändert, bricht die App mit einem Hinweis ab.
 4. Es gibt **einen** Schreibpfad (`schreiben` in `40_daten.js`). Gelöscht wird nie, nur archiviert.
 5. Jede Anfrage hat ein Zeitlimit.
@@ -90,7 +105,7 @@ Jede Ansicht hat eine eigene Wrapper-Klasse (`kom-bl`, `kom-db`, `kom-rg`, `kom-
 |---|---|---|
 | Tabellen und Felder | `20_tabellen.js` | Vorschlag `fwm.kom_…` |
 | Verknüpfungsfelder, Gruppentabelle | `20_tabellen.js` | Muster `<feld>_id_<ziel>`, Gruppen in `fwm.standard_gruppe` (nur vermutet) |
-| Archiv-Feld (Name, Typ) | `20_tabellen.js` | `archiviert`, ja/nein |
+| Archiv-Feld (Name, Typ) | `20_tabellen.js` | `archiviert`, ja/nein; bei einem Status `archivWerte` eintragen |
 | Feldtypen (Mengen mit 3 Nachkommastellen bis 999.999.999, Datum, ja/nein, JSON) | Tabellen in Symolo | JSON als Text |
 | Rückgabe von Create, Update und List; Fehlerformat | `antwortObjekt` in `40_daten.js` | JSON-Text in `data.result` |
 | Reihenfolge von `par`, Form der `idList`, ID als Text oder Zahl | `40_daten.js` | wie der Pfad; `idList` als Text mit Kommas; ID als Text |
@@ -112,11 +127,24 @@ Jede Ansicht hat eine eigene Wrapper-Klasse (`kom-bl`, `kom-db`, `kom-rg`, `kom-
 | Rückgabe von `UpdateObjectJson` | `schreiben` in `40_daten.js` | kein Objekt: das gesendete gilt |
 | Sammel-Update | `datenAendernViele` in `40_daten.js` | einzeln, je 8 gleichzeitig |
 | Endpunkt im Fenster | `10_einstellungen.js` | setzt `internal.connection` selbst |
-| Benutzer, Rollen, Rechte | `50_benutzer.js`, Rechte in Symolo | vorerst keine |
+| Rechte und Name der Person | `rechte` und `benutzer` in `50_benutzer.js` | `window.currentRights`; ohne es in Symolo kein Recht |
+| Ausgeblendete Daten (Protokoll, Häkchen, Originale, alter Forecast) | Datenbank | bleiben stehen; wer endgültig löscht und wann, ist offen (Datenschutz, sobald Namen im Protokoll stehen) |
 | Schrift und Farben im Fenster | `symolo/quelle/gemeinsam.css` | FWM-Variablen an der Ansicht, Thema light |
 | Gemeinsame Skripte, Excel-Bibliothek | Aufbau der Ansichten | jede Ansicht in sich geschlossen; Excel-Bibliothek erlaubt, Adresse offen |
 
 ## 6. Abnahme (in dieser Reihenfolge)
+
+**Zuerst nur lesen.** Solange `schreibenErlaubtInSymolo` auf `false` steht, kann nichts kaputtgehen. Je Tabelle aus `20_tabellen.js` einmal prüfen:
+
+- [ ] `dsf.Database.Select` mit `select * from <tabelle>` liefert Zeilen, und jede Spalte aus `felder` ist dabei.
+- [ ] `dsf.dbo.GetObjectByIdJson` holt einen Eintrag; die Felder heißen wie im Select.
+- [ ] Ein Datum (`udate`, bei `teil` auch `datum_eingelagert`) kommt im Format `2026-10-16T00:00:00.0000000Z`.
+- [ ] Eine Menge (`teil.vorhanden`, `teil.menge_gesamt`) kommt als Zahl oder als Text mit Punkt (`21.000`). Erscheint oben „Menge … ist unklar“, das Format hier notieren.
+- [ ] Das Archiv-Feld: welche Werte stehen drin (ja/nein oder Status)? Bei einem Status `archivWerte` eintragen. Archivierte Einträge fehlen in der Bestandsliste und stehen im Archiv.
+- [ ] Verweise (`gruppe`, `auftrag`, `baugruppe`) erscheinen als Namen, nie als Zahl.
+- [ ] `currentRights`: Mit einem Recht ist der Knopf an, ohne ist er aus (z. B. „AB archivieren …“ für `kom.bestand.bearbeiten`).
+
+Danach:
 
 1. **Verbindungstest** (`fertig/verbindungstest.js`): Die Ansicht zeigt `fwm.stamm_prozesse` mit Gruppennamen und ohne IDs. Das ist die erste Ansicht, die Sie einbinden. Sie braucht nur `prozess` und `gruppe` in `20_tabellen.js`.
 2. **Bestandsliste** (`fertig/bestandsliste.js`, nur lesen): braucht `auftrag`, `baugruppe` und `teil` in `20_tabellen.js`. Sie liest drei Abfragen (ABs mit `bereich = 'bestand'`, dann Baugruppen und Teile dieser ABs) und zeigt Status und Fortschritt wie die Excel-Liste.
@@ -126,8 +154,8 @@ Jede Ansicht hat eine eigene Wrapper-Klasse (`kom-bl`, `kom-db`, `kom-rg`, `kom-
 6. **Forecast** (`fertig/forecast.js`), **Planung** (`fertig/planung.js`) und **Statistik** (`fertig/statistik.js`): lesen `auftrag`, `baugruppe`, `teil`, `schweisszeile`, `forecast`, `forecast_zeile` und `planungsmarke`. Das **Dashboard** liest jetzt ebenfalls `planungsmarke`, `forecast`, `forecast_zeile` und `schweisszeile` (Spalte Planung, Kachel Forecast). Geschrieben wird nur das Häkchen „Planung“ in `planungsmarke`; ein entferntes Häkchen wird ausgeblendet (`archiviert`) und beim nächsten Setzen wieder eingeblendet. Das Einlesen der Forecast-Datei kommt mit dem Import (Phase 7).
 7. **Schweißen** (`fertig/schweissen.js`) und **Arbeitsplätze** (`fertig/arbeitsplaetze.js`): lesen `auftrag`, `baugruppe`, `teil`, `schweisszeile`, `arbeitsplatz` und `mitarbeiter`. Die **Bestandsliste** schreibt jetzt auch: „Entnehmen“ legt Zeilen in `schweisszeile` an und blendet die Originale aus (`auftrag.bereich`, `baugruppe.archiviert`, `teil.archiviert`). Das geht nur mit Anlegen von mehreren Zeilen nacheinander; eine Transaktion gibt es nicht. Zuerst Entnehmen mit einem kleinen Test-AB prüfen, dann Archivieren und Zurückholen im Schweißen.
 8. Die weiteren Bereiche der Reihe nach, sobald sie gebaut sind.
-8. Tests: `python -m pytest tests/test_symolo.py`. Das umfasst die Skill-Prüfungen und die Datenschicht gegen den Nachbau.
+9. Tests: `python -m pytest tests/test_symolo.py`. Das umfasst die Skill-Prüfungen und die Datenschicht gegen den Nachbau.
 
 ## 7. Lokal testen (ohne Symolo)
 
-`symolo/test.html` per Doppelklick öffnen. Die Testleiste bietet die Bereichswahl, „Beispieldaten zurücksetzen“ und zwei Schalter: „Spaltennamen anders schreiben“ prüft das tolerante Lesen, „Verbindung tot“ prüft das Zeitlimit. Die Beispieldaten erzeugt `python tools/symolo_beispieldaten.py` aus den Demo-Daten der bisherigen App.
+`symolo/test.html` per Doppelklick öffnen. Die Testleiste bietet die Bereichswahl, „Beispieldaten zurücksetzen“ und drei Schalter: „Spaltennamen anders schreiben“ prüft das tolerante Lesen, „Verbindung tot“ prüft das Zeitlimit, „Ohne Rechte (nur ansehen)“ setzt ein leeres `currentRights`. Die Beispieldaten erzeugt `python tools/symolo_beispieldaten.py` aus den Demo-Daten der bisherigen App.

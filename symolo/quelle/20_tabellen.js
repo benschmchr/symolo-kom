@@ -14,8 +14,16 @@
      verweise  unser Feld, das auf eine andere Tabelle zeigt:
                ziel = unser Tabellenname, anzeige = Feld dort, das statt
                der ID angezeigt wird (IDs werden nie angezeigt)
-     archiv    unser Feld für "archiviert" (j/n). Fehlt es, kann die
+     archiv    unser Feld für "archiviert". Fehlt es, kann die
                Tabelle nicht archiviert werden. Gelöscht wird nie.
+     archivWerte  nur wenn in Symolo ein STATUS archiviert statt eines
+               Ja/Nein-Felds (Herr Herzog, 16.10.: "meist über einen Status"):
+               archivWerte: { ja: "archiviert", nein: "aktiv" } und rechts beim
+               Archiv-Feld die Statusspalte eintragen (archiviert: "status").
+               Die App rechnet weiter mit ja/nein, 40_daten.js übersetzt beim
+               Lesen, in Bedingungen und beim Schreiben.
+               Fehlt archivWerte, ist es ein Ja/Nein-Feld wie bisher.
+               OFFEN (Symolo): Spalte und Werte je Tabelle.
    =========================================================================== */
 tabellen: {
 
