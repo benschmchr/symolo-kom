@@ -178,7 +178,8 @@ sqlBauen: function (name, optionen) {
 
     for (const feld in bedingungen) {
         const sp = this.sqlName(this.spalte(name, feld));
-        const w = bedingungen[feld];
+        const w = Array.isArray(bedingungen[feld]) ? bedingungen[feld].map(x => this.archivRoh(name, feld, x))
+            : bedingungen[feld] === null ? null : this.archivRoh(name, feld, bedingungen[feld]);
 
         if (w === null) {
             wo.push(sp + " is null");
@@ -230,12 +231,23 @@ zeileLesen: function (name, row) {
         if (verweise[feld]) {
             z["_" + feld + "_id"] = wert === undefined ? null : wert;
             z[feld] = "";                 /* Name kommt aus datenAufloesen */
+        } else if (feld === t.archiv && t.archivWerte) {
+            z[feld] = this.text(wert) === this.text(t.archivWerte.ja);
         } else {
             z[feld] = wert === undefined ? null : wert;
         }
     }
 
     return z;
+},
+
+/* Archiv über einen Status (20_tabellen.js, archivWerte): ja/nein der App
+   -> Statuswert in Symolo. Ohne archivWerte bleibt der Wert, wie er ist. */
+archivRoh: function (name, feld, wert) {
+
+    const t = this.tabelleInfo(name);
+    if (feld !== t.archiv || !t.archivWerte) return wert;
+    return this.istJa(wert) ? t.archivWerte.ja : t.archivWerte.nein;
 },
 
 /* optionen.archiv: "ohne" (Standard), "nur" oder "alle"
@@ -364,7 +376,7 @@ rohSetzen: function (name, roh, werte) {
         const sp = t.felder[feld];
         if (!sp) throw new Error("Unbekanntes Feld „" + feld + "“ in " + name);
 
-        roh[this.schluesselVon(roh, sp) || sp] = werte[feld];
+        roh[this.schluesselVon(roh, sp) || sp] = this.archivRoh(name, feld, werte[feld]);
     }
 
     return roh;
@@ -471,7 +483,8 @@ datenAendernViele: async function (aufgaben) {
 },
 
 /* Archivieren statt löschen (Ben, 16.10.2026).
-   OFFEN (Symolo): Name und Typ des Archiv-Felds. Angenommen: true. */
+   Ja/Nein-Feld oder Status: steht je Tabelle in 20_tabellen.js (archivWerte).
+   OFFEN (Symolo): Name und Werte des Felds je Tabelle. */
 datenArchivieren: async function (name, zeile) {
 
     const feld = this.tabelleInfo(name).archiv;

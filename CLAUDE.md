@@ -9,9 +9,9 @@ Umbau für Symolo (ab 16.10.2026): Die App läuft künftig nur als Fenster in Sy
 ## Symolo (Pflicht, Ben 16.10.2026)
 - Für jede Arbeit am Umbau gelten der Skill `.claude/skills/symolo-barebone-framework/` und alles in `docs/Symolo_Referenz.md` (Vorgaben, Befehlsliste, test.html-Ablauf, Entscheidungen, offene Punkte). Entwickler-Anleitung: `docs/Symolo_Anbindung.md`.
 - Nie auf Symolo, `wss://fwm.symolo.biz` oder Symolo-Datenbanken zugreifen; Zugangsdaten aus test.html nirgends übernehmen. Getestet wird nur mit dem Nachbau (`symolo/lokal/`).
-- Nur WebSocket, kein `fetch`. IDs nie anzeigen, beim Anlegen nie eine ID setzen, Verknüpfungen als Namen auflösen, beim Ändern das komplette Objekt senden, archivieren statt löschen.
+- Nur WebSocket, kein `fetch`. IDs intern erlaubt, aber nie anzeigen und beim Anlegen nicht mitgeben; Verknüpfungen als Namen auflösen, beim Ändern das komplette Objekt senden, archivieren statt löschen (je Tabelle Ja/Nein-Feld oder Status, `archivWerte` in `20_tabellen.js`).
 - Datenbankzugriff nur über `symolo/quelle/40_daten.js`; Tabellen- und Spaltennamen nur in `symolo/quelle/20_tabellen.js`. Unklares mit `OFFEN (Symolo)`, Annahmen mit `VERMUTET` kommentieren.
-- Vorerst ohne Anmeldung und Rechte. Excel einlesen macht die App selbst (Lesebibliothek erlaubt).
+- Anmeldung macht Symolo. Rechte nur über `currentRights` in `symolo/quelle/50_benutzer.js` (fünf Rechte `kom.<gruppe>.<recht>`, ohne Recht ist der Knopf aus; im Nachbau alle an). Excel einlesen macht die App selbst (Lesebibliothek erlaubt).
 
 ## Ordner
 - `config/` Einstellungen, Adressen

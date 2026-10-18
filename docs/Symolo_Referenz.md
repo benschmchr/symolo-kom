@@ -20,10 +20,10 @@ Kennzeichnung: **BEKANNT** = gesehen oder vom Entwickler belegt, **VERMUTET** = 
 
 1. **Nie auf Symolo, den Endpunkt oder Symolo-Datenbanken zugreifen.** Keine Anmeldung, keine Abfrage, nichts ändern.
 2. Datenzugriff **nur über WebSocket**, **kein `fetch`**.
-3. **IDs nie anzeigen.**
-4. **Beim Anlegen nie eine ID setzen.** Symolo ignoriert sie ohnehin. Bens Punkt „Index nie eintragen“ meint die ID; die Spalte „Index“ der Teile (Zeichnungsindex) bleibt.
+3. **IDs nie anzeigen.** Intern darf die App sie benutzen (Herr Herzog, 16.10.2026).
+4. **Beim Anlegen keine ID mitgeben.** Symolo vergibt sie selbst. Bens Punkt „Index nie eintragen“ meint die ID; die Spalte „Index“ der Teile (Zeichnungsindex) bleibt.
 5. **Verknüpfungen als Namen auflösen**, zum Beispiel Gruppen statt Gruppen-ID.
-6. **Lieber archivieren als löschen.** Dafür ein Feld wie „archiviert j/n“ in der Tabelle.
+6. **Lieber archivieren als löschen.** Dafür ein Feld wie „archiviert j/n“ oder, wie meist in Symolo, ein Status (Herr Herzog, 16.10.2026). Je Tabelle in `20_tabellen.js` einstellbar (`archivWerte`).
 7. Beim Ändern **immer das komplette Objekt** senden, weil fehlende Felder gelöscht werden.
 8. **Die Skills des Entwicklers beachten und nutzen** (Teil B).
 9. Unklare Punkte zur Datenbankanbindung **im Code mit Kommentaren kennzeichnen**, den Code möglichst übersichtlich halten.
@@ -36,7 +36,7 @@ Kennzeichnung: **BEKANNT** = gesehen oder vom Entwickler belegt, **VERMUTET** = 
 | Frage | Entscheidung |
 |---|---|
 | Wo läuft die App? | Nur noch als Fenster in Symolo. Eigener Server, Teams-Reiter und Gäste ohne Anmeldung entfallen. |
-| Anmeldung und Rechte | Vorerst **keine**. Alle sehen und dürfen alles. Die Stelle für Rollen ist im Code vorbereitet. |
+| Anmeldung und Rechte | Anmeldung macht Symolo. Rechte nach Herrn Herzog (16.10.2026): ein Objekt `currentRights` mit fünf Rechten `kom.<gruppe>.<recht>` (`50_benutzer.js`). Ansehen darf jeder, ohne Recht ist der Knopf aus. Im Nachbau sind alle Rechte an. |
 | Löschen | **Archivieren statt Löschen**, auch bei „AB löschen“ und „AB ersetzen“ (weicht von Excel ab). |
 | Aufbau | **Eine Ansicht je Bereich** (Bestandsliste, Dashboard, Regal …), jede als in sich geschlossenes Hook-Objekt. |
 | Excel einlesen | Macht die App selbst. Eine Lesebibliothek (z. B. SheetJS) darf eingebunden werden; die Adresse ist OFFEN. |
@@ -197,7 +197,7 @@ Tabelle `fwm.stamm_prozesse` (BEKANNT), Ergebnis von `select * from fwm.stamm_pr
 | `symolo/quelle/4N_sw_liste.js` | Schweißen ansehen: Suche, Filter, Sortierung, Sammlungen, Zähler |
 | `symolo/quelle/liste.css` | gemeinsame Stile der Karten-Liste (eingebunden über `"css": ["liste"]` im Bauschritt) |
 | `symolo/quelle/bestand.css` | gemeinsame Stile von Bestandsliste und Schweißen (Spalten, Knöpfe, Links) |
-| `symolo/quelle/50_benutzer.js` | Platzhalter für Benutzer und Rollen (vorerst ohne) |
+| `symolo/quelle/50_benutzer.js` | Rechte (`currentRights`): Liste der fünf Rechte, `darf`, `nurMitRecht`; Name der Person (noch leer) |
 | `symolo/ansichten/<bereich>/` | eine Ansicht je Bereich |
 | `symolo/fertig/<bereich>.js` | fertiges Hook-Objekt zum Einfügen in Symolo (gebaut mit `tools/symolo_bauen.py`) |
 | `symolo/lokal/` | Nachbau von `window.symolo` mit Beispieldaten, nur zum Testen |
@@ -213,7 +213,7 @@ Im Code steht **OFFEN (Symolo)** an jeder ungeklärten Stelle und **VERMUTET** a
 | Endpunkt im Fenster | `internal.connection` setzt ihn selbst |
 | Tabellen, Felder, Feldtypen | Vorschlag `fwm.kom_…`, Felder wie in der bisherigen App |
 | Muster der Verknüpfungsfelder, Gruppentabelle | `<feld>_id_<ziel>`, `fwm.standard_gruppe` |
-| Archiv-Feld (Name, Typ) | `archiviert`, ja/nein |
+| Archiv-Feld (Name, Typ) | `archiviert`, ja/nein; ist es in Symolo ein Status, trägt der Entwickler `archivWerte` (`ja`, `nein`) in `20_tabellen.js` ein, sonst ändert sich nichts |
 | Archiv und Protokoll: Tabelle `kom_aenderung`, Felder `archiviert_am`, `archiv_herkunft`, `archiv_status` am AB | Vorschlag; Protokoll eventuell über die Standardfelder (`iuser`, `idate`, `uuser`, `udate`) |
 | Name der angemeldeten Person (fürs Protokoll) | leer, bis klar ist, woher er kommt |
 | Protokoll „leeren“ und „aufbewahren“ ohne Löschen | Einträge werden ausgeblendet (`archiviert`); endgültig löschen macht die IT |
@@ -235,7 +235,8 @@ Im Code steht **OFFEN (Symolo)** an jeder ungeklärten Stelle und **VERMUTET** a
 | Schweißen: Felder `auftrag.bereich`, `baugruppe.archiviert`, `teil.archiviert`, `schweisszeile.zurueckgeholt`; Tabellen `arbeitsplatz`, `mitarbeiter` | Vorschlag; entnommene Originale werden ausgeblendet, nie gelöscht |
 | Entnehmen ohne Transaktion und ohne Anlegen mehrerer Zeilen auf einmal | neue Zeilen zuerst, Originale zuletzt ausblenden; bei Abbruch steht höchstens etwas doppelt, und die Meldung sagt, dass schon etwas gespeichert ist |
 | Ausgeblendete Originale (entnommen, zurückgeholt) | bleiben in der Datenbank; endgültig löschen macht die IT |
-| Benutzer, Rollen, Rechte | vorerst keine |
+| Ausgeblendete Daten allgemein (Prüfbericht D7): Protokoll „leeren“, entfernte Planungshäkchen, entnommene Originale, alter Forecast | bleiben in der Datenbank. Sobald das Protokoll Namen speichert, ist das eine Datenschutzfrage (Ben, Betriebsrat): wer löscht endgültig, nach welcher Frist |
+| Woher `currentRights` und der Name der Person kommen | `window.currentRights` (VERMUTET); ohne das Objekt in Symolo kein Recht. Geschützt ist erst, wenn Symolo die Schreibrechte selbst prüft |
 | Schrift, Farben, Fenstergröße, Handy | FWM-Variablen innerhalb der Ansicht, Thema light |
 | Gemeinsame Skripte je Formular, Excel-Bibliothek und deren Adresse | in Klärung (Ben testet); bis dahin jede Ansicht in sich geschlossen |
 | Geplante Aufgaben (Morgenmail), Sicherung, Testumgebung | bei Symolo |

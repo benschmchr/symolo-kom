@@ -55,7 +55,7 @@ before_set_values: async function (form, { data }) {
     const start = this.startOptionen();
     if (start.suche) this.suche = this.sucheEl.value = this.text(start.suche);   /* Sprung aus einem anderen Bereich */
     this.fussKnopf("Neu laden", "Laden", () => this.laden());
-    this.fussKnopf("Mitarbeiter verwalten", "Mitarbeiter", () => this.verwaltenDialog());
+    this.nurMitRecht(this.fussKnopf("Mitarbeiter verwalten", "Mitarbeiter", () => this.verwaltenDialog()), "kom.schweissen.bearbeiten");
 
     await this.laden();
 },
@@ -481,6 +481,7 @@ mitarbeiterZelle: function (tr, z) {
     b.title = (this.text(z.m) || "kein Mitarbeiter") + " (antippen zum Ändern)";
     b.setAttribute("aria-label", "Mitarbeiter " + this.swAnzeigename(z));
     b.onclick = () => this.mitarbeiterDialog(z);
+    this.nurMitRecht(b, "kom.schweissen.bearbeiten");
 },
 
 platzZelle: function (tr, z) {
@@ -502,6 +503,7 @@ platzZelle: function (tr, z) {
     sel.value = wert === this.swVerschieden ? "__v" : (aktuell !== null ? aktuell : (wert ? "__alt" : ""));
     sel.setAttribute("data-gespeichert", sel.value);
     sel.onchange = () => this.eintragen(z, "arbeitsplatz", sel.value, sel);
+    this.nurMitRecht(sel, "kom.schweissen.bearbeiten");
 },
 
 /* Datum als Text (TT.MM.JJJJ, 15.10., 151026 …) und ein Kalender-Knopf. */
@@ -527,6 +529,7 @@ datumZelle: function (tr, z, feld, kurz, titel) {
     };
     f.onchange = () => speichern(f.value);
     f.onkeydown = e => { if (e.key === "Enter") { e.preventDefault(); f.blur(); } };
+    this.nurMitRecht(f, "kom.schweissen.bearbeiten");
 
     /* Kalender: ein unsichtbares Datumsfeld, das der Knopf öffnet */
     const kal = this.el(reihe, "input", "kom-sw-kalender");
@@ -550,6 +553,7 @@ datumZelle: function (tr, z, feld, kurz, titel) {
     b.onclick = () => {
         try { kal.showPicker(); } catch (fehler) { kal.focus(); kal.click(); }
     };
+    this.nurMitRecht(b, "kom.schweissen.bearbeiten");
 },
 
 aktionZelle: function (tr, z, art, o) {
@@ -562,10 +566,12 @@ aktionZelle: function (tr, z, art, o) {
         const b = this.knopf(td, "Archivieren", () => this.archivierenFragen(z), "klein");
         b.title = "Ganzen AB ins Archiv legen";
         b.setAttribute("aria-label", "Archivieren " + name);
+        this.nurMitRecht(b, "kom.schweissen.bearbeiten");
     }
     const r = this.knopf(td, "Zurück", () => this.zurueckFragen(z), "klein");
     r.title = "Zurück in die Bestandsliste (Mitarbeiter, Arbeitsplatz und Termine gehen verloren)";
     r.setAttribute("aria-label", "Zurück " + name);
+    this.nurMitRecht(r, "kom.schweissen.bearbeiten");
 },
 
 /* Ein Eintrag speichern (R-W6, R-W7). Bei einem Fehler bleibt die Meldung stehen, und das Feld zeigt

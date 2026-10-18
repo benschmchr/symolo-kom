@@ -273,12 +273,15 @@ dialogSchliessen: function () {
 },
 
 /* Menü (Rechtsklick): Titel, Knöpfe untereinander, "Abbrechen" rot unten
-   (Ben, 15.10.2026). eintraege: [[text, aktion]] */
+   (Ben, 15.10.2026). eintraege: [[text, aktion, recht]]; ohne das Recht ist der Knopf aus. */
 menueZeigen: function (titel, eintraege) {
 
     this.dialogZeigen(titel, (inhalt, knoepfe) => {
         knoepfe.classList.add("kom-dialog-spalte");
-        eintraege.forEach(([text, aktion]) => this.knopf(knoepfe, text, () => { this.dialogSchliessen(); aktion(); }));
+        eintraege.forEach(([text, aktion, recht]) => {
+            const b = this.knopf(knoepfe, text, () => { this.dialogSchliessen(); aktion(); });
+            if (recht) this.nurMitRecht(b, recht);
+        });
         this.knopf(knoepfe, "Abbrechen", () => this.dialogSchliessen(), "rot");
     });
 },

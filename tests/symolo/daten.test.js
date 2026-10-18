@@ -164,3 +164,66 @@ test("Alter Browser-Stand ohne neue Spalte: Häkchen in der Planung lässt sich 
     /* und der Stand wurde mit der neuen Spalte gespeichert */
     assert.ok(JSON.parse(speicher["kom-symolo-nachbau-v1"])["fwm.kom_planungsmarke"].felder.includes("archiviert"));
 });
+
+test("Archivieren über einen Status (Herr Herzog, 16.10.): die App rechnet mit ja/nein, Symolo bekommt den Statuswert", async () => {
+    const { v, db } = umgebung(null, "bestandsliste");
+    const zeilen = db["fwm.kom_auftrag"].zeilen;
+    const vorherArchiv = zeilen.filter(z => v.istJa(z.archiviert)).length;
+    /* so sähe es in Symolo aus: eine Statusspalte statt ja/nein */
+    zeilen.forEach(z => { z.archiviert = v.istJa(z.archiviert) ? "archiviert" : "aktiv"; });
+    v.tabellen.auftrag.archivWerte = { ja: "archiviert", nein: "aktiv" };
+
+    const aktiv = await v.datenLesen("auftrag", { aufloesen: false });
+    assert.equal((await v.datenLesen("auftrag", { archiv: "nur", aufloesen: false })).length, vorherArchiv);
+    assert.equal(aktiv[0].archiviert, false);
+
+    await v.datenArchivieren("auftrag", aktiv[0]);
+    const roh = zeilen.find(z => z.id === aktiv[0]._id);
+    assert.equal(roh.archiviert, "archiviert");
+    const zurueck = (await v.datenLesen("auftrag", { archiv: "nur", aufloesen: false })).find(z => z._id === aktiv[0]._id);
+    assert.equal(zurueck.archiviert, true);
+
+    await v.datenAendern("auftrag", zurueck, { archiviert: false });
+    assert.equal(roh.archiviert, "aktiv");
+    assert.match(v.sqlBauen("auftrag", { wo: { archiviert: true } }), /= 'archiviert'$/);
+    /* andere Felder werden nicht übersetzt */
+    assert.match(v.sqlBauen("auftrag", { wo: { bereich: "bestand" } }), /= 'bestand'$/);
+});
+
+test("Rechte (currentRights): im Nachbau alle an, sonst nur die gesetzten; ohne Recht ist der Knopf aus", () => {
+    const { v, ctx } = umgebung(null, "bestandsliste");
+    const namen = Object.keys(v.rechteListe);
+    assert.deepEqual(namen, ["kom.bestand.bearbeiten", "kom.schweissen.bearbeiten", "kom.planung.bearbeiten",
+        "kom.import.excel", "kom.protokoll.verwalten"]);
+    namen.forEach(n => { assert.match(n, /^kom\.[a-z]+\.[a-z]+$/); assert.equal(v.darf(n), true, n); });
+
+    ctx.currentRights = { "kom.planung.bearbeiten": true, "kom.bestand.bearbeiten": "ja" };
+    assert.equal(v.darf("kom.planung.bearbeiten"), true);
+    assert.equal(v.darf("kom.bestand.bearbeiten"), false);   /* nur true zählt */
+    assert.equal(v.darf("kom.schweissen.bearbeiten"), false);
+
+    const knopf = { disabled: false, title: "" };
+    assert.equal(v.nurMitRecht(knopf, "kom.bestand.bearbeiten"), knopf);
+    assert.equal(knopf.disabled, true);
+    const frei = { disabled: false, title: "" };
+    v.nurMitRecht(frei, "kom.planung.bearbeiten");
+    assert.equal(frei.disabled, false);
+
+    /* in Symolo ohne currentRights: kein Recht */
+    delete ctx.currentRights;
+    v.datenQuelle = () => "symolo";
+    namen.forEach(n => assert.equal(v.darf(n), false, n));
+});
+
+test("Rechte: jeder Name im Code steht in der Liste der Rechte", () => {
+    const fs = require("node:fs");
+    const path = require("node:path");
+    const { v } = umgebung();
+    const { SYMOLO } = require("./umgebung");
+    const dateien = fs.readdirSync(path.join(SYMOLO, "quelle")).filter(d => d.endsWith(".js")).map(d => path.join(SYMOLO, "quelle", d))
+        .concat(fs.readdirSync(path.join(SYMOLO, "ansichten")).map(d => path.join(SYMOLO, "ansichten", d, "ansicht.js")));
+    const benutzt = new Set();
+    dateien.forEach(d => (fs.readFileSync(d, "utf8").match(/"kom\.[a-z]+\.[a-z]+"/g) || []).forEach(n => benutzt.add(n.slice(1, -1))));
+    assert.ok(benutzt.size >= 4);
+    benutzt.forEach(n => assert.ok(n in v.rechteListe, n));
+});
